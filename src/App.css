@@ -59,9 +59,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 20px;
   box-shadow: var(--shadow-glow);
   animation: iconPulse 3s ease-in-out infinite;
+  flex-shrink: 0;
 }
 
 @keyframes iconPulse {
@@ -73,6 +73,43 @@
   width: 28px;
   height: 28px;
   color: #fff;
+}
+
+/* Top row: icon + nav button */
+.leave-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-bottom: 20px;
+}
+
+.view-list-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 18px;
+  background: rgba(108, 92, 231, 0.12);
+  border: 1px solid var(--accent);
+  border-radius: var(--border-radius-sm);
+  color: var(--accent-light);
+  font-family: var(--font-family);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: 0.01em;
+  transition: all var(--transition-fast);
+}
+
+.view-list-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.view-list-btn:hover {
+  background: rgba(108, 92, 231, 0.22);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px var(--accent-glow);
 }
 
 .leave-header h1 {
@@ -87,6 +124,41 @@
 .leave-header p {
   font-size: 15px;
   color: var(--text-muted);
+}
+
+/* Nav buttons row */
+.header-nav-btns {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-panel-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 18px;
+  background: rgba(253, 203, 110, 0.10);
+  border: 1px solid rgba(253, 203, 110, 0.4);
+  border-radius: var(--border-radius-sm);
+  color: #fdcb6e;
+  font-family: var(--font-family);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: 0.01em;
+  transition: all var(--transition-fast);
+}
+
+.admin-panel-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.admin-panel-btn:hover {
+  background: rgba(253, 203, 110, 0.18);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(253, 203, 110, 0.15);
 }
 
 /* ===== Form Grid ===== */
