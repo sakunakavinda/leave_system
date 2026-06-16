@@ -1,19 +1,46 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import './App.css'
 import LeaveList from './LeaveList.jsx'
+
+const getMinLeaveDate = () => {
+  const minDate = new Date()
+  minDate.setDate(minDate.getDate() + 3)
+  const year = minDate.getFullYear()
+  const month = String(minDate.getMonth() + 1).padStart(2, '0')
+  const day = String(minDate.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
 
 function App() {
   const [page, setPage] = useState('form') // 'form' | 'list'
   const [formData, setFormData] = useState({
     secretCode: '',
     confirmSecretCode: '',
-    leaveDates: [''],
+    leaveDates: [getMinLeaveDate()],
     returningDate: '',
     substituteName: '',
   })
 
   const [showToast, setShowToast] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    const validDates = formData.leaveDates.filter(d => d);
+    if (validDates.length > 0) {
+      const maxDateStr = validDates.reduce((max, current) => current > max ? current : max, validDates[0]);
+      const maxDate = new Date(maxDateStr);
+      maxDate.setDate(maxDate.getDate() + 1);
+      
+      const year = maxDate.getFullYear();
+      const month = String(maxDate.getMonth() + 1).padStart(2, '0');
+      const day = String(maxDate.getDate()).padStart(2, '0');
+      const nextDayStr = `${year}-${month}-${day}`;
+      
+      setFormData(prev => prev.returningDate !== nextDayStr ? { ...prev, returningDate: nextDayStr } : prev);
+    } else {
+      setFormData(prev => prev.returningDate !== '' ? { ...prev, returningDate: '' } : prev);
+    }
+  }, [formData.leaveDates]);
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -31,7 +58,7 @@ function App() {
   const addLeaveDate = () => {
     setFormData((prev) => ({
       ...prev,
-      leaveDates: [...prev.leaveDates, ''],
+      leaveDates: [...prev.leaveDates, getMinLeaveDate()],
     }))
   }
 
@@ -49,6 +76,24 @@ function App() {
       setError('Secret codes do not match. Please re-enter carefully.')
       return
     }
+
+    // Validate that all leave dates are at least 3 days from today
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    
+    const minDate = new Date(today)
+    minDate.setDate(minDate.getDate() + 3)
+
+    for (let dateStr of formData.leaveDates) {
+      if (!dateStr) continue
+      const leaveDate = new Date(dateStr)
+      leaveDate.setHours(0, 0, 0, 0)
+      if (leaveDate < minDate) {
+        setError('Leaves must be applied at least 3 days in advance.')
+        return
+      }
+    }
+
     setError('')
 
     const submissionData = {
@@ -66,7 +111,7 @@ function App() {
     setFormData({
       secretCode: '',
       confirmSecretCode: '',
-      leaveDates: [''],
+      leaveDates: [getMinLeaveDate()],
       returningDate: '',
       substituteName: '',
     })
@@ -212,7 +257,8 @@ function App() {
               id="returningDate"
               name="returningDate"
               value={formData.returningDate}
-              onChange={handleChange}
+              readOnly
+              style={{ cursor: 'not-allowed', opacity: 0.7 }}
               required
             />
           </div>
@@ -252,9 +298,6 @@ function App() {
             </div>
             <ol className="conditions-list">
               <li data-num="1.">
-                Leaves should be applied before 3 working days.
-              </li>
-              <li data-num="2.">
                 If the person who took leave fails to report for duty on the designated day, the substitute must perform the duties in their place.
               </li>
             </ol>

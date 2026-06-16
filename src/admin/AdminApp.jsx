@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import './admin.css'
-import { AdminDashboard, ManageEmployees, ManageBranches, ManageManagers, INITIAL_APPLICATIONS, INITIAL_BRANCHES, INITIAL_MANAGERS, INITIAL_EMPLOYEES } from './AdminPages.jsx'
+import { AdminDashboard, ManageEmployees, ManageBranches, ManageManagers, AccountSettings, INITIAL_APPLICATIONS, INITIAL_BRANCHES, INITIAL_MANAGERS, INITIAL_EMPLOYEES } from './AdminPages.jsx'
 
 const NAV = [
   {
@@ -65,6 +65,7 @@ export default function AdminApp() {
   const [currentUser, setCurrentUser]   = useState(null)
   const [loginForm, setLoginForm]       = useState({ username: '', password: '' })
   const [loginError, setLoginError]     = useState('')
+  const [showProfileModal, setShowProfileModal] = useState(false)
 
   const [activePage, setActivePage]     = useState('dashboard')
   const [applications, setApplications] = useState(INITIAL_APPLICATIONS)
@@ -75,7 +76,7 @@ export default function AdminApp() {
   const handleLogin = (e) => {
     e.preventDefault()
     const user = managers.find(m => m.username === loginForm.username)
-    if (user && loginForm.password === 'password') {
+    if (user && loginForm.password === user.password) {
       setCurrentUser(user)
       setLoginError('')
       setActivePage('dashboard')
@@ -203,7 +204,12 @@ export default function AdminApp() {
             <p>{meta.subtitle}</p>
           </div>
           <div className="topbar-right">
-            <div className="admin-avatar" title={`${currentUser.username} (${currentUser.role})`}>
+            <div 
+              className="admin-avatar" 
+              title={`${currentUser.username} (${currentUser.role})`}
+              onClick={() => setShowProfileModal(true)}
+              style={{ cursor: 'pointer', transition: 'transform 0.2s', ':hover': { transform: 'scale(1.05)' } }}
+            >
               {currentUser.username.slice(0,2).toUpperCase()}
             </div>
           </div>
@@ -227,6 +233,16 @@ export default function AdminApp() {
           <ManageBranches branches={allowedBranches} setBranches={setBranches} />
         )}
       </main>
+
+      {showProfileModal && (
+        <AccountSettings 
+          currentUser={currentUser} 
+          setCurrentUser={setCurrentUser} 
+          managers={managers} 
+          setManagers={setManagers} 
+          onClose={() => setShowProfileModal(false)}
+        />
+      )}
     </div>
   )
 }

@@ -12,11 +12,11 @@ export const INITIAL_APPLICATIONS = [
 ]
 
 export const INITIAL_EMPLOYEES = [
-  { id: 'EMP-001', name: 'John Doe',       post: 'Senior Engineer',  department: 'Engineering', branch: 'Colombo', status: 'active'   },
-  { id: 'EMP-002', name: 'Jane Smith',     post: 'Accountant',       department: 'Finance',     branch: 'Kandy',   status: 'active'   },
-  { id: 'EMP-003', name: 'Alex Johnson',   post: 'HR Manager',       department: 'HR',          branch: 'Galle',   status: 'active'   },
-  { id: 'EMP-004', name: 'Sarah Williams', post: 'Operations Lead',  department: 'Operations',  branch: 'Negombo', status: 'active'   },
-  { id: 'EMP-005', name: 'Michael Brown',  post: 'Junior Developer', department: 'Engineering', branch: 'Jaffna',  status: 'inactive' },
+  { id: 'EMP-001', name: 'John Doe',       secretCode: '12345678', post: 'Senior Engineer',  department: 'Engineering', branch: 'Colombo', status: 'active'   },
+  { id: 'EMP-002', name: 'Jane Smith',     secretCode: '23456789', post: 'Accountant',       department: 'Finance',     branch: 'Kandy',   status: 'active'   },
+  { id: 'EMP-003', name: 'Alex Johnson',   secretCode: '34567890', post: 'HR Manager',       department: 'HR',          branch: 'Galle',   status: 'active'   },
+  { id: 'EMP-004', name: 'Sarah Williams', secretCode: '45678901', post: 'Operations Lead',  department: 'Operations',  branch: 'Negombo', status: 'active'   },
+  { id: 'EMP-005', name: 'Michael Brown',  secretCode: '56789012', post: 'Junior Developer', department: 'Engineering', branch: 'Jaffna',  status: 'inactive' },
 ]
 
 export const INITIAL_BRANCHES = [
@@ -28,11 +28,11 @@ export const INITIAL_BRANCHES = [
 ]
 
 export const INITIAL_MANAGERS = [
-  { id: 'MGR-001', username: 'johndoe',   branch: 'Colombo', status: 'active', role: 'manager'   },
-  { id: 'MGR-002', username: 'janesmith', branch: 'Kandy',   status: 'active', role: 'super manager' },
-  { id: 'MGR-003', username: 'alexj',     branch: 'Galle',   status: 'active', role: 'manager'   },
-  { id: 'MGR-004', username: 'sarahw',    branch: 'Negombo', status: 'active', role: 'super manager' },
-  { id: 'MGR-005', username: 'michaelb',  branch: 'Jaffna',  status: 'inactive', role: 'manager' },
+  { id: 'MGR-001', username: 'johndoe',   password: 'password', branch: 'Colombo', status: 'active', role: 'manager'   },
+  { id: 'MGR-002', username: 'janesmith', password: 'password', branch: 'Kandy',   status: 'active', role: 'super manager' },
+  { id: 'MGR-003', username: 'alexj',     password: 'password', branch: 'Galle',   status: 'active', role: 'manager'   },
+  { id: 'MGR-004', username: 'sarahw',    password: 'password', branch: 'Negombo', status: 'active', role: 'super manager' },
+  { id: 'MGR-005', username: 'michaelb',  password: 'password', branch: 'Jaffna',  status: 'inactive', role: 'manager' },
 ]
 
 
@@ -225,7 +225,7 @@ export function ManageEmployees({ branches, employees, setEmployees }) {
   const [branchFilter, setBranchFilter] = useState('all')
   const [modal, setModal]               = useState(null) // null | 'add' | employee object
   const [toast, setToast]               = useState(null)
-  const EMPTY_EMP = { name:'', post:'', department:'', branch: branches[0]?.name || '', status:'active' }
+  const EMPTY_EMP = { name:'', secretCode:'', post:'', department:'', branch: branches[0]?.name || '', status:'active' }
   const [form, setForm]                 = useState(EMPTY_EMP)
 
   const showToast = (msg, type='success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000) }
@@ -283,7 +283,7 @@ export function ManageEmployees({ branches, employees, setEmployees }) {
       <div className="data-table-wrap">
         <table className="data-table">
           <thead>
-            <tr><th>ID</th><th>Name</th><th>Post</th><th>Branch</th><th>Status</th><th>Actions</th></tr>
+            <tr><th>ID</th><th>Name</th><th>Secret Code</th><th>Post</th><th>Branch</th><th>Status</th><th>Actions</th></tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
@@ -300,6 +300,7 @@ export function ManageEmployees({ branches, employees, setEmployees }) {
                     </div>
                   </div>
                 </td>
+                <td><span style={{ fontFamily:'monospace', color:'var(--text-secondary)' }}>{emp.secretCode || '—'}</span></td>
                 <td>{emp.post}</td>
                 <td>{emp.branch}</td>
                 <td>
@@ -357,18 +358,24 @@ export function ManageEmployees({ branches, employees, setEmployees }) {
                   <input placeholder="Department" value={form.department} onChange={e => setForm(p=>({...p, department: e.target.value}))} />
                 </div>
                 <div className="field">
+                  <label>Secret Code</label>
+                  <input placeholder="Secret Code" value={form.secretCode} onChange={e => setForm(p=>({...p, secretCode: e.target.value}))} />
+                </div>
+              </div>
+              <div className="field-row">
+                <div className="field">
                   <label>Branch</label>
                   <select value={form.branch} onChange={e => setForm(p=>({...p, branch: e.target.value}))}>
                     {branches.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
                   </select>
                 </div>
-              </div>
-              <div className="field">
-                <label>Status</label>
-                <select value={form.status} onChange={e => setForm(p=>({...p, status: e.target.value}))}>
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                </select>
+                <div className="field">
+                  <label>Status</label>
+                  <select value={form.status} onChange={e => setForm(p=>({...p, status: e.target.value}))}>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </div>
               </div>
             </div>
             <div className="modal-footer">
@@ -731,6 +738,81 @@ export function ManageManagers({ branches, managers, setManagers }) {
             ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
             : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>}
           {toast.msg}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─────────────────────────────────────────────────────
+   AccountSettings
+───────────────────────────────────────────────────── */
+export function AccountSettings({ currentUser, setCurrentUser, managers, setManagers, onClose }) {
+  const [form, setForm] = useState({ username: currentUser.username, password: '', confirmPassword: '' })
+  const [error, setError] = useState('')
+  const [toast, setToast] = useState(null)
+
+  const handleSave = () => {
+    if (!form.username.trim() || !form.password.trim() || !form.confirmPassword.trim()) {
+      setError('All fields are required')
+      return
+    }
+    if (form.password !== form.confirmPassword) {
+      setError('Passwords do not match')
+      return
+    }
+    
+    setError('')
+    setManagers(prev => prev.map(m => m.id === currentUser.id ? { ...m, username: form.username, password: form.password } : m))
+    setCurrentUser(prev => ({ ...prev, username: form.username, password: form.password }))
+    setToast('Account settings updated')
+    setTimeout(() => {
+      setToast(null)
+      onClose()
+    }, 1500)
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+        <div className="modal-header">
+          <h3>Update Credentials</h3>
+          <button className="modal-close" onClick={onClose}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div className="modal-body">
+          <div className="field-row">
+            <div className="field" style={{ flex: 1 }}>
+              <label>Username</label>
+              <input value={form.username} onChange={e => setForm(p => ({...p, username: e.target.value}))} />
+            </div>
+          </div>
+          <div className="field-row" style={{ marginTop: '16px' }}>
+            <div className="field" style={{ flex: 1 }}>
+              <label>New Password</label>
+              <input type="password" value={form.password} onChange={e => setForm(p => ({...p, password: e.target.value}))} />
+            </div>
+          </div>
+          <div className="field-row" style={{ marginTop: '16px' }}>
+            <div className="field" style={{ flex: 1 }}>
+              <label>Confirm Password</label>
+              <input type="password" value={form.confirmPassword} onChange={e => setForm(p => ({...p, confirmPassword: e.target.value}))} />
+            </div>
+          </div>
+          {error && <div style={{ color: '#ff5252', fontSize: '13px', marginTop: '12px' }}>{error}</div>}
+        </div>
+        <div className="modal-footer">
+          <button className="btn-secondary" onClick={onClose}>Cancel</button>
+          <button className="btn-primary" onClick={handleSave}>Save Changes</button>
+        </div>
+      </div>
+      {toast && (
+        <div className={`admin-toast admin-toast-success show`}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          {toast}
         </div>
       )}
     </div>
