@@ -49,6 +49,9 @@ export function AdminDashboard({ applications, onUpdateStatus, branches }) {
   const [branchFilter, setBranchFilter] = useState('all')
   const [search, setSearch]           = useState('')
   const [toast, setToast]             = useState(null)
+  const [currentDate, setCurrentDate] = useState(() => new Date(2026, 5, 1))
+  const [isCalendarExpanded, setIsCalendarExpanded] = useState(true)
+  const [selectedDayLeaves, setSelectedDayLeaves] = useState(null)
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type })
@@ -81,6 +84,49 @@ export function AdminDashboard({ applications, onUpdateStatus, branches }) {
     rejected: branchFiltered.filter(a => a.status === 'rejected').length,
   }
 
+  const getYYYYMMDD = (d) => {
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const dayVal = String(d.getDate()).padStart(2, '0')
+    return `${y}-${m}-${dayVal}`
+  }
+
+  const year = currentDate.getFullYear()
+  const month = currentDate.getMonth()
+
+  const firstDay = new Date(year, month, 1)
+  const lastDay = new Date(year, month + 1, 0)
+  const daysInMonth = lastDay.getDate()
+  const startDayOfWeek = firstDay.getDay()
+  const prevLastDay = new Date(year, month, 0).getDate()
+
+  const cells = []
+  for (let i = startDayOfWeek - 1; i >= 0; i--) {
+    const d = new Date(year, month - 1, prevLastDay - i)
+    cells.push({ date: d, isCurrentMonth: false, dateString: getYYYYMMDD(d) })
+  }
+  for (let i = 1; i <= daysInMonth; i++) {
+    const d = new Date(year, month, i)
+    cells.push({ date: d, isCurrentMonth: true, dateString: getYYYYMMDD(d) })
+  }
+  const totalCells = 42
+  const remaining = totalCells - cells.length
+  for (let i = 1; i <= remaining; i++) {
+    const d = new Date(year, month + 1, i)
+    cells.push({ date: d, isCurrentMonth: false, dateString: getYYYYMMDD(d) })
+  }
+
+  const calendarApprovedLeaves = applications.filter(app => {
+    if (app.status !== 'approved') return false
+    const matchBranch = branchFilter === 'all' || app.branch === branchFilter
+    const q = search.toLowerCase()
+    const matchSearch = !q || 
+      app.name.toLowerCase().includes(q) || 
+      app.branch.toLowerCase().includes(q) || 
+      app.id.toLowerCase().includes(q)
+    return matchBranch && matchSearch
+  })
+
   return (
     <div className="admin-content">
       {/* Stats */}
@@ -103,6 +149,89 @@ export function AdminDashboard({ applications, onUpdateStatus, branches }) {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Approved Leaves Calendar */}
+      <div className="calendar-card">
+        <div className="calendar-header" onClick={() => setIsCalendarExpanded(!isCalendarExpanded)} style={{ cursor: 'pointer' }}>
+          <div className="calendar-header-title">
+            <div className="calendar-title-row">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="calendar-title-icon">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/>
+                <line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+              <h3>Approved Leaves Calendar</h3>
+              <span className="calendar-badge">
+                {calendarApprovedLeaves.length} Approved
+              </span>
+            </div>
+            <p className="calendar-subtitle">Monthly overview of approved staff leaves</p>
+          </div>
+          
+          <div className="calendar-header-controls" onClick={e => e.stopPropagation()}>
+            {isCalendarExpanded && (
+              <div className="calendar-month-nav">
+                <button className="btn-nav" onClick={() => {
+                  setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
+                }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                </button>
+                <span className="calendar-month-label">
+                  {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                </span>
+                <button className="btn-nav" onClick={() => {
+                  setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
+                }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+              </div>
+            )}
+            <button className="btn-toggle-expand" onClick={() => setIsCalendarExpanded(!isCalendarExpanded)} title={isCalendarExpanded ? "Collapse Calendar" : "Expand Calendar"}>
+              {isCalendarExpanded ? (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {isCalendarExpanded && (
+          <div className="calendar-body">
+            <div className="calendar-weekdays">
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+                <div key={d} className="calendar-weekday">{d}</div>
+              ))}
+            </div>
+            <div className="calendar-grid">
+              {cells.map((cell, idx) => {
+                const dayLeaves = calendarApprovedLeaves.filter(app => app.leaveDates.includes(cell.dateString))
+                const isToday = getYYYYMMDD(new Date()) === cell.dateString
+                const hasLeaves = dayLeaves.length > 0
+                
+                return (
+                  <div 
+                    key={idx} 
+                    className={`calendar-day ${!cell.isCurrentMonth ? 'adjacent-month' : ''} ${isToday ? 'today' : ''} ${hasLeaves ? 'has-leaves' : ''}`}
+                    onClick={hasLeaves ? () => setSelectedDayLeaves({ date: cell.dateString, leaves: dayLeaves }) : undefined}
+                    style={hasLeaves ? { cursor: 'pointer' } : undefined}
+                  >
+                    <div className="day-number">{cell.date.getDate()}</div>
+                    {hasLeaves && (
+                      <div className="day-leaves-count">
+                        <span className="leaves-count-badge">
+                          {dayLeaves.length} {dayLeaves.length === 1 ? 'Leave' : 'Leaves'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Controls */}
@@ -203,6 +332,55 @@ export function AdminDashboard({ applications, onUpdateStatus, branches }) {
           </tbody>
         </table>
       </div>
+
+      {/* Leaves Modal */}
+      {selectedDayLeaves && (
+        <div className="modal-backdrop" onClick={() => setSelectedDayLeaves(null)}>
+          <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+            <div className="modal-header">
+              <h3>Approved Leaves — {formatDate(selectedDayLeaves.date)}</h3>
+              <button className="modal-close" onClick={() => setSelectedDayLeaves(null)}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            <div className="modal-body" style={{ maxHeight: '400px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {selectedDayLeaves.leaves.map((leave) => (
+                <div key={leave.id} style={{ 
+                  background: 'rgba(255, 255, 255, 0.02)', 
+                  border: '1px solid var(--bg-card-border)', 
+                  borderRadius: 'var(--border-radius-sm)', 
+                  padding: '16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h4 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '15px', fontWeight: 600 }}>{leave.name}</h4>
+                    <span className="badge badge-approved" style={{ padding: '2px 8px' }}>Approved</span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                    <div><strong>Branch:</strong> {leave.branch}</div>
+                    <div><strong>Department:</strong> {leave.department || '—'}</div>
+                    <div><strong>Designation:</strong> {leave.post || '—'}</div>
+                    <div><strong>Substitute:</strong> {leave.substituteName || '—'}</div>
+                    <div style={{ gridColumn: 'span 2' }}>
+                      <strong>Leave Dates:</strong> {leave.leaveDates.map(d => formatDate(d)).join(', ')}
+                    </div>
+                    <div style={{ gridColumn: 'span 2' }}>
+                      <strong>Returning Date:</strong> {formatDate(leave.returningDate)}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="modal-footer">
+              <button className="btn-primary" onClick={() => setSelectedDayLeaves(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toast */}
       {toast && (
@@ -747,7 +925,7 @@ export function ManageManagers({ branches, managers, setManagers }) {
 /* ─────────────────────────────────────────────────────
    AccountSettings
 ───────────────────────────────────────────────────── */
-export function AccountSettings({ currentUser, setCurrentUser, managers, setManagers, onClose }) {
+export function AccountSettings({ currentUser, setCurrentUser, setManagers, onClose }) {
   const [form, setForm] = useState({ username: currentUser.username, password: '', confirmPassword: '' })
   const [error, setError] = useState('')
   const [toast, setToast] = useState(null)

@@ -238,7 +238,6 @@ export default function AdminApp() {
         <AccountSettings 
           currentUser={currentUser} 
           setCurrentUser={setCurrentUser} 
-          managers={managers} 
           setManagers={setManagers} 
           onClose={() => setShowProfileModal(false)}
         />
