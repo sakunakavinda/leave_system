@@ -163,7 +163,7 @@ export default function AdminApp() {
               <label>Username</label>
               <input 
                 autoFocus
-                placeholder="e.g. johndoe" 
+                placeholder="Enter username" 
                 value={loginForm.username} 
                 onChange={e => setLoginForm(p => ({...p, username: e.target.value}))} 
               />
@@ -172,7 +172,7 @@ export default function AdminApp() {
               <label>Password</label>
               <input 
                 type="password" 
-                placeholder="password" 
+                placeholder="Enter password" 
                 value={loginForm.password} 
                 onChange={e => setLoginForm(p => ({...p, password: e.target.value}))} 
               />

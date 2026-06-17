@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { api } from './api'
 import './LeaveList.css'
 
 
@@ -58,6 +59,21 @@ function formatDate(dateStr) {
 export default function LeaveList({ onBack, submissions = [], employees = [], branches = [], roles = [], applicant }) {
   const [filter, setFilter] = useState('all')
   const [expandedId, setExpandedId] = useState(null)
+  const [isDeleting, setIsDeleting] = useState(null)
+
+  const handleUndo = async (e, id) => {
+    e.stopPropagation()
+    if (!window.confirm("Are you sure you want to undo this leave application?")) return;
+    
+    setIsDeleting(id)
+    try {
+      await api.deleteApplication(id)
+      window.location.reload()
+    } catch (err) {
+      alert("Failed to undo application: " + err.message)
+      setIsDeleting(null)
+    }
+  }
 
   // Filter to only show the applicant's own applications
   const mySubmissions = submissions.filter(s => s.employee_id === applicant?.id)
@@ -230,6 +246,21 @@ export default function LeaveList({ onBack, submissions = [], employees = [], br
                         <span className="detail-value mono">{app.id}</span>
                       </div>
                     </div>
+                    {app.status === 'pending' && (
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '24px', paddingTop: '16px', borderTop: '1px solid var(--bg-card-border)' }}>
+                        <button
+                          className="btn-secondary"
+                          style={{ color: '#ff7675', borderColor: 'rgba(255, 118, 117, 0.3)', background: 'rgba(255, 118, 117, 0.05)' }}
+                          onClick={(e) => handleUndo(e, app.id)}
+                          disabled={isDeleting === app.id}
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px' }}>
+                            <path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                          </svg>
+                          {isDeleting === app.id ? 'Undoing...' : 'Undo Application'}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

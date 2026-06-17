@@ -1488,7 +1488,7 @@ export function ManageBranches({ branches, setBranches, employees, managers, set
               <div className="field-row">
                 <div className="field">
                   <label>Branch Name *</label>
-                  <input placeholder="e.g. Colombo" value={form.name} onChange={e => setForm(p=>({...p, name: e.target.value}))} />
+                  <input placeholder="Branch name" value={form.name} onChange={e => setForm(p=>({...p, name: e.target.value}))} />
                 </div>
                 <div className="field">
                   <label>Location</label>
@@ -1671,7 +1671,7 @@ export function ManageManagers({ branches, managers, setManagers }) {
               <div className="field-row">
                 <div className="field">
                   <label>Username *</label>
-                  <input placeholder="e.g. johndoe" value={form.username} onChange={e => setForm(p=>({...p, username: e.target.value}))} />
+                  <input placeholder="Enter username" value={form.username} onChange={e => setForm(p=>({...p, username: e.target.value}))} />
                 </div>
                 <div className="field">
                   {/* Branch assignment happens during branch creation, so no field here. */}
@@ -1846,7 +1846,7 @@ export function ManageDepartments({ departments, setDepartments }) {
               <div className="field-row">
                 <div className="field">
                   <label>Department Name *</label>
-                  <input placeholder="e.g. Engineering" value={form.name} onChange={e => setForm(p=>({...p, name: e.target.value}))} />
+                  <input placeholder="Department name" value={form.name} onChange={e => setForm(p=>({...p, name: e.target.value}))} />
                 </div>
               </div>
               <div className="field-row">
@@ -2025,7 +2025,7 @@ export function ManageRoles({ departments, roles, setRoles }) {
               <div className="field-row">
                 <div className="field">
                   <label>Role Title *</label>
-                  <input placeholder="e.g. Senior Engineer" value={form.title} onChange={e => setForm(p=>({...p, title: e.target.value}))} />
+                  <input placeholder="Role title" value={form.title} onChange={e => setForm(p=>({...p, title: e.target.value}))} />
                 </div>
                 <div className="field">
                   <label>Department</label>

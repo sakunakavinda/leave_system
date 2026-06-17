@@ -58,4 +58,5 @@ export const api = {
   addApplication: (data) => fetchApi('/applications', { method: 'POST', body: JSON.stringify(data) }),
   updateApplicationStatus: (id, status) => fetchApi(`/applications/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) }),
   confirmApplication: (id, secretCode) => fetchApi(`/applications/${id}/confirm`, { method: 'PUT', body: JSON.stringify({ secretCode }) }),
+  deleteApplication: (id) => fetchApi(`/applications/${id}`, { method: 'DELETE' }),
 };

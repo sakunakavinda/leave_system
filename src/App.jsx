@@ -193,22 +193,39 @@ function App() {
 
   const applicant = employees.find(e => e.secretCode === formData.secretCode);
   const availableSubstitutes = applicant 
-    ? employees.filter(e => e.branch_id === applicant.branch_id && e.role_id === applicant.role_id && e.id !== applicant.id && e.status === 'active')
+    ? employees.filter(e => {
+        if (e.branch_id !== applicant.branch_id || e.role_id !== applicant.role_id || e.id === applicant.id || e.status !== 'active') {
+          return false;
+        }
+        // Check if this employee has any pending/approved leaves overlapping with the selected leave dates
+        const hasLeaveOverlap = submissions.some(sub => 
+          sub.employee_id === e.id && 
+          ['pending', 'approved'].includes(sub.status) &&
+          sub.leaveDates.some(d => formData.leaveDates.includes(d))
+        );
+
+        // Check if this employee is ALREADY a substitute for someone else overlapping with the selected leave dates
+        const hasSubOverlap = submissions.some(sub => 
+          sub.substitute_employee_id === e.id && 
+          ['pending', 'approved'].includes(sub.status) &&
+          sub.leaveDates.some(d => formData.leaveDates.includes(d))
+        );
+
+        return !hasLeaveOverlap && !hasSubOverlap;
+      })
     : [];
 
   const pendingSubstitutions = applicant ? submissions.filter(s => !s.substituteConfirmed && s.substitute_employee_id === applicant.id) : []
 
-  if (page === 'list') {
-    return <LeaveList onBack={() => setPage('form')} submissions={submissions} employees={employees} branches={branches} roles={roles} applicant={applicant} />
-  }
-
-  if (page === 'substitutions') {
-    return <SubstitutionsList onBack={() => setPage('form')} onAgree={handleAgreeSubstitution} submissions={submissions} employees={employees} branches={branches} roles={roles} applicant={applicant} />
-  }
-
   return (
-    <div className="leave-page">
-      <div className="leave-card">
+    <>
+      {page === 'list' ? (
+        <LeaveList onBack={() => setPage('form')} submissions={submissions} employees={employees} branches={branches} roles={roles} applicant={applicant} />
+      ) : page === 'substitutions' ? (
+        <SubstitutionsList onBack={() => setPage('form')} onAgree={handleAgreeSubstitution} submissions={submissions} employees={employees} branches={branches} roles={roles} applicant={applicant} />
+      ) : (
+        <div className="leave-page">
+          <div className="leave-card">
         {/* ── Header ── */}
         <header className="leave-header">
           <div className="leave-header-top">
@@ -264,7 +281,7 @@ function App() {
                   <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
                   <path d="M16 3.13a4 4 0 0 1 0 7.75" />
                 </svg>
-                {page === 'substitutions' ? 'Close Substitutions' : `Substitutions (${pendingSubstitutions.length})`}
+                {page === 'substitutions' ? 'Close Substitutions' : 'Substitutions'}
               </button>
             </div>
           </div>
@@ -434,8 +451,9 @@ function App() {
               </ol>
             </div>
           </form>
-
-
+        </div>
+      </div>
+      )}
       {/* ── Agreement Modal ── */}
       {agreeModal && (
         <div className="modal-backdrop" onClick={() => setAgreeModal(null)}>
@@ -495,7 +513,7 @@ function App() {
         </svg>
         {toastMsg || 'Leave application submitted successfully!'}
       </div>
-    </div>
+    </>
   )
 }
 

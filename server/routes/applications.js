@@ -106,6 +106,44 @@ router.post('/', async (req, res) => {
           await client.query('ROLLBACK');
           return res.status(400).json({ error: `Maximum allowed employees on leave reached for date: ${date}` });
         }
+
+        // Substitute Check: Can't take leave if you are acting as a substitute for someone else that day
+        const subCheckResult = await client.query(`
+          SELECT e.name 
+          FROM leave_applications a
+          JOIN leave_application_dates d ON a.id = d.leave_application_id
+          JOIN employees e ON a.employee_id = e.id
+          WHERE a.substitute_employee_id = $1
+            AND d.leave_date = $2
+            AND a.status IN ('pending', 'approved')
+        `, [employee_id, date]);
+
+        if (subCheckResult.rows.length > 0) {
+          await client.query('ROLLBACK');
+          const requesterName = subCheckResult.rows[0].name;
+          return res.status(400).json({ error: `You cannot take leave on ${date} because you are assigned as a substitute for ${requesterName}.` });
+        }
+
+        // Double Substitute Check: Can't be assigned as a substitute if already substituting for someone else that day
+        if (substitute_employee_id) {
+          const doubleSubCheck = await client.query(`
+            SELECT e.name 
+            FROM leave_applications a
+            JOIN leave_application_dates d ON a.id = d.leave_application_id
+            JOIN employees e ON a.employee_id = e.id
+            WHERE a.substitute_employee_id = $1
+              AND d.leave_date = $2
+              AND a.status IN ('pending', 'approved')
+          `, [substitute_employee_id, date]);
+
+          if (doubleSubCheck.rows.length > 0) {
+            await client.query('ROLLBACK');
+            const requesterName = doubleSubCheck.rows[0].name;
+            const subEmpResult = await client.query('SELECT name FROM employees WHERE id = $1', [substitute_employee_id]);
+            const subName = subEmpResult.rows[0]?.name || 'the selected substitute';
+            return res.status(400).json({ error: `${subName} cannot be your substitute on ${date} because they are already substituting for ${requesterName}.` });
+          }
+        }
       }
     }
     
@@ -126,6 +164,23 @@ router.post('/', async (req, res) => {
       }
     }
     
+    
+    // Immediately deduct the balance since the request is pending and takes up quota
+    if (requestedDays > 0) {
+      let updateCol = '';
+      if (leave_type === 'annual') updateCol = 'annual_taken';
+      else if (leave_type === 'sick') updateCol = 'sick_taken';
+      else if (leave_type === 'casual') updateCol = 'casual_taken';
+
+      if (updateCol) {
+        const currentYear = new Date().getFullYear();
+        await client.query(`
+          UPDATE leave_balances SET ${updateCol} = ${updateCol} + $1 
+          WHERE employee_id = $2 AND year = $3
+        `, [requestedDays, employee_id, currentYear]);
+      }
+    }
+
     await client.query('COMMIT');
     
     res.status(201).json({ id: appId, message: 'Application submitted successfully' });
@@ -153,8 +208,26 @@ router.put('/:id/status', async (req, res) => {
     }
     const app = appResult.rows[0];
 
-    // If changing to 'approved' from something else
-    if (app.status !== 'approved' && status === 'approved') {
+    // If changing to 'rejected' from an active state (refund)
+    if (app.status !== 'rejected' && status === 'rejected') {
+      const daysResult = await client.query('SELECT COUNT(*) FROM leave_application_dates WHERE leave_application_id = $1', [id]);
+      const requestedDays = parseInt(daysResult.rows[0].count);
+      const currentYear = new Date(app.applied_date).getFullYear();
+
+      let updateCol = '';
+      if (app.leave_type === 'annual') updateCol = 'annual_taken';
+      else if (app.leave_type === 'sick') updateCol = 'sick_taken';
+      else if (app.leave_type === 'casual') updateCol = 'casual_taken';
+
+      if (updateCol) {
+        await client.query(`
+          UPDATE leave_balances SET ${updateCol} = ${updateCol} - $1 
+          WHERE employee_id = $2 AND year = $3
+        `, [requestedDays, app.employee_id, currentYear]);
+      }
+    } 
+    // If changing from 'rejected' to an active state (deduct)
+    else if (app.status === 'rejected' && status !== 'rejected') {
       const daysResult = await client.query('SELECT COUNT(*) FROM leave_application_dates WHERE leave_application_id = $1', [id]);
       const requestedDays = parseInt(daysResult.rows[0].count);
       const currentYear = new Date(app.applied_date).getFullYear();
@@ -173,24 +246,6 @@ router.put('/:id/status', async (req, res) => {
       if (updateCol) {
         await client.query(`
           UPDATE leave_balances SET ${updateCol} = ${updateCol} + $1 
-          WHERE employee_id = $2 AND year = $3
-        `, [requestedDays, app.employee_id, currentYear]);
-      }
-    } 
-    // If changing from 'approved' to something else (refund)
-    else if (app.status === 'approved' && status !== 'approved') {
-      const daysResult = await client.query('SELECT COUNT(*) FROM leave_application_dates WHERE leave_application_id = $1', [id]);
-      const requestedDays = parseInt(daysResult.rows[0].count);
-      const currentYear = new Date(app.applied_date).getFullYear();
-
-      let updateCol = '';
-      if (app.leave_type === 'annual') updateCol = 'annual_taken';
-      else if (app.leave_type === 'sick') updateCol = 'sick_taken';
-      else if (app.leave_type === 'casual') updateCol = 'casual_taken';
-
-      if (updateCol) {
-        await client.query(`
-          UPDATE leave_balances SET ${updateCol} = ${updateCol} - $1 
           WHERE employee_id = $2 AND year = $3
         `, [requestedDays, app.employee_id, currentYear]);
       }
@@ -238,6 +293,57 @@ router.put('/:id/confirm', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error', details: err.message });
+  }
+});
+
+router.delete('/:id', async (req, res) => {
+  const { id } = req.params;
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+    
+    const appResult = await client.query('SELECT * FROM leave_applications WHERE id = $1', [id]);
+    if (appResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Application not found' });
+    }
+    
+    const app = appResult.rows[0];
+    
+    if (app.status !== 'pending') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Can only undo pending applications' });
+    }
+    
+    // Refund the leave balance since it was deducted on submission
+    const daysResult = await client.query('SELECT COUNT(*) FROM leave_application_dates WHERE leave_application_id = $1', [id]);
+    const requestedDays = parseInt(daysResult.rows[0].count);
+    const currentYear = new Date(app.applied_date).getFullYear();
+
+    let updateCol = '';
+    if (app.leave_type === 'annual') updateCol = 'annual_taken';
+    else if (app.leave_type === 'sick') updateCol = 'sick_taken';
+    else if (app.leave_type === 'casual') updateCol = 'casual_taken';
+
+    if (updateCol) {
+      await client.query(`
+        UPDATE leave_balances SET ${updateCol} = ${updateCol} - $1 
+        WHERE employee_id = $2 AND year = $3
+      `, [requestedDays, app.employee_id, currentYear]);
+    }
+    
+    await client.query('DELETE FROM leave_application_dates WHERE leave_application_id = $1', [id]);
+    await client.query('DELETE FROM leave_applications WHERE id = $1', [id]);
+    
+    await client.query('COMMIT');
+    res.json({ success: true, message: 'Application deleted successfully' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: 'Server error', details: err.message });
+  } finally {
+    client.release();
   }
 });
 
