@@ -202,6 +202,10 @@ function App() {
     return <LeaveList onBack={() => setPage('form')} submissions={submissions} employees={employees} branches={branches} roles={roles} applicant={applicant} />
   }
 
+  if (page === 'substitutions') {
+    return <SubstitutionsList onBack={() => setPage('form')} onAgree={handleAgreeSubstitution} submissions={submissions} employees={employees} branches={branches} roles={roles} applicant={applicant} />
+  }
+
   return (
     <div className="leave-page">
       <div className="leave-card">
@@ -268,18 +272,7 @@ function App() {
           <p>Fill in the details below to submit your leave request</p>
         </header>
 
-        {page === 'substitutions' ? (
-          <SubstitutionsList
-            onBack={() => setPage('form')}
-            onAgree={handleAgreeSubstitution}
-            submissions={submissions}
-            employees={employees}
-            branches={branches}
-            roles={roles}
-            applicant={applicant}
-          />
-        ) : (
-          /* ── Leave Application Form ── */
+          {/* ── Leave Application Form ── */}
           <form className="leave-form" id="leave-application-form" onSubmit={handleSubmit}>
             
             {/* Row 1: Secret Code */}
@@ -441,8 +434,7 @@ function App() {
               </ol>
             </div>
           </form>
-        )}
-      </div>
+
 
       {/* ── Agreement Modal ── */}
       {agreeModal && (
