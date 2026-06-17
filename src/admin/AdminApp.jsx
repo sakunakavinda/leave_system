@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import './admin.css'
-import { AdminDashboard, ManageEmployees, ManageBranches, ManageManagers, AccountSettings, INITIAL_APPLICATIONS, INITIAL_BRANCHES, INITIAL_MANAGERS, INITIAL_EMPLOYEES } from './AdminPages.jsx'
+import { AdminDashboard, ManageEmployees, ManageBranches, ManageManagers, ManageDepartments, ManageRoles, AccountSettings, INITIAL_APPLICATIONS, INITIAL_BRANCHES, INITIAL_MANAGERS, INITIAL_EMPLOYEES, INITIAL_DEPARTMENTS, INITIAL_ROLES } from './AdminPages.jsx'
 
 const NAV = [
   {
@@ -51,6 +51,29 @@ const NAV = [
       </svg>
     ),
   },
+  {
+    id: 'departments',
+    label: 'Manage Departments',
+    desc: 'Department directory',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+        <path d="M2 17l10 5 10-5"/>
+        <path d="M2 12l10 5 10-5"/>
+      </svg>
+    ),
+  },
+  {
+    id: 'roles',
+    label: 'Manage Roles',
+    desc: 'Role definitions',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M9 11l3 3L22 4"/>
+        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+      </svg>
+    ),
+  },
 ]
 
 const PAGE_META = {
@@ -58,6 +81,8 @@ const PAGE_META = {
   employees:  { title: 'Manage Employees',  subtitle: 'Add, edit or remove staff members'   },
   managers:   { title: 'Manage Managers',   subtitle: 'View, add, edit or remove branch managers' },
   branches:   { title: 'Manage Branches',   subtitle: 'Configure and track office branches'  },
+  departments: { title: 'Manage Departments', subtitle: 'Configure and organize departments'  },
+  roles:      { title: 'Manage Roles',      subtitle: 'Define and manage role designations'   },
 }
 
 export default function AdminApp() {
@@ -72,6 +97,8 @@ export default function AdminApp() {
   const [branches, setBranches]         = useState(INITIAL_BRANCHES)
   const [managers, setManagers]         = useState(INITIAL_MANAGERS)
   const [employees, setEmployees]       = useState(INITIAL_EMPLOYEES)
+  const [departments, setDepartments]   = useState(INITIAL_DEPARTMENTS)
+  const [roles, setRoles]               = useState(INITIAL_ROLES)
 
   const handleLogin = (e) => {
     e.preventDefault()
@@ -231,6 +258,12 @@ export default function AdminApp() {
         )}
         {activePage === 'branches' && (
           <ManageBranches branches={allowedBranches} setBranches={setBranches} />
+        )}
+        {activePage === 'departments' && (
+          <ManageDepartments departments={departments} setDepartments={setDepartments} />
+        )}
+        {activePage === 'roles' && (
+          <ManageRoles departments={departments} roles={roles} setRoles={setRoles} />
         )}
       </main>
 

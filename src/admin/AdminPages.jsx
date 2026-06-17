@@ -35,6 +35,24 @@ export const INITIAL_MANAGERS = [
   { id: 'MGR-005', username: 'michaelb',  password: 'password', branch: 'Jaffna',  status: 'inactive', role: 'manager' },
 ]
 
+export const INITIAL_DEPARTMENTS = [
+  { id: 'DEPT-001', name: 'Engineering',  description: 'Software and systems engineering', status: 'active' },
+  { id: 'DEPT-002', name: 'Finance',      description: 'Financial management and accounting', status: 'active' },
+  { id: 'DEPT-003', name: 'HR',           description: 'Human resources management', status: 'active' },
+  { id: 'DEPT-004', name: 'Operations',   description: 'Business operations and logistics', status: 'active' },
+  { id: 'DEPT-005', name: 'Marketing',    description: 'Marketing and communications', status: 'inactive' },
+]
+
+export const INITIAL_ROLES = [
+  { id: 'ROLE-001', title: 'Senior Engineer',     department: 'Engineering',  description: 'Leads engineering projects and mentors juniors', status: 'active' },
+  { id: 'ROLE-002', title: 'Junior Developer',    department: 'Engineering',  description: 'Entry-level development role', status: 'active' },
+  { id: 'ROLE-003', title: 'Software Engineer',   department: 'Engineering',  description: 'Mid-level software development', status: 'active' },
+  { id: 'ROLE-004', title: 'Accountant',          department: 'Finance',      description: 'Handles financial records and reporting', status: 'active' },
+  { id: 'ROLE-005', title: 'HR Manager',          department: 'HR',           description: 'Manages HR operations and staff welfare', status: 'active' },
+  { id: 'ROLE-006', title: 'Operations Lead',     department: 'Operations',   description: 'Leads operational activities and team coordination', status: 'active' },
+  { id: 'ROLE-007', title: 'Marketing Specialist', department: 'Marketing',   description: 'Handles marketing campaigns and brand strategy', status: 'inactive' },
+]
+
 
 function formatDate(d) {
   if (!d) return '—'
@@ -1011,6 +1029,337 @@ export function ManageManagers({ branches, managers, setManagers }) {
 }
 
 /* ─────────────────────────────────────────────────────
+   ManageDepartments
+───────────────────────────────────────────────────── */
+export function ManageDepartments({ departments, setDepartments }) {
+  const [search, setSearch]   = useState('')
+  const [modal, setModal]     = useState(null)
+  const [toast, setToast]     = useState(null)
+  const EMPTY_DEPT = { name:'', description:'', status:'active' }
+  const [form, setForm]       = useState(EMPTY_DEPT)
+
+  const showToast = (msg, type='success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000) }
+  const openAdd  = ()    => { setForm(EMPTY_DEPT); setModal('add') }
+  const openEdit = (dept)  => { setForm({ ...dept }); setModal(dept) }
+  const closeModal = ()  => setModal(null)
+
+  const handleSave = () => {
+    if (!form.name.trim()) return
+    if (modal === 'add') {
+      const newId = `DEPT-${String(departments.length + 1).padStart(3, '0')}`
+      setDepartments(prev => [...prev, { ...form, id: newId }])
+      showToast('Department added successfully')
+    } else {
+      setDepartments(prev => prev.map(d => d.id === modal.id ? { ...d, ...form } : d))
+      showToast('Department updated')
+    }
+    closeModal()
+  }
+
+  const handleDelete = (id) => {
+    setDepartments(prev => prev.filter(d => d.id !== id))
+    showToast('Department removed', 'danger')
+  }
+
+  const filtered = departments.filter(d => {
+    const q = search.toLowerCase()
+    return !q ||
+      d.name.toLowerCase().includes(q) ||
+      d.description.toLowerCase().includes(q)
+  })
+
+  return (
+    <div className="admin-content">
+      <div className="controls-bar">
+        <div className="admin-search-box">
+          <svg className="s-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input placeholder="Search departments…" value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
+        <button className="btn-primary" id="add-department-btn" onClick={openAdd}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          Add Department
+        </button>
+      </div>
+
+      <div className="data-table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr><th>ID</th><th>Department Name</th><th>Description</th><th>Status</th><th>Actions</th></tr>
+          </thead>
+          <tbody>
+            {filtered.length === 0 ? (
+              <tr><td colSpan={5} style={{ textAlign:'center', padding:'48px', color:'var(--text-muted)' }}>No departments found</td></tr>
+            ) : filtered.map((dept, i) => (
+              <tr key={dept.id} style={{ animationDelay: `${i * 0.04}s` }}>
+                <td><span style={{ fontFamily:'monospace', fontSize:'12px', color:'var(--text-muted)' }}>{dept.id}</span></td>
+                <td>
+                  <div className="cell-user">
+                    <div className="cell-avatar" style={{ borderRadius:'10px', background:'linear-gradient(135deg, #00b894, #55efc4)' }}>
+                      {dept.name.slice(0,2).toUpperCase()}
+                    </div>
+                    <div className="cell-name">{dept.name}</div>
+                  </div>
+                </td>
+                <td style={{ color:'var(--text-secondary)' }}>{dept.description}</td>
+                <td>
+                  <span className={`badge badge-${dept.status}`}>{dept.status === 'active' ? 'Active' : 'Inactive'}</span>
+                </td>
+                <td>
+                  <div className="action-btns">
+                    <button className="btn-edit" id={`edit-dept-${dept.id}`} onClick={() => openEdit(dept)}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                      </svg>
+                      Edit
+                    </button>
+                    <button className="btn-danger" id={`del-dept-${dept.id}`} onClick={() => handleDelete(dept.id)}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+                      </svg>
+                      Remove
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Modal */}
+      {modal !== null && (
+        <div className="modal-backdrop" onClick={closeModal}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>{modal === 'add' ? 'Add Department' : 'Edit Department'}</h3>
+              <button className="modal-close" onClick={closeModal}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="field-row">
+                <div className="field">
+                  <label>Department Name *</label>
+                  <input placeholder="e.g. Engineering" value={form.name} onChange={e => setForm(p=>({...p, name: e.target.value}))} />
+                </div>
+              </div>
+              <div className="field-row">
+                <div className="field" style={{ gridColumn: 'span 2' }}>
+                  <label>Description</label>
+                  <input placeholder="Brief description of the department" value={form.description} onChange={e => setForm(p=>({...p, description: e.target.value}))} />
+                </div>
+              </div>
+              <div className="field">
+                <label>Status</label>
+                <select value={form.status} onChange={e => setForm(p=>({...p, status: e.target.value}))}>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={closeModal}>Cancel</button>
+              <button className="btn-primary" id="save-department-btn" onClick={handleSave}>
+                {modal === 'add' ? 'Add Department' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {toast && (
+        <div className={`admin-toast admin-toast-${toast.type} show`}>
+          {toast.type === 'success'
+            ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>}
+          {toast.msg}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─────────────────────────────────────────────────────
+   ManageRoles
+───────────────────────────────────────────────────── */
+export function ManageRoles({ departments, roles, setRoles }) {
+  const [search, setSearch]     = useState('')
+  const [deptFilter, setDeptFilter] = useState('all')
+  const [modal, setModal]       = useState(null)
+  const [toast, setToast]       = useState(null)
+  const EMPTY_ROLE = { title:'', department: departments[0]?.name || '', description:'', status:'active' }
+  const [form, setForm]         = useState(EMPTY_ROLE)
+
+  const showToast = (msg, type='success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000) }
+  const openAdd  = ()    => { setForm(EMPTY_ROLE); setModal('add') }
+  const openEdit = (role)  => { setForm({ ...role }); setModal(role) }
+  const closeModal = ()  => setModal(null)
+
+  const handleSave = () => {
+    if (!form.title.trim()) return
+    if (modal === 'add') {
+      const newId = `ROLE-${String(roles.length + 1).padStart(3, '0')}`
+      setRoles(prev => [...prev, { ...form, id: newId }])
+      showToast('Role added successfully')
+    } else {
+      setRoles(prev => prev.map(r => r.id === modal.id ? { ...r, ...form } : r))
+      showToast('Role updated')
+    }
+    closeModal()
+  }
+
+  const handleDelete = (id) => {
+    setRoles(prev => prev.filter(r => r.id !== id))
+    showToast('Role removed', 'danger')
+  }
+
+  const filtered = roles.filter(r => {
+    const matchDept = deptFilter === 'all' || r.department === deptFilter
+    const q = search.toLowerCase()
+    const matchSearch = !q ||
+      r.title.toLowerCase().includes(q) ||
+      r.department.toLowerCase().includes(q) ||
+      r.description.toLowerCase().includes(q)
+    return matchDept && matchSearch
+  })
+
+  return (
+    <div className="admin-content">
+      <div className="controls-bar">
+        <div className="admin-search-box">
+          <svg className="s-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input placeholder="Search roles…" value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
+        <select className="admin-filter-select" value={deptFilter} onChange={e => setDeptFilter(e.target.value)} id="role-dept-filter">
+          <option value="all">All Departments</option>
+          {departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+        </select>
+        <button className="btn-primary" id="add-role-btn" onClick={openAdd}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          Add Role
+        </button>
+      </div>
+
+      <div className="data-table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr><th>ID</th><th>Role Title</th><th>Department</th><th>Description</th><th>Status</th><th>Actions</th></tr>
+          </thead>
+          <tbody>
+            {filtered.length === 0 ? (
+              <tr><td colSpan={6} style={{ textAlign:'center', padding:'48px', color:'var(--text-muted)' }}>No roles found</td></tr>
+            ) : filtered.map((role, i) => (
+              <tr key={role.id} style={{ animationDelay: `${i * 0.04}s` }}>
+                <td><span style={{ fontFamily:'monospace', fontSize:'12px', color:'var(--text-muted)' }}>{role.id}</span></td>
+                <td>
+                  <div className="cell-user">
+                    <div className="cell-avatar" style={{ borderRadius:'10px', background:'linear-gradient(135deg, #fdcb6e, #e17055)' }}>
+                      {role.title.slice(0,2).toUpperCase()}
+                    </div>
+                    <div className="cell-name">{role.title}</div>
+                  </div>
+                </td>
+                <td>{role.department}</td>
+                <td style={{ color:'var(--text-secondary)' }}>{role.description}</td>
+                <td>
+                  <span className={`badge badge-${role.status}`}>{role.status === 'active' ? 'Active' : 'Inactive'}</span>
+                </td>
+                <td>
+                  <div className="action-btns">
+                    <button className="btn-edit" id={`edit-role-${role.id}`} onClick={() => openEdit(role)}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                      </svg>
+                      Edit
+                    </button>
+                    <button className="btn-danger" id={`del-role-${role.id}`} onClick={() => handleDelete(role.id)}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+                      </svg>
+                      Remove
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Modal */}
+      {modal !== null && (
+        <div className="modal-backdrop" onClick={closeModal}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>{modal === 'add' ? 'Add Role' : 'Edit Role'}</h3>
+              <button className="modal-close" onClick={closeModal}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="field-row">
+                <div className="field">
+                  <label>Role Title *</label>
+                  <input placeholder="e.g. Senior Engineer" value={form.title} onChange={e => setForm(p=>({...p, title: e.target.value}))} />
+                </div>
+                <div className="field">
+                  <label>Department</label>
+                  <select value={form.department} onChange={e => setForm(p=>({...p, department: e.target.value}))}>
+                    {departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="field-row">
+                <div className="field" style={{ gridColumn: 'span 2' }}>
+                  <label>Description</label>
+                  <input placeholder="Brief description of the role" value={form.description} onChange={e => setForm(p=>({...p, description: e.target.value}))} />
+                </div>
+              </div>
+              <div className="field">
+                <label>Status</label>
+                <select value={form.status} onChange={e => setForm(p=>({...p, status: e.target.value}))}>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={closeModal}>Cancel</button>
+              <button className="btn-primary" id="save-role-btn" onClick={handleSave}>
+                {modal === 'add' ? 'Add Role' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {toast && (
+        <div className={`admin-toast admin-toast-${toast.type} show`}>
+          {toast.type === 'success'
+            ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>}
+          {toast.msg}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─────────────────────────────────────────────────────
    AccountSettings
 ───────────────────────────────────────────────────── */
 export function AccountSettings({ currentUser, setCurrentUser, setManagers, onClose }) {
@@ -1084,4 +1433,3 @@ export function AccountSettings({ currentUser, setCurrentUser, setManagers, onCl
     </div>
   )
 }
-
