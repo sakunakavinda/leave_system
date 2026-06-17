@@ -28,6 +28,15 @@ router.post('/', async (req, res) => {
       await pool.query('UPDATE managers SET branch_id = $1 WHERE id = $2', [branch.id, manager_id]);
     }
     
+    // Auto-generate default leave rules for all existing roles
+    const rolesResult = await pool.query('SELECT id FROM roles');
+    for (const r of rolesResult.rows) {
+      await pool.query(
+        'INSERT INTO leave_rules (role_id, branch_id) VALUES ($1, $2) ON CONFLICT (role_id, branch_id) DO NOTHING',
+        [r.id, branch.id]
+      );
+    }
+
     res.status(201).json(branch);
   } catch (err) {
     console.error(err);

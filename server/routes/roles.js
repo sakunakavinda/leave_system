@@ -20,7 +20,18 @@ router.post('/', async (req, res) => {
       'INSERT INTO roles (title, department_id, description, status) VALUES ($1, $2, $3, $4) RETURNING *',
       [title, department_id, description, status || 'active']
     );
-    res.status(201).json(result.rows[0]);
+    const newRole = result.rows[0];
+
+    // Auto-generate default leave rules for all existing branches
+    const branchesResult = await pool.query('SELECT id FROM branches');
+    for (const b of branchesResult.rows) {
+      await pool.query(
+        'INSERT INTO leave_rules (role_id, branch_id) VALUES ($1, $2) ON CONFLICT (role_id, branch_id) DO NOTHING',
+        [newRole.id, b.id]
+      );
+    }
+
+    res.status(201).json(newRole);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });

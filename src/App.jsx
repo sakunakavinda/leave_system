@@ -17,8 +17,6 @@ function App() {
   const [page, setPage] = useState('form') // 'form' | 'list' | 'substitutions'
   const [formData, setFormData] = useState({
     secretCode: '',
-    confirmSecretCode: '',
-    branch_id: '',
     leaveDates: [getMinLeaveDate()],
     returningDate: '',
     substitute_employee_id: '',
@@ -26,6 +24,7 @@ function App() {
   })
 
   const [branches, setBranches] = useState([])
+  const [roles, setRoles] = useState([])
   const [employees, setEmployees] = useState([])
   const [submissions, setSubmissions] = useState([])
   const [loading, setLoading] = useState(true)
@@ -33,17 +32,16 @@ function App() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [brs, emps, apps] = await Promise.all([
+        const [brs, rls, emps, apps] = await Promise.all([
           api.getBranches(),
+          api.getRoles(),
           api.getEmployees(),
           api.getApplications()
         ]);
         setBranches(brs);
+        setRoles(rls);
         setEmployees(emps);
         setSubmissions(apps);
-        if (brs.length > 0) {
-          setFormData(prev => ({ ...prev, branch_id: brs[0].id }));
-        }
         setLoading(false);
       } catch (err) {
         console.error("Failed to load data", err);
@@ -115,8 +113,8 @@ function App() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     
-    if (formData.secretCode !== formData.confirmSecretCode) {
-      setError('Secret codes do not match. Please re-enter carefully.')
+    if (!applicant) {
+      setError('Invalid secret code. Please enter your correct secret code.')
       return
     }
 
@@ -142,7 +140,6 @@ function App() {
     try {
       const payload = {
         secretCode: formData.secretCode,
-        branch_id: formData.branch_id,
         leaveDates: formData.leaveDates.filter(d => d),
         returningDate: formData.returningDate,
         substitute_employee_id: formData.substitute_employee_id,
@@ -161,8 +158,6 @@ function App() {
       // Reset form
       setFormData({
         secretCode: '',
-        confirmSecretCode: '',
-        branch_id: branches.length > 0 ? branches[0].id : '',
         leaveDates: [getMinLeaveDate()],
         returningDate: '',
         substitute_employee_id: '',
@@ -195,10 +190,15 @@ function App() {
     }
   }
 
-  const pendingSubstitutions = submissions.filter(s => !s.substituteConfirmed)
+  const applicant = employees.find(e => e.secretCode === formData.secretCode);
+  const availableSubstitutes = applicant 
+    ? employees.filter(e => e.branch_id === applicant.branch_id && e.role_id === applicant.role_id && e.id !== applicant.id && e.status === 'active')
+    : [];
+
+  const pendingSubstitutions = applicant ? submissions.filter(s => !s.substituteConfirmed && s.substitute_employee_id === applicant.id) : []
 
   if (page === 'list') {
-    return <LeaveList onBack={() => setPage('form')} />
+    return <LeaveList onBack={() => setPage('form')} submissions={submissions} employees={employees} branches={branches} roles={roles} applicant={applicant} />
   }
 
   return (
@@ -221,7 +221,14 @@ function App() {
                 type="button"
                 className="view-list-btn"
                 id="view-applications-btn"
-                onClick={() => setPage('list')}
+                onClick={() => {
+                  if (!applicant) {
+                    setError('Please enter your valid secret code first to view your applications.');
+                  } else {
+                    setError('');
+                    setPage('list');
+                  }
+                }}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="8" y1="6" x2="21" y2="6" />
@@ -237,7 +244,14 @@ function App() {
                 type="button"
                 className="admin-panel-btn"
                 id="view-substitutions-btn"
-                onClick={() => setPage(page === 'substitutions' ? 'form' : 'substitutions')}
+                onClick={() => {
+                  if (!applicant) {
+                    setError('Please enter your valid secret code first to view your substitutions.');
+                  } else {
+                    setError('');
+                    setPage(page === 'substitutions' ? 'form' : 'substitutions');
+                  }
+                }}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '15px', height: '15px' }}>
                   <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -290,9 +304,10 @@ function App() {
             </div>
 
             {(() => {
+              const mySubs = applicant ? submissions.filter(s => s.substitute_employee_id === applicant.id) : []
               const filteredSubs = subBranchFilter === 'all'
-                ? submissions
-                : submissions.filter(s => {
+                ? mySubs
+                : mySubs.filter(s => {
                     const emp = employees.find(e => e.id === s.employee_id);
                     return emp && emp.branch_id === subBranchFilter;
                   })
@@ -390,40 +405,6 @@ function App() {
                 required
               />
             </div>
-
-            <div className="form-group">
-              <label htmlFor="confirmSecretCode">
-                Re-enter Secret Code <span className="required">*</span>
-              </label>
-              <input
-                type="password"
-                id="confirmSecretCode"
-                name="confirmSecretCode"
-                placeholder="••••••••"
-                value={formData.confirmSecretCode}
-                onChange={handleChange}
-                required
-              />
-            </div>
-
-            {/* Branch */}
-            <div className="form-group full-width">
-              <label htmlFor="branch_id">
-                Branch <span className="required">*</span>
-              </label>
-              <select
-                id="branch_id"
-                name="branch_id"
-                value={formData.branch_id}
-                onChange={handleChange}
-                required
-              >
-                {branches.filter(b => b.status === 'active').map(b => (
-                  <option key={b.id} value={b.id}>{b.name}</option>
-                ))}
-              </select>
-            </div>
-            
             {/* Leave Type */}
             <div className="form-group full-width">
               <label htmlFor="leave_type">
@@ -525,11 +506,22 @@ function App() {
                 value={formData.substitute_employee_id}
                 onChange={handleChange}
                 required
+                disabled={!applicant}
               >
-                <option value="">Select a substitute…</option>
-                {employees.filter(e => e.branch_id === formData.branch_id && e.status === 'active').map(e => (
-                  <option key={e.id} value={e.id}>{e.name}</option>
-                ))}
+                {!applicant ? (
+                  <option value="">Please enter your valid secret code first…</option>
+                ) : (
+                  <>
+                    <option value="">Select a substitute…</option>
+                    {availableSubstitutes.length === 0 ? (
+                      <option value="" disabled>No available substitutes in your role and branch</option>
+                    ) : (
+                      availableSubstitutes.map(e => (
+                        <option key={e.id} value={e.id}>{e.name}</option>
+                      ))
+                    )}
+                  </>
+                )}
               </select>
             </div>
 

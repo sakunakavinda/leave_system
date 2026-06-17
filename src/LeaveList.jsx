@@ -1,82 +1,9 @@
 import { useState } from 'react'
 import './LeaveList.css'
 
-const BRANCHES = ['Colombo', 'Kandy', 'Galle', 'Negombo', 'Jaffna']
 
-const MOCK_APPLICATIONS = [
-  {
-    id: 'LA-0001',
-    name: 'John Doe',
-    branch: 'Colombo',
-    department: 'Engineering',
-    post: 'Senior Engineer',
-    appliedDate: '2026-06-10',
-    leaveDates: ['2026-06-16', '2026-06-17'],
-    returningDate: '2026-06-18',
-    substituteName: 'Alex Johnson',
-    status: 'approved',
-  },
-  {
-    id: 'LA-0002',
-    name: 'Jane Smith',
-    branch: 'Kandy',
-    department: 'Finance',
-    post: 'Accountant',
-    appliedDate: '2026-06-11',
-    leaveDates: ['2026-06-20'],
-    returningDate: '2026-06-21',
-    substituteName: 'Sarah Williams',
-    status: 'pending',
-  },
-  {
-    id: 'LA-0003',
-    name: 'Alex Johnson',
-    branch: 'Galle',
-    department: 'HR',
-    post: 'HR Manager',
-    appliedDate: '2026-06-09',
-    leaveDates: ['2026-06-14', '2026-06-15', '2026-06-16'],
-    returningDate: '2026-06-17',
-    substituteName: 'Michael Brown',
-    status: 'rejected',
-  },
-  {
-    id: 'LA-0004',
-    name: 'Sarah Williams',
-    branch: 'Negombo',
-    department: 'Operations',
-    post: 'Operations Lead',
-    appliedDate: '2026-06-12',
-    leaveDates: ['2026-06-19'],
-    returningDate: '2026-06-20',
-    substituteName: 'John Doe',
-    status: 'pending',
-  },
-  {
-    id: 'LA-0005',
-    name: 'Michael Brown',
-    branch: 'Jaffna',
-    department: 'Engineering',
-    post: 'Junior Developer',
-    appliedDate: '2026-06-08',
-    leaveDates: ['2026-06-13', '2026-06-14'],
-    returningDate: '2026-06-15',
-    substituteName: 'Jane Smith',
-    status: 'approved',
-  },
-  {
-    id: 'LA-0006',
-    name: 'John Doe',
-    branch: 'Colombo',
-    department: 'Engineering',
-    post: 'Senior Engineer',
-    appliedDate: '2026-06-05',
-    leaveDates: ['2026-06-09'],
-    returningDate: '2026-06-10',
-    substituteName: 'Alex Johnson',
-    status: 'rejected',
-  },
-]
+
+
 
 const STATUS_CONFIG = {
   pending: {
@@ -128,13 +55,36 @@ function formatDate(dateStr) {
   })
 }
 
-export default function LeaveList({ onBack }) {
+export default function LeaveList({ onBack, submissions = [], employees = [], branches = [], roles = [], applicant }) {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('all')
   const [branchFilter, setBranchFilter] = useState('all')
   const [expandedId, setExpandedId] = useState(null)
 
-  const filtered = MOCK_APPLICATIONS.filter((app) => {
+  // Filter to only show the applicant's own applications
+  const mySubmissions = submissions.filter(s => s.employee_id === applicant?.id)
+
+  const enrichedSubmissions = mySubmissions.map(sub => {
+    const emp = employees.find(e => e.id === sub.employee_id)
+    const branch = branches.find(b => b.id === emp?.branch_id)
+    const role = roles.find(r => r.id === emp?.role_id)
+    const subEmp = employees.find(e => e.id === sub.substitute_employee_id)
+
+    return {
+      id: sub.id,
+      name: emp?.name || 'Unknown',
+      branch: branch?.name || 'Unknown',
+      department: 'N/A', // Deprecated
+      post: role?.title || 'Unknown',
+      appliedDate: sub.appliedDate,
+      leaveDates: sub.leaveDates || [],
+      returningDate: sub.returningDate,
+      substituteName: subEmp?.name || 'Unknown',
+      status: sub.status,
+    }
+  })
+
+  const filtered = enrichedSubmissions.filter((app) => {
     const matchesFilter = filter === 'all' || app.status === filter
     const matchesBranch = branchFilter === 'all' || app.branch === branchFilter
     const query = search.toLowerCase()
@@ -148,10 +98,10 @@ export default function LeaveList({ onBack }) {
   })
 
   const counts = {
-    all: MOCK_APPLICATIONS.length,
-    pending: MOCK_APPLICATIONS.filter((a) => a.status === 'pending').length,
-    approved: MOCK_APPLICATIONS.filter((a) => a.status === 'approved').length,
-    rejected: MOCK_APPLICATIONS.filter((a) => a.status === 'rejected').length,
+    all: enrichedSubmissions.length,
+    pending: enrichedSubmissions.filter((a) => a.status === 'pending').length,
+    approved: enrichedSubmissions.filter((a) => a.status === 'approved').length,
+    rejected: enrichedSubmissions.filter((a) => a.status === 'rejected').length,
   }
 
   return (
@@ -175,7 +125,7 @@ export default function LeaveList({ onBack }) {
           </div>
           <div>
             <h1>Leave Applications</h1>
-            <p>{MOCK_APPLICATIONS.length} total records</p>
+            <p>{enrichedSubmissions.length} total records</p>
           </div>
         </div>
       </div>
@@ -226,7 +176,7 @@ export default function LeaveList({ onBack }) {
           id="branch-filter-select"
         >
           <option value="all">All Branches</option>
-          {BRANCHES.map(b => <option key={b} value={b}>{b}</option>)}
+          {branches.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
         </select>
 
         <select
