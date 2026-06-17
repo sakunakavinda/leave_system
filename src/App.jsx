@@ -18,10 +18,11 @@ function App() {
   const [formData, setFormData] = useState({
     secretCode: '',
     confirmSecretCode: '',
-    branch: INITIAL_BRANCHES[0]?.name || '',
+    branch_id: INITIAL_BRANCHES[0]?.id || '',
     leaveDates: [getMinLeaveDate()],
     returningDate: '',
-    substituteName: '',
+    substitute_employee_id: '',
+    leave_type: 'annual',
   })
 
   const [showToast, setShowToast] = useState(false)
@@ -113,17 +114,25 @@ function App() {
 
     // Resolve employee name from secret code
     const employee = INITIAL_EMPLOYEES.find(e => e.secretCode === formData.secretCode)
-    const employeeName = employee ? employee.name : 'Unknown'
+    if (!employee) { setError('Employee not found.'); return; }
+    
+    // Resolve substitute
+    const substitute = INITIAL_EMPLOYEES.find(e => e.id === formData.substitute_employee_id)
+    if (!substitute) { setError('Substitute not found.'); return; }
 
     const submission = {
       id: `SUB-${String(submissions.length + 1).padStart(3, '0')}`,
-      employeeName,
+      employee_id: employee.id,
+      employeeName: employee.name,
       employeeSecretCode: formData.secretCode,
-      branch: formData.branch,
+      branch_id: formData.branch_id,
       leaveDates: [...formData.leaveDates],
       returningDate: formData.returningDate,
-      substituteName: formData.substituteName,
+      substitute_employee_id: substitute.id,
+      substituteName: substitute.name,
+      leave_type: formData.leave_type,
       substituteConfirmed: false,
+      status: 'pending',
       appliedDate: new Date().toISOString().split('T')[0],
     }
 
@@ -134,10 +143,11 @@ function App() {
     setFormData({
       secretCode: '',
       confirmSecretCode: '',
-      branch: INITIAL_BRANCHES[0]?.name || '',
+      branch_id: INITIAL_BRANCHES[0]?.id || '',
       leaveDates: [getMinLeaveDate()],
       returningDate: '',
-      substituteName: '',
+      substitute_employee_id: '',
+      leave_type: 'annual',
     })
   }
 
@@ -155,7 +165,7 @@ function App() {
       setAgreeModal({ ...modal, error: 'Invalid secret code. Employee not found.' })
       return
     }
-    if (substitute.name !== modal.submission.substituteName) {
+    if (substitute.id !== modal.submission.substitute_employee_id) {
       setAgreeModal({ ...modal, error: `This secret code belongs to ${substitute.name}, not ${modal.submission.substituteName}.` })
       return
     }
@@ -264,7 +274,7 @@ function App() {
             {(() => {
               const filteredSubs = subBranchFilter === 'all'
                 ? submissions
-                : submissions.filter(s => s.branch === subBranchFilter)
+                : submissions.filter(s => s.branch_id === subBranchFilter)
 
               if (filteredSubs.length === 0) {
                 return (
@@ -297,7 +307,7 @@ function App() {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
                           <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{s.employeeName}</span>
-                          <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: '8px' }}>{s.branch}</span>
+                          <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: '8px' }}>{INITIAL_BRANCHES.find(b => b.id === s.branch_id)?.name}</span>
                         </div>
                         <span style={{
                           padding: '3px 10px',
@@ -311,9 +321,12 @@ function App() {
                           {s.substituteConfirmed ? 'Confirmed' : 'Pending'}
                         </span>
                       </div>
-                      <div style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+                      <div style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', gap: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
                         <span><strong>Substitute:</strong> {s.substituteName}</span>
                         <span><strong>Leave:</strong> {s.leaveDates.join(', ')}</span>
+                        <span style={{ padding: '2px 6px', background: 'var(--accent-primary)', color: '#fff', borderRadius: '4px', fontSize: '10px', textTransform: 'uppercase', fontWeight: 'bold' }}>
+                          {s.leave_type}
+                        </span>
                       </div>
                       {!s.substituteConfirmed && (
                         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -372,19 +385,37 @@ function App() {
 
             {/* Branch */}
             <div className="form-group full-width">
-              <label htmlFor="branch">
+              <label htmlFor="branch_id">
                 Branch <span className="required">*</span>
               </label>
               <select
-                id="branch"
-                name="branch"
-                value={formData.branch}
+                id="branch_id"
+                name="branch_id"
+                value={formData.branch_id}
                 onChange={handleChange}
                 required
               >
                 {INITIAL_BRANCHES.filter(b => b.status === 'active').map(b => (
-                  <option key={b.id} value={b.name}>{b.name}</option>
+                  <option key={b.id} value={b.id}>{b.name}</option>
                 ))}
+              </select>
+            </div>
+            
+            {/* Leave Type */}
+            <div className="form-group full-width">
+              <label htmlFor="leave_type">
+                Leave Type <span className="required">*</span>
+              </label>
+              <select
+                id="leave_type"
+                name="leave_type"
+                value={formData.leave_type}
+                onChange={handleChange}
+                required
+              >
+                <option value="annual">Annual Leave</option>
+                <option value="sick">Sick Leave</option>
+                <option value="casual">Casual Leave</option>
               </select>
             </div>
 
@@ -460,21 +491,21 @@ function App() {
               />
             </div>
 
-            {/* Row 3: Substitute Name */}
-            <div className="form-group">
-              <label htmlFor="substituteName">
-                Substitute Name <span className="required">*</span>
+            {/* Row 3: Substitute */}
+            <div className="form-group full-width">
+              <label htmlFor="substitute_employee_id">
+                Substitute <span className="required">*</span>
               </label>
               <select
-                id="substituteName"
-                name="substituteName"
-                value={formData.substituteName}
+                id="substitute_employee_id"
+                name="substitute_employee_id"
+                value={formData.substitute_employee_id}
                 onChange={handleChange}
                 required
               >
                 <option value="">Select a substitute…</option>
-                {INITIAL_EMPLOYEES.filter(e => e.branch === formData.branch && e.status === 'active').map(e => (
-                  <option key={e.id} value={e.name}>{e.name}</option>
+                {INITIAL_EMPLOYEES.filter(e => e.branch_id === formData.branch_id && e.status === 'active').map(e => (
+                  <option key={e.id} value={e.id}>{e.name}</option>
                 ))}
               </select>
             </div>

@@ -2,55 +2,52 @@ import { useState, useMemo } from 'react'
 import './admin.css'
 
 /* ── Shared mock data ─────────────────────────────── */
-export const INITIAL_APPLICATIONS = [
-  { id: 'LA-0001', name: 'John Doe',       branch: 'Colombo', department: 'Engineering', post: 'Senior Engineer',  appliedDate: '2026-06-10', leaveDates: ['2026-06-16','2026-06-17'], returningDate: '2026-06-18', substituteName: 'Alex Johnson',   status: 'approved' },
-  { id: 'LA-0002', name: 'Jane Smith',     branch: 'Kandy',   department: 'Finance',     post: 'Accountant',       appliedDate: '2026-06-11', leaveDates: ['2026-06-20'],              returningDate: '2026-06-21', substituteName: 'Sarah Williams', status: 'pending'  },
-  { id: 'LA-0003', name: 'Alex Johnson',   branch: 'Galle',   department: 'HR',          post: 'HR Manager',       appliedDate: '2026-06-09', leaveDates: ['2026-06-14','2026-06-15'], returningDate: '2026-06-17', substituteName: 'Michael Brown',  status: 'rejected' },
-  { id: 'LA-0004', name: 'Sarah Williams', branch: 'Negombo', department: 'Operations',  post: 'Operations Lead',  appliedDate: '2026-06-12', leaveDates: ['2026-06-19'],              returningDate: '2026-06-20', substituteName: 'John Doe',       status: 'pending'  },
-  { id: 'LA-0005', name: 'Michael Brown',  branch: 'Jaffna',  department: 'Engineering', post: 'Junior Developer', appliedDate: '2026-06-08', leaveDates: ['2026-06-13','2026-06-14'], returningDate: '2026-06-15', substituteName: 'Jane Smith',     status: 'approved' },
-  { id: 'LA-0006', name: 'John Doe',       branch: 'Colombo', department: 'Engineering', post: 'Senior Engineer',  appliedDate: '2026-06-05', leaveDates: ['2026-06-09'],              returningDate: '2026-06-10', substituteName: 'Alex Johnson',   status: 'rejected' },
-]
-
-export const INITIAL_EMPLOYEES = [
-  { id: 'EMP-001', name: 'John Doe',       secretCode: '12345678', post: 'Senior Engineer',  department: 'Engineering', branch: 'Colombo', status: 'active'   },
-  { id: 'EMP-002', name: 'Jane Smith',     secretCode: '23456789', post: 'Accountant',       department: 'Finance',     branch: 'Kandy',   status: 'active'   },
-  { id: 'EMP-003', name: 'Alex Johnson',   secretCode: '34567890', post: 'HR Manager',       department: 'HR',          branch: 'Galle',   status: 'active'   },
-  { id: 'EMP-004', name: 'Sarah Williams', secretCode: '45678901', post: 'Operations Lead',  department: 'Operations',  branch: 'Negombo', status: 'active'   },
-  { id: 'EMP-005', name: 'Michael Brown',  secretCode: '56789012', post: 'Junior Developer', department: 'Engineering', branch: 'Jaffna',  status: 'inactive' },
-]
-
 export const INITIAL_BRANCHES = [
-  { id: 'BR-001', name: 'Colombo',  location: 'Western Province',   manager: 'John Doe',       employees: 42, status: 'active'   },
-  { id: 'BR-002', name: 'Kandy',    location: 'Central Province',   manager: 'Jane Smith',     employees: 18, status: 'active'   },
-  { id: 'BR-003', name: 'Galle',    location: 'Southern Province',  manager: 'Alex Johnson',   employees: 14, status: 'active'   },
-  { id: 'BR-004', name: 'Jaffna',   location: 'Northern Province',  manager: 'Michael Brown',  employees: 10, status: 'inactive' },
-  { id: 'BR-005', name: 'Negombo',  location: 'Western Province',   manager: 'Sarah Williams', employees: 21, status: 'active'   },
+  { id: 'a1111111-1111-1111-1111-111111111111', name: 'Colombo',  location: 'Western Province',   status: 'active'   },
+  { id: 'a1111111-1111-1111-1111-111111111112', name: 'Kandy',    location: 'Central Province',   status: 'active'   },
+  { id: 'a1111111-1111-1111-1111-111111111113', name: 'Galle',    location: 'Southern Province',  status: 'active'   },
+  { id: 'a1111111-1111-1111-1111-111111111114', name: 'Jaffna',   location: 'Northern Province',  status: 'inactive' },
+  { id: 'a1111111-1111-1111-1111-111111111115', name: 'Negombo',  location: 'Western Province',   status: 'active'   },
 ]
 
 export const INITIAL_MANAGERS = [
-  { id: 'MGR-001', username: 'johndoe',   password: 'password', branch: 'Colombo', status: 'active', role: 'manager'   },
-  { id: 'MGR-002', username: 'janesmith', password: 'password', branch: 'Kandy',   status: 'active', role: 'super manager' },
-  { id: 'MGR-003', username: 'alexj',     password: 'password', branch: 'Galle',   status: 'active', role: 'manager'   },
-  { id: 'MGR-004', username: 'sarahw',    password: 'password', branch: 'Negombo', status: 'active', role: 'super manager' },
-  { id: 'MGR-005', username: 'michaelb',  password: 'password', branch: 'Jaffna',  status: 'inactive', role: 'manager' },
+  { id: 'e5555555-5555-5555-5555-555555555551', username: 'johndoe',   password: 'password', branch_id: 'a1111111-1111-1111-1111-111111111111', status: 'active', role: 'manager'   },
+  { id: 'e5555555-5555-5555-5555-555555555552', username: 'janesmith', password: 'password', branch_id: 'a1111111-1111-1111-1111-111111111112', status: 'active', role: 'super manager' },
+  { id: 'e5555555-5555-5555-5555-555555555553', username: 'alexj',     password: 'password', branch_id: 'a1111111-1111-1111-1111-111111111113', status: 'active', role: 'manager'   },
+  { id: 'e5555555-5555-5555-5555-555555555554', username: 'sarahw',    password: 'password', branch_id: 'a1111111-1111-1111-1111-111111111115', status: 'active', role: 'super manager' },
+  { id: 'e5555555-5555-5555-5555-555555555555', username: 'michaelb',  password: 'password', branch_id: 'a1111111-1111-1111-1111-111111111114', status: 'inactive', role: 'manager' },
 ]
 
 export const INITIAL_DEPARTMENTS = [
-  { id: 'DEPT-001', name: 'Engineering',  description: 'Software and systems engineering', status: 'active' },
-  { id: 'DEPT-002', name: 'Finance',      description: 'Financial management and accounting', status: 'active' },
-  { id: 'DEPT-003', name: 'HR',           description: 'Human resources management', status: 'active' },
-  { id: 'DEPT-004', name: 'Operations',   description: 'Business operations and logistics', status: 'active' },
-  { id: 'DEPT-005', name: 'Marketing',    description: 'Marketing and communications', status: 'inactive' },
+  { id: 'b2222222-2222-2222-2222-222222222221', name: 'Engineering',  description: 'Software and systems engineering', status: 'active' },
+  { id: 'b2222222-2222-2222-2222-222222222222', name: 'Finance',      description: 'Financial management and accounting', status: 'active' },
+  { id: 'b2222222-2222-2222-2222-222222222223', name: 'HR',           description: 'Human resources management', status: 'active' },
+  { id: 'b2222222-2222-2222-2222-222222222224', name: 'Operations',   description: 'Business operations and logistics', status: 'active' },
+  { id: 'b2222222-2222-2222-2222-222222222225', name: 'Marketing',    description: 'Marketing and communications', status: 'inactive' },
 ]
 
 export const INITIAL_ROLES = [
-  { id: 'ROLE-001', title: 'Senior Engineer',     department: 'Engineering',  description: 'Leads engineering projects and mentors juniors', status: 'active' },
-  { id: 'ROLE-002', title: 'Junior Developer',    department: 'Engineering',  description: 'Entry-level development role', status: 'active' },
-  { id: 'ROLE-003', title: 'Software Engineer',   department: 'Engineering',  description: 'Mid-level software development', status: 'active' },
-  { id: 'ROLE-004', title: 'Accountant',          department: 'Finance',      description: 'Handles financial records and reporting', status: 'active' },
-  { id: 'ROLE-005', title: 'HR Manager',          department: 'HR',           description: 'Manages HR operations and staff welfare', status: 'active' },
-  { id: 'ROLE-006', title: 'Operations Lead',     department: 'Operations',   description: 'Leads operational activities and team coordination', status: 'active' },
-  { id: 'ROLE-007', title: 'Marketing Specialist', department: 'Marketing',   description: 'Handles marketing campaigns and brand strategy', status: 'inactive' },
+  { id: 'c3333333-3333-3333-3333-333333333331', title: 'Senior Engineer',     department_id: 'b2222222-2222-2222-2222-222222222221', description: 'Leads engineering projects and mentors juniors', status: 'active' },
+  { id: 'c3333333-3333-3333-3333-333333333332', title: 'Junior Developer',    department_id: 'b2222222-2222-2222-2222-222222222221', description: 'Entry-level development role', status: 'active' },
+  { id: 'c3333333-3333-3333-3333-333333333333', title: 'Software Engineer',   department_id: 'b2222222-2222-2222-2222-222222222221', description: 'Mid-level software development', status: 'active' },
+  { id: 'c3333333-3333-3333-3333-333333333334', title: 'Accountant',          department_id: 'b2222222-2222-2222-2222-222222222222', description: 'Handles financial records and reporting', status: 'active' },
+  { id: 'c3333333-3333-3333-3333-333333333335', title: 'HR Manager',          department_id: 'b2222222-2222-2222-2222-222222222223', description: 'Manages HR operations and staff welfare', status: 'active' },
+  { id: 'c3333333-3333-3333-3333-333333333336', title: 'Operations Lead',     department_id: 'b2222222-2222-2222-2222-222222222224', description: 'Leads operational activities and team coordination', status: 'active' },
+  { id: 'c3333333-3333-3333-3333-333333333337', title: 'Marketing Specialist', department_id: 'b2222222-2222-2222-2222-222222222225', description: 'Handles marketing campaigns and brand strategy', status: 'inactive' },
+]
+
+export const INITIAL_EMPLOYEES = [
+  { id: 'd4444444-4444-4444-4444-444444444441', name: 'John Doe',       secretCode: '12345678', role_id: 'c3333333-3333-3333-3333-333333333331', branch_id: 'a1111111-1111-1111-1111-111111111111', status: 'active'   },
+  { id: 'd4444444-4444-4444-4444-444444444442', name: 'Jane Smith',     secretCode: '23456789', role_id: 'c3333333-3333-3333-3333-333333333334', branch_id: 'a1111111-1111-1111-1111-111111111112', status: 'active'   },
+  { id: 'd4444444-4444-4444-4444-444444444443', name: 'Alex Johnson',   secretCode: '34567890', role_id: 'c3333333-3333-3333-3333-333333333335', branch_id: 'a1111111-1111-1111-1111-111111111113', status: 'active'   },
+  { id: 'd4444444-4444-4444-4444-444444444444', name: 'Sarah Williams', secretCode: '45678901', role_id: 'c3333333-3333-3333-3333-333333333336', branch_id: 'a1111111-1111-1111-1111-111111111115', status: 'active'   },
+  { id: 'd4444444-4444-4444-4444-444444444445', name: 'Michael Brown',  secretCode: '56789012', role_id: 'c3333333-3333-3333-3333-333333333332', branch_id: 'a1111111-1111-1111-1111-111111111114', status: 'inactive' },
+]
+
+export const INITIAL_APPLICATIONS = [
+  { id: 'f6666666-6666-6666-6666-666666666661', employee_id: 'd4444444-4444-4444-4444-444444444441', leave_type: 'annual', appliedDate: '2026-06-10', leaveDates: ['2026-06-16','2026-06-17'], returningDate: '2026-06-18', substitute_employee_id: 'd4444444-4444-4444-4444-444444444443', substituteConfirmed: true, status: 'approved' },
+  { id: 'f6666666-6666-6666-6666-666666666662', employee_id: 'd4444444-4444-4444-4444-444444444442', leave_type: 'sick', appliedDate: '2026-06-11', leaveDates: ['2026-06-20'],              returningDate: '2026-06-21', substitute_employee_id: 'd4444444-4444-4444-4444-444444444444', substituteConfirmed: false, status: 'pending'  },
+  { id: 'f6666666-6666-6666-6666-666666666663', employee_id: 'd4444444-4444-4444-4444-444444444443', leave_type: 'casual', appliedDate: '2026-06-09', leaveDates: ['2026-06-14','2026-06-15'], returningDate: '2026-06-17', substitute_employee_id: 'd4444444-4444-4444-4444-444444444445', substituteConfirmed: true, status: 'rejected' },
 ]
 
 
@@ -62,7 +59,7 @@ function formatDate(d) {
 /* ─────────────────────────────────────────────────────
    AdminDashboard
 ───────────────────────────────────────────────────── */
-export function AdminDashboard({ applications, onUpdateStatus, branches }) {
+export function AdminDashboard({ applications, onUpdateStatus, branches, employees, roles, departments }) {
   const [filter, setFilter]           = useState('all')
   const [branchFilter, setBranchFilter] = useState('all')
   const [search, setSearch]           = useState('')
@@ -70,6 +67,11 @@ export function AdminDashboard({ applications, onUpdateStatus, branches }) {
   const [currentDate, setCurrentDate] = useState(() => new Date(2026, 5, 1))
   const [isCalendarExpanded, setIsCalendarExpanded] = useState(true)
   const [selectedDayLeaves, setSelectedDayLeaves] = useState(null)
+
+  const getEmp = (id) => employees?.find(e => e.id === id) || {}
+  const getRole = (id) => roles?.find(r => r.id === id) || {}
+  const getDept = (id) => departments?.find(d => d.id === id) || {}
+  const getBranch = (id) => branches?.find(b => b.id === id) || {}
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type })
@@ -86,12 +88,16 @@ export function AdminDashboard({ applications, onUpdateStatus, branches }) {
 
   const branchFiltered = branchFilter === 'all'
     ? applications
-    : applications.filter(app => app.branch === branchFilter)
+    : applications.filter(app => getEmp(app.employee_id).branch_id === branchFilter)
 
   const filtered = branchFiltered.filter(app => {
     const matchFilter = filter === 'all' || app.status === filter
     const q = search.toLowerCase()
-    const matchSearch = !q || app.name.toLowerCase().includes(q) || app.branch.toLowerCase().includes(q) || app.id.toLowerCase().includes(q)
+    const emp = getEmp(app.employee_id)
+    const matchSearch = !q || 
+      (emp.name || '').toLowerCase().includes(q) || 
+      (getBranch(emp.branch_id).name || '').toLowerCase().includes(q) || 
+      app.id.toLowerCase().includes(q)
     return matchFilter && matchSearch
   })
 
@@ -136,11 +142,12 @@ export function AdminDashboard({ applications, onUpdateStatus, branches }) {
 
   const calendarApprovedLeaves = applications.filter(app => {
     if (app.status !== 'approved') return false
-    const matchBranch = branchFilter === 'all' || app.branch === branchFilter
+    const emp = getEmp(app.employee_id)
+    const matchBranch = branchFilter === 'all' || emp.branch_id === branchFilter
     const q = search.toLowerCase()
     const matchSearch = !q || 
-      app.name.toLowerCase().includes(q) || 
-      app.branch.toLowerCase().includes(q) || 
+      (emp.name || '').toLowerCase().includes(q) || 
+      (getBranch(emp.branch_id).name || '').toLowerCase().includes(q) || 
       app.id.toLowerCase().includes(q)
     return matchBranch && matchSearch
   })
@@ -262,7 +269,7 @@ export function AdminDashboard({ applications, onUpdateStatus, branches }) {
         </div>
         <select className="admin-filter-select" value={branchFilter} onChange={e => setBranchFilter(e.target.value)} id="dash-branch-filter">
           <option value="all">All Branches</option>
-          {branches.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
+          {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
         </select>
         <select className="admin-filter-select" value={filter} onChange={e => setFilter(e.target.value)} id="dash-status-filter">
           <option value="all">All Status</option>
@@ -296,17 +303,20 @@ export function AdminDashboard({ applications, onUpdateStatus, branches }) {
                 <td><span style={{ fontFamily:'monospace', fontSize:'12px', color:'var(--text-muted)' }}>{app.id}</span></td>
                 <td>
                   <div className="cell-user">
-                    <div className="cell-avatar">{app.name.split(' ').map(w=>w[0]).join('').slice(0,2)}</div>
+                    <div className="cell-avatar">{(getEmp(app.employee_id).name || 'U').split(' ').map(w=>w[0]).join('').slice(0,2)}</div>
                     <div>
-                      <div className="cell-name">{app.name}</div>
-                      <div className="cell-sub">{app.department}</div>
+                      <div className="cell-name">{getEmp(app.employee_id).name}</div>
+                      <div className="cell-sub">{getDept(getRole(getEmp(app.employee_id).role_id).department_id).name}</div>
                     </div>
                   </div>
                 </td>
-                <td>{app.branch}</td>
-                <td><span style={{ color:'var(--text-secondary)', fontSize:'14px' }}>{app.post || '—'}</span></td>
+                <td>{getBranch(getEmp(app.employee_id).branch_id).name}</td>
+                <td><span style={{ color:'var(--text-secondary)', fontSize:'14px' }}>{getRole(getEmp(app.employee_id).role_id).title || '—'}</span></td>
                 <td>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: '220px' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: '220px', alignItems: 'center' }}>
+                    <span style={{ fontSize: '10px', fontWeight: 600, textTransform: 'uppercase', padding: '3px 6px', background: 'var(--accent-primary)', color: '#fff', borderRadius: '4px', marginRight: '4px' }}>
+                      {app.leave_type}
+                    </span>
                     {app.leaveDates.map(date => (
                       <span key={date} style={{
                         fontSize: '12px',
@@ -323,7 +333,7 @@ export function AdminDashboard({ applications, onUpdateStatus, branches }) {
                   </div>
                 </td>
                 <td>{formatDate(app.returningDate)}</td>
-                <td>{app.substituteName}</td>
+                <td>{getEmp(app.substitute_employee_id).name || '—'}</td>
                 <td>
                   {app.status === 'pending'  && <span className="badge badge-pending"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Pending</span>}
                   {app.status === 'approved' && <span className="badge badge-approved"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>Approved</span>}
@@ -434,26 +444,24 @@ function generateSecretCode(existingCodes) {
 const DEPARTMENTS = ['Engineering', 'Finance', 'HR', 'Operations']
 const DESIGNATIONS = ['Senior Engineer', 'Junior Developer', 'Software Engineer', 'Accountant', 'HR Manager', 'Operations Lead']
 
-/* ── Generate branch-specific leave rules ── */
-const BRANCH_NAMES = ['Colombo', 'Kandy', 'Galle', 'Negombo', 'Jaffna']
 const ROLE_LEAVE_DEFAULTS = [
-  { role: 'Senior Engineer',   department: 'Engineering',  annualLeave: 20, sickLeave: 10, casualLeave: 7,  maxPerDay: 1 },
-  { role: 'Junior Developer',  department: 'Engineering',  annualLeave: 14, sickLeave: 10, casualLeave: 7,  maxPerDay: 2 },
-  { role: 'Software Engineer', department: 'Engineering',  annualLeave: 18, sickLeave: 10, casualLeave: 7,  maxPerDay: 2 },
-  { role: 'Accountant',        department: 'Finance',      annualLeave: 16, sickLeave: 10, casualLeave: 7,  maxPerDay: 1 },
-  { role: 'HR Manager',        department: 'HR',           annualLeave: 20, sickLeave: 10, casualLeave: 7,  maxPerDay: 1 },
-  { role: 'Operations Lead',   department: 'Operations',   annualLeave: 18, sickLeave: 10, casualLeave: 7,  maxPerDay: 1 },
+  { role_id: 'c3333333-3333-3333-3333-333333333331', annualLeave: 20, sickLeave: 10, casualLeave: 7,  maxPerDay: 1 },
+  { role_id: 'c3333333-3333-3333-3333-333333333332', annualLeave: 14, sickLeave: 10, casualLeave: 7,  maxPerDay: 2 },
+  { role_id: 'c3333333-3333-3333-3333-333333333333', annualLeave: 18, sickLeave: 10, casualLeave: 7,  maxPerDay: 2 },
+  { role_id: 'c3333333-3333-3333-3333-333333333334', annualLeave: 16, sickLeave: 10, casualLeave: 7,  maxPerDay: 1 },
+  { role_id: 'c3333333-3333-3333-3333-333333333335', annualLeave: 20, sickLeave: 10, casualLeave: 7,  maxPerDay: 1 },
+  { role_id: 'c3333333-3333-3333-3333-333333333336', annualLeave: 18, sickLeave: 10, casualLeave: 7,  maxPerDay: 1 },
 ]
 
 const INITIAL_LEAVE_RULES = []
 let lrCounter = 0
-BRANCH_NAMES.forEach(branch => {
+INITIAL_BRANCHES.forEach(branch => {
   ROLE_LEAVE_DEFAULTS.forEach(def => {
     lrCounter++
     INITIAL_LEAVE_RULES.push({
       id: `LR-${String(lrCounter).padStart(3, '0')}`,
       ...def,
-      branch,
+      branch_id: branch.id,
       status: 'active',
     })
   })
@@ -466,14 +474,18 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
   const [modal, setModal]               = useState(null) // null | 'add' | employee object
   const [toast, setToast]               = useState(null)
   const [secretCodePopup, setSecretCodePopup] = useState(null)
-  const EMPTY_EMP = { name:'', post: DESIGNATIONS[0], department: DEPARTMENTS[0], branch: branches[0]?.name || '', status:'active' }
+  const EMPTY_EMP = { name:'', role_id: roles?.[0]?.id || '', branch_id: branches?.[0]?.id || '', status:'active' }
   const [form, setForm]                 = useState(EMPTY_EMP)
 
   // Leave rules state
   const [leaveRules, setLeaveRules]     = useState(INITIAL_LEAVE_RULES)
   const [ruleModal, setRuleModal]       = useState(null)
-  const EMPTY_RULE = { role: roles?.[0]?.title || DESIGNATIONS[0], department: departments?.[0]?.name || DEPARTMENTS[0], branch: branches[0]?.name || '', annualLeave: 14, sickLeave: 10, casualLeave: 7, maxPerDay: 1, status: 'active' }
+  const EMPTY_RULE = { role_id: roles?.[0]?.id || '', branch_id: branches?.[0]?.id || '', annualLeave: 14, sickLeave: 10, casualLeave: 7, maxPerDay: 1, status: 'active' }
   const [ruleForm, setRuleForm]         = useState(EMPTY_RULE)
+
+  const getRole = (role_id) => roles?.find(r => r.id === role_id)
+  const getDept = (dept_id) => departments?.find(d => d.id === dept_id)
+  const getBranch = (branch_id) => branches?.find(b => b.id === branch_id)
 
   const showToast = (msg, type='success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000) }
 
@@ -504,64 +516,76 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
   }
 
   const filtered = employees.filter(e => {
-    const matchBranch = branchFilter === 'all' || e.branch === branchFilter
+    const matchBranch = branchFilter === 'all' || e.branch_id === branchFilter
     const q = search.toLowerCase()
-    const matchSearch = !q || e.name.toLowerCase().includes(q) || e.department.toLowerCase().includes(q) || e.branch.toLowerCase().includes(q)
+    
+    const role = getRole(e.role_id)
+    const dept = role ? getDept(role.department_id) : null
+    const branch = getBranch(e.branch_id)
+
+    const matchSearch = !q || 
+      e.name.toLowerCase().includes(q) || 
+      (dept?.name || '').toLowerCase().includes(q) || 
+      (branch?.name || '').toLowerCase().includes(q) ||
+      (role?.title || '').toLowerCase().includes(q)
+      
     return matchBranch && matchSearch
   })
 
   // ── Leave Rules handlers ──
-  const openAddRule  = () => { setRuleForm(EMPTY_RULE); setRuleModal('add') }
   const openEditRule = (rule) => { setRuleForm({ ...rule }); setRuleModal(rule) }
   const closeRuleModal = () => setRuleModal(null)
 
   const handleSaveRule = () => {
-    if (!ruleForm.role.trim() || !ruleForm.branch.trim()) return
-    // Duplicate validation: same role + branch
-    const isDuplicate = leaveRules.some(r =>
-      r.role === ruleForm.role &&
-      r.branch === ruleForm.branch &&
-      (ruleModal === 'add' || r.id !== ruleModal.id)
-    )
-    if (isDuplicate) {
-      showToast(`A rule for "${ruleForm.role}" in "${ruleForm.branch}" already exists`, 'danger')
-      return
-    }
-    if (ruleModal === 'add') {
-      const newId = `LR-${String(leaveRules.length + 1).padStart(3, '0')}`
-      setLeaveRules(prev => [...prev, { ...ruleForm, id: newId }])
-      showToast('Leave rule added successfully')
-    } else {
-      setLeaveRules(prev => prev.map(r => r.id === ruleModal.id ? { ...r, ...ruleForm } : r))
-      showToast('Leave rule updated')
-    }
+    if (!ruleForm.role_id || !ruleForm.branch_id) return
+    
+    setLeaveRules(prev => {
+      const exists = prev.find(r => r.role_id === ruleForm.role_id && r.branch_id === ruleForm.branch_id)
+      if (exists) {
+        return prev.map(r => r.role_id === ruleForm.role_id && r.branch_id === ruleForm.branch_id ? { ...r, ...ruleForm } : r)
+      } else {
+        const newId = `LR-${String(prev.length + 1).padStart(3, '0')}`
+        return [...prev, { ...ruleForm, id: newId }]
+      }
+    })
+    showToast('Leave rule saved successfully')
     closeRuleModal()
-  }
-
-  const handleDeleteRule = (id) => {
-    if (!window.confirm('Are you sure you want to remove this leave rule?')) return
-    setLeaveRules(prev => prev.filter(r => r.id !== id))
-    showToast('Leave rule removed', 'danger')
-  }
-
-  const handleMaxPerDayChange = (id, newVal) => {
-    setLeaveRules(prev => prev.map(r => r.id === id ? { ...r, maxPerDay: Math.max(1, newVal) } : r))
   }
 
   // Group leave rules hierarchically by branch then department
   const groupedLeaveRules = useMemo(() => {
-    const branchNames = branches.map(b => b.name)
     const grouped = {}
-    branchNames.forEach(b => {
-      grouped[b] = {}
-      const branchRules = leaveRules.filter(r => r.branch === b)
+    branches.forEach(b => {
+      grouped[b.id] = {}
+      
+      // Auto-generate missing rules for active roles if they don't exist in leaveRules array
+      const branchRules = (roles || []).filter(r => r.status === 'active').map(role => {
+        const existingRule = leaveRules.find(r => r.branch_id === b.id && r.role_id === role.id)
+        if (existingRule) return existingRule
+        
+        return {
+          id: `tmp-${b.id}-${role.id}`,
+          role_id: role.id,
+          branch_id: b.id,
+          annualLeave: 14,
+          sickLeave: 10,
+          casualLeave: 7,
+          maxPerDay: 1,
+          status: 'active'
+        }
+      })
+      
       branchRules.forEach(r => {
-        if (!grouped[b][r.department]) grouped[b][r.department] = []
-        grouped[b][r.department].push(r)
+        const role = getRole(r.role_id)
+        const deptId = role?.department_id || 'unknown'
+        if (!grouped[b.id][deptId]) grouped[b.id][deptId] = []
+        grouped[b.id][deptId].push(r)
       })
     })
     return grouped
-  }, [leaveRules, branches])
+  }, [leaveRules, branches, roles])
+
+  const [ruleBranchFilter, setRuleBranchFilter] = useState('all')
 
   // ── Employee Overview computations ──
   const overviewBranches = isSuper ? branches : branches
@@ -569,20 +593,24 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
 
   const overviewEmployees = overviewBranchFilter === 'all'
     ? employees
-    : employees.filter(e => e.branch === overviewBranchFilter)
+    : employees.filter(e => e.branch_id === overviewBranchFilter)
 
   // Build overview data: group by department, then by role
-  const activeDepts = (departments || DEPARTMENTS.map((d, i) => ({ id: `D-${i}`, name: d }))).filter(d => d.status !== 'inactive')
+  const activeDepts = (departments || []).filter(d => d.status !== 'inactive')
 
   const overviewData = activeDepts.map(dept => {
-    const deptEmployees = overviewEmployees.filter(e => e.department === dept.name)
+    const deptRoles = roles?.filter(r => r.department_id === dept.id) || []
+    const roleIds = deptRoles.map(r => r.id)
+    
+    const deptEmployees = overviewEmployees.filter(e => roleIds.includes(e.role_id))
     const roleMap = {}
     deptEmployees.forEach(e => {
-      if (!roleMap[e.post]) roleMap[e.post] = 0
-      roleMap[e.post]++
+      const roleTitle = getRole(e.role_id)?.title || 'Unknown'
+      if (!roleMap[roleTitle]) roleMap[roleTitle] = 0
+      roleMap[roleTitle]++
     })
     const roleEntries = Object.entries(roleMap).sort((a, b) => b[1] - a[1])
-    return { department: dept.name, total: deptEmployees.length, roles: roleEntries }
+    return { department_id: dept.id, department: dept.name, total: deptEmployees.length, roles: roleEntries }
   })
 
   const totalOverview = overviewEmployees.length
@@ -680,13 +708,13 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
                         <div className="cell-avatar">{emp.name.split(' ').map(w=>w[0]).join('').slice(0,2)}</div>
                         <div>
                           <div className="cell-name">{emp.name}</div>
-                          <div className="cell-sub">{emp.department}</div>
+                          <div className="cell-sub">{getDept(getRole(emp.role_id)?.department_id)?.name || 'Unknown Dept'}</div>
                         </div>
                       </div>
                     </td>
                     <td><span style={{ fontFamily:'monospace', color:'var(--text-secondary)' }}>{emp.secretCode || '—'}</span></td>
-                    <td>{emp.post}</td>
-                    <td>{emp.branch}</td>
+                    <td>{getRole(emp.role_id)?.title || 'Unknown Role'}</td>
+                    <td>{getBranch(emp.branch_id)?.name || 'Unknown Branch'}</td>
                     <td>
                       <span className={`badge badge-${emp.status}`}>{emp.status === 'active' ? 'Active' : 'Inactive'}</span>
                     </td>
@@ -765,7 +793,7 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
                 </svg>
               </div>
               <div className="stat-info">
-                <div className="stat-value">{new Set(overviewEmployees.map(e => e.post)).size}</div>
+                <div className="stat-value">{new Set(overviewEmployees.map(e => e.role_id)).size}</div>
                 <div className="stat-label">Unique Roles</div>
               </div>
             </div>
@@ -782,7 +810,7 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
               </div>
               <select className="admin-filter-select" value={overviewBranchFilter} onChange={e => setOverviewBranchFilter(e.target.value)} id="overview-branch-filter">
                 <option value="all">All Branches</option>
-                {branches.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
+                {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             </div>
           )}
@@ -848,12 +876,10 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
               <input placeholder="Search leave rules…" id="leave-rule-search" />
             </div>
             {isSuper && (
-              <button className="btn-primary" id="add-leave-rule-btn" onClick={openAddRule}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-                </svg>
-                Add Rule
-              </button>
+              <select className="admin-filter-select" value={ruleBranchFilter} onChange={e => setRuleBranchFilter(e.target.value)} id="rule-branch-filter">
+                <option value="all">All Branches</option>
+                {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
             )}
           </div>
 
@@ -878,8 +904,8 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
           </div>
 
           <div className="lr-hierarchy">
-            {branches.map(branch => {
-              const depts = Object.keys(groupedLeaveRules[branch.name] || {})
+            {(ruleBranchFilter === 'all' ? branches : branches.filter(b => b.id === ruleBranchFilter)).map(branch => {
+              const depts = Object.keys(groupedLeaveRules[branch.id] || {})
               if (depts.length === 0) return null
               
               return (
@@ -892,10 +918,11 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
                   </div>
                   
                   <div className="lr-branch-body">
-                    {depts.map(deptName => {
-                      const rules = groupedLeaveRules[branch.name][deptName]
+                    {depts.map(deptId => {
+                      const deptName = getDept(deptId)?.name || 'Unknown Department'
+                      const rules = groupedLeaveRules[branch.id][deptId]
                       return (
-                        <div key={deptName} className="lr-dept-group">
+                        <div key={deptId} className="lr-dept-group">
                           <div className="lr-dept-header">
                             <span className="lr-dept-icon">{deptName.slice(0,2).toUpperCase()}</span>
                             {deptName}
@@ -903,11 +930,12 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
                           
                           <div className="lr-role-list">
                             {rules.map(rule => {
-                              const availableEmployeesCount = employees.filter(e => e.post === rule.role && e.branch === rule.branch).length
+                              const roleName = getRole(rule.role_id)?.title || 'Unknown Role'
+                              const availableEmployeesCount = employees.filter(e => e.role_id === rule.role_id && e.branch_id === rule.branch_id).length
                               return (
                                 <div key={rule.id} className="lr-role-row">
                                   <div className="lr-role-info">
-                                    <div className="lr-role-name">{rule.role}</div>
+                                    <div className="lr-role-name">{roleName}</div>
                                     <div className="lr-role-count">
                                       <span className="lr-count-badge">
                                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -926,13 +954,7 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
                                   
                                   <div className="lr-role-maxday">
                                     <label>Max/Day Allowed</label>
-                                    <input 
-                                      type="number" 
-                                      className="lr-inline-input"
-                                      min="1"
-                                      value={rule.maxPerDay}
-                                      onChange={(e) => handleMaxPerDayChange(rule.id, parseInt(e.target.value) || 1)}
-                                    />
+                                    <span style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>{rule.maxPerDay}</span>
                                   </div>
                                   
                                   <div className="lr-role-actions">
@@ -942,13 +964,6 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
                                         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
                                       </svg>
                                     </button>
-                                    {isSuper && (
-                                      <button className="btn-danger-icon" onClick={() => handleDeleteRule(rule.id)} title="Remove Rule">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
-                                        </svg>
-                                      </button>
-                                    )}
                                   </div>
                                 </div>
                               )
@@ -962,7 +977,7 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
               )
             })}
             
-            {branches.every(b => Object.keys(groupedLeaveRules[b.name] || {}).length === 0) && (
+            {(ruleBranchFilter === 'all' ? branches : branches.filter(b => b.id === ruleBranchFilter)).every(b => Object.keys(groupedLeaveRules[b.id] || {}).length === 0) && (
               <div style={{ textAlign:'center', padding:'48px', color:'var(--text-muted)' }}>No leave rules found</div>
             )}
           </div>
@@ -988,23 +1003,21 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
                   <input placeholder="Full name" value={form.name} onChange={e => setForm(p=>({...p, name: e.target.value}))} />
                 </div>
                 <div className="field">
-                  <label>Post / Designation *</label>
-                  <select value={form.post} onChange={e => setForm(p=>({...p, post: e.target.value}))}>
-                    {DESIGNATIONS.map(d => <option key={d} value={d}>{d}</option>)}
+                  <label>Role *</label>
+                  <select value={form.role_id} onChange={e => setForm(p=>({...p, role_id: e.target.value}))}>
+                    {(roles || []).filter(r => r.status === 'active').map(r => <option key={r.id} value={r.id}>{r.title}</option>)}
                   </select>
                 </div>
               </div>
               <div className="field-row">
                 <div className="field">
                   <label>Department</label>
-                  <select value={form.department} onChange={e => setForm(p=>({...p, department: e.target.value}))}>
-                    {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
-                  </select>
+                  <input readOnly value={getDept(getRole(form.role_id)?.department_id)?.name || ''} style={{ opacity: 0.7, cursor: 'not-allowed' }} />
                 </div>
                 <div className="field">
                   <label>Branch</label>
-                  <select value={form.branch} onChange={e => setForm(p=>({...p, branch: e.target.value}))}>
-                    {branches.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
+                  <select value={form.branch_id} onChange={e => setForm(p=>({...p, branch_id: e.target.value}))}>
+                    {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
                 </div>
               </div>
@@ -1031,13 +1044,13 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
       {/* ── Leave Rule Add/Edit Modal ── */}
       {ruleModal !== null && (() => {
         // Calculate available employees for the selected role and branch
-        const availableEmployeesCount = employees.filter(e => e.post === ruleForm.role && e.branch === ruleForm.branch).length;
+        const availableEmployeesCount = employees.filter(e => e.role_id === ruleForm.role_id && e.branch_id === ruleForm.branch_id).length;
         
         return (
         <div className="modal-backdrop" onClick={closeRuleModal}>
           <div className="modal-box" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>{ruleModal === 'add' ? 'Add Leave Rule' : 'Edit Leave Rule'}</h3>
+              <h3>Edit Leave Rule</h3>
               <button className="modal-close" onClick={closeRuleModal}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -1047,33 +1060,22 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
             <div className="modal-body">
               <div className="field-row">
                 <div className="field">
-                  <label>Role *</label>
-                  <select value={ruleForm.role} onChange={e => setRuleForm(p=>({...p, role: e.target.value}))}>
-                    {(roles || []).filter(r => r.status === 'active').map(r => <option key={r.id} value={r.title}>{r.title}</option>)}
-                    {(!roles || roles.length === 0) && DESIGNATIONS.map(d => <option key={d} value={d}>{d}</option>)}
-                  </select>
+                  <label>Role</label>
+                  <input readOnly value={getRole(ruleForm.role_id)?.title || ''} style={{ opacity: 0.7, cursor: 'not-allowed' }} />
                 </div>
                 <div className="field">
-                  <label>Branch *</label>
-                  <select value={ruleForm.branch} onChange={e => setRuleForm(p=>({...p, branch: e.target.value}))}>
-                    {branches.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
-                  </select>
+                  <label>Branch</label>
+                  <input readOnly value={getBranch(ruleForm.branch_id)?.name || ''} style={{ opacity: 0.7, cursor: 'not-allowed' }} />
                 </div>
               </div>
               <div className="field-row">
                 <div className="field">
                   <label>Department</label>
-                  <select value={ruleForm.department} onChange={e => setRuleForm(p=>({...p, department: e.target.value}))}>
-                    {(departments || []).filter(d => d.status === 'active').map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
-                    {(!departments || departments.length === 0) && DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
-                  </select>
+                  <input readOnly value={getDept(getRole(ruleForm.role_id)?.department_id)?.name || ''} style={{ opacity: 0.7, cursor: 'not-allowed' }} />
                 </div>
                 <div className="field">
                   <label>Status</label>
-                  <select value={ruleForm.status} onChange={e => setRuleForm(p=>({...p, status: e.target.value}))}>
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                  </select>
+                  <input readOnly value={ruleForm.status} style={{ opacity: 0.7, cursor: 'not-allowed', textTransform: 'capitalize' }} />
                 </div>
               </div>
               <div className="leave-rule-days-grid">
@@ -1109,7 +1111,7 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
                     <input type="number" min="1" max="99" value={ruleForm.maxPerDay} onChange={e => setRuleForm(p=>({...p, maxPerDay: Math.max(1, parseInt(e.target.value) || 1)}))} />
                   </div>
                   <p className="leave-maxday-hint">
-                    Maximum number of <strong>{ruleForm.role || 'employees'}</strong> in <strong>{ruleForm.branch || 'this branch'}</strong> that can be on leave on the same day, regardless of leave type.
+                    Maximum number of <strong>{getRole(ruleForm.role_id)?.title || 'employees'}</strong> in <strong>{getBranch(ruleForm.branch_id)?.name || 'this branch'}</strong> that can be on leave on the same day, regardless of leave type.
                     <br />
                     <span style={{ display: 'inline-block', marginTop: '6px', padding: '4px 8px', background: 'rgba(108, 92, 231, 0.1)', color: 'var(--accent-light)', borderRadius: '4px', fontSize: '11px', fontWeight: 600 }}>
                       Currently there {availableEmployeesCount === 1 ? 'is' : 'are'} {availableEmployeesCount} {availableEmployeesCount === 1 ? 'employee' : 'employees'} with this role in this branch.
@@ -1121,7 +1123,7 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
             <div className="modal-footer">
               <button className="btn-secondary" onClick={closeRuleModal}>Cancel</button>
               <button className="btn-primary" id="save-leave-rule-btn" onClick={handleSaveRule}>
-                {ruleModal === 'add' ? 'Add Rule' : 'Save Changes'}
+                Save Changes
               </button>
             </div>
           </div>
@@ -1210,16 +1212,22 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
 /* ─────────────────────────────────────────────────────
    ManageBranches
 ───────────────────────────────────────────────────── */
-export function ManageBranches({ branches, setBranches, employees }) {
+export function ManageBranches({ branches, setBranches, employees, managers, setManagers }) {
   const [search, setSearch]   = useState('')
   const [modal, setModal]     = useState(null)
   const [toast, setToast]     = useState(null)
-  const EMPTY_BR = { name:'', location:'', manager:'', status:'active' }
+  const EMPTY_BR = { name:'', location:'', manager_id:'', status:'active' }
   const [form, setForm]       = useState(EMPTY_BR)
+
+  const getBranchManager = (branchId) => managers?.find(m => m.branch_id === branchId)
 
   const showToast = (msg, type='success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000) }
   const openAdd  = ()    => { setForm(EMPTY_BR); setModal('add') }
-  const openEdit = (br)  => { setForm({ ...br }); setModal(br) }
+  const openEdit = (br)  => { 
+    const mgr = getBranchManager(br.id)
+    setForm({ ...br, manager_id: mgr ? mgr.id : '' })
+    setModal(br) 
+  }
   const closeModal = ()  => setModal(null)
 
   const getEmployeeCount = (branchName) => {
@@ -1229,13 +1237,24 @@ export function ManageBranches({ branches, setBranches, employees }) {
   const handleSave = () => {
     if (!form.name.trim()) return
     const empCount = getEmployeeCount(form.name)
+    
+    let savedBranchId = ''
     if (modal === 'add') {
-      const newId = `BR-${String(branches.length + 1).padStart(3, '0')}`
-      setBranches(prev => [...prev, { ...form, id: newId, employees: empCount }])
+      savedBranchId = `BR-${String(branches.length + 1).padStart(3, '0')}`
+      setBranches(prev => [...prev, { ...form, id: savedBranchId, employees: empCount }])
       showToast('Branch added successfully')
     } else {
-      setBranches(prev => prev.map(b => b.id === modal.id ? { ...b, ...form, employees: empCount } : b))
+      savedBranchId = modal.id
+      setBranches(prev => prev.map(b => b.id === savedBranchId ? { ...b, ...form, employees: empCount } : b))
       showToast('Branch updated')
+    }
+
+    if (setManagers) {
+      setManagers(prev => prev.map(m => {
+        if (m.id === form.manager_id) return { ...m, branch_id: savedBranchId }
+        if (m.branch_id === savedBranchId && m.id !== form.manager_id) return { ...m, branch_id: null }
+        return m
+      }))
     }
     closeModal()
   }
@@ -1247,8 +1266,12 @@ export function ManageBranches({ branches, setBranches, employees }) {
   }
 
   const filtered = branches.filter(b => {
+    const mgr = getBranchManager(b.id)
     const q = search.toLowerCase()
-    return !q || b.name.toLowerCase().includes(q) || b.location.toLowerCase().includes(q) || b.manager.toLowerCase().includes(q)
+    return !q || 
+      b.name.toLowerCase().includes(q) || 
+      b.location.toLowerCase().includes(q) || 
+      (mgr?.username || '').toLowerCase().includes(q)
   })
 
   return (
@@ -1288,7 +1311,7 @@ export function ManageBranches({ branches, setBranches, employees }) {
                   </div>
                 </td>
                 <td style={{ color:'var(--text-secondary)' }}>{br.location}</td>
-                <td>{br.manager}</td>
+                <td>{getBranchManager(br.id)?.username || '—'}</td>
                 <td>
                   <span style={{ fontWeight:600, color:'var(--text-primary)' }}>{getEmployeeCount(br.name)}</span>
                   <span style={{ fontSize:'12px', color:'var(--text-muted)', marginLeft:4 }}>staff</span>
@@ -1344,7 +1367,10 @@ export function ManageBranches({ branches, setBranches, employees }) {
               </div>
               <div className="field">
                 <label>Branch Manager</label>
-                <input placeholder="Manager name" value={form.manager} onChange={e => setForm(p=>({...p, manager: e.target.value}))} />
+                <select value={form.manager_id} onChange={e => setForm(p=>({...p, manager_id: e.target.value}))}>
+                  <option value="">No Manager Assigned</option>
+                  {(managers || []).map(m => <option key={m.id} value={m.id}>{m.username}</option>)}
+                </select>
               </div>
               <div className="field">
                 <label>Status</label>
@@ -1383,7 +1409,7 @@ export function ManageManagers({ branches, managers, setManagers }) {
   const [search, setSearch]       = useState('')
   const [modal, setModal]         = useState(null) // null | 'add' | manager object
   const [toast, setToast]         = useState(null)
-  const EMPTY_MGR = { username:'', branch: branches[0]?.name || '', status:'active', role: 'manager' }
+  const EMPTY_MGR = { username:'', branch_id: branches[0]?.id || '', status:'active', role: 'manager' }
   const [form, setForm]           = useState(EMPTY_MGR)
 
   const showToast = (msg, type='success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000) }
@@ -1413,9 +1439,10 @@ export function ManageManagers({ branches, managers, setManagers }) {
 
   const filtered = managers.filter(m => {
     const q = search.toLowerCase()
+    const bName = branches.find(br => br.id === m.branch_id)?.name || ''
     return !q ||
       m.username.toLowerCase().includes(q) ||
-      m.branch.toLowerCase().includes(q) ||
+      bName.toLowerCase().includes(q) ||
       (m.role && m.role.toLowerCase().includes(q))
   })
 
@@ -1460,7 +1487,7 @@ export function ManageManagers({ branches, managers, setManagers }) {
                     {mgr.role === 'super manager' ? 'Super Manager' : 'Manager'}
                   </span>
                 </td>
-                <td>{mgr.branch}</td>
+                <td>{branches.find(b => b.id === mgr.branch_id)?.name || '—'}</td>
 
                 <td>
                   <span className={`badge badge-${mgr.status}`}>{mgr.status === 'active' ? 'Active' : 'Inactive'}</span>
@@ -1508,8 +1535,8 @@ export function ManageManagers({ branches, managers, setManagers }) {
                 </div>
                 <div className="field">
                   <label>Branch</label>
-                  <select value={form.branch} onChange={e => setForm(p=>({...p, branch: e.target.value}))}>
-                    {branches.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
+                  <select value={form.branch_id} onChange={e => setForm(p=>({...p, branch_id: e.target.value}))}>
+                    {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
                 </div>
               </div>

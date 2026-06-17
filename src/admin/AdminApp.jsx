@@ -155,9 +155,12 @@ export default function AdminApp() {
   const isSuper = currentUser.role === 'super manager'
   const allowedNav = NAV.filter(item => isSuper || ['dashboard', 'employees'].includes(item.id))
 
-  const allowedApps = isSuper ? applications : applications.filter(a => a.branch === currentUser.branch)
-  const allowedEmps = isSuper ? employees : employees.filter(e => e.branch === currentUser.branch)
-  const allowedBranches = isSuper ? branches : branches.filter(b => b.name === currentUser.branch)
+  const allowedApps = isSuper ? applications : applications.filter(a => {
+    const emp = employees.find(e => e.id === a.employee_id)
+    return emp && emp.branch_id === currentUser.branch_id
+  })
+  const allowedEmps = isSuper ? employees : employees.filter(e => e.branch_id === currentUser.branch_id)
+  const allowedBranches = isSuper ? branches : branches.filter(b => b.id === currentUser.branch_id)
 
   const pendingCount = allowedApps.filter(a => a.status === 'pending').length
 
@@ -248,6 +251,9 @@ export default function AdminApp() {
             applications={allowedApps}
             onUpdateStatus={handleUpdateStatus}
             branches={allowedBranches}
+            employees={employees}
+            roles={roles}
+            departments={departments}
           />
         )}
         {activePage === 'employees' && (
@@ -257,7 +263,7 @@ export default function AdminApp() {
           <ManageManagers branches={allowedBranches} managers={managers} setManagers={setManagers} />
         )}
         {activePage === 'branches' && (
-          <ManageBranches branches={allowedBranches} setBranches={setBranches} employees={employees} />
+          <ManageBranches branches={allowedBranches} setBranches={setBranches} employees={employees} managers={managers} setManagers={setManagers} />
         )}
         {activePage === 'departments' && (
           <ManageDepartments departments={departments} setDepartments={setDepartments} />
