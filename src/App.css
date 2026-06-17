@@ -89,7 +89,7 @@
   align-items: center;
   gap: 7px;
   padding: 9px 18px;
-  background: rgba(108, 92, 231, 0.12);
+  background: rgba(249, 115, 22, 0.12);
   border: 1px solid var(--accent);
   border-radius: var(--border-radius-sm);
   color: var(--accent-light);
@@ -107,7 +107,7 @@
 }
 
 .view-list-btn:hover {
-  background: rgba(108, 92, 231, 0.22);
+  background: rgba(249, 115, 22, 0.22);
   transform: translateY(-1px);
   box-shadow: 0 4px 16px var(--accent-glow);
 }
@@ -266,7 +266,7 @@
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  background: var(--accent-bg, rgba(108, 92, 231, 0.1));
+  background: var(--accent-bg, rgba(249, 115, 22, 0.1));
   border: 1px dashed var(--accent);
   border-radius: var(--border-radius-sm);
   color: var(--accent-light);
@@ -287,7 +287,7 @@
 }
 
 .add-date-btn:hover {
-  background: rgba(108, 92, 231, 0.18);
+  background: rgba(249, 115, 22, 0.18);
   transform: translateY(-1px);
 }
 

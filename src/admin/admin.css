@@ -114,7 +114,7 @@
 }
 
 .nav-item.active {
-  background: rgba(108, 92, 231, 0.15);
+  background: rgba(249, 115, 22, 0.15);
   color: var(--accent-light);
 }
 
@@ -277,7 +277,7 @@
 }
 
 .stat-icon svg { width: 20px; height: 20px; }
-.stat-icon-purple { background: rgba(108,92,231,0.15); color: var(--accent-light); }
+.stat-icon-purple { background: rgba(249,115,22,0.15); color: var(--accent-light); }
 .stat-icon-amber  { background: rgba(253,203,110,0.12); color: #fdcb6e; }
 .stat-icon-green  { background: rgba(0,184,148,0.12);  color: #00b894; }
 .stat-icon-red    { background: rgba(255,82,82,0.12);  color: #ff5252; }
@@ -370,7 +370,7 @@
   backdrop-filter: blur(20px);
   border: 1px solid var(--bg-card-border);
   border-radius: var(--border-radius-md);
-  overflow: hidden;
+  overflow-x: auto;
 }
 
 .data-table {
@@ -432,7 +432,7 @@
 .badge-rejected { background: rgba(255,82,82,0.12);  color: #ff5252; border: 1px solid rgba(255,82,82,0.25); }
 .badge-active   { background: rgba(0,184,148,0.12);  color: #00b894; border: 1px solid rgba(0,184,148,0.25); }
 .badge-inactive { background: rgba(255,82,82,0.12);  color: #ff5252; border: 1px solid rgba(255,82,82,0.25); }
-.badge-super-manager { background: rgba(108, 92, 231, 0.15); color: var(--accent-light); border: 1px solid rgba(108, 92, 231, 0.3); }
+.badge-super-manager { background: rgba(249, 115, 22, 0.15); color: var(--accent-light); border: 1px solid rgba(249, 115, 22, 0.3); }
 .badge-manager { background: rgba(255, 255, 255, 0.06); color: var(--text-secondary); border: 1px solid rgba(255, 255, 255, 0.12); }
 
 /* ── Action Buttons Row ── */
@@ -485,19 +485,19 @@
   align-items: center;
   gap: 5px;
   padding: 6px 13px;
-  background: rgba(108,92,231,0.1);
+  background: rgba(249,115,22,0.1);
   color: var(--accent-light);
   font-family: var(--font-family);
   font-size: 12px;
   font-weight: 600;
-  border: 1px solid rgba(108,92,231,0.25);
+  border: 1px solid rgba(249,115,22,0.25);
   border-radius: 6px;
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
 .btn-edit svg { width: 13px; height: 13px; }
-.btn-edit:hover { background: rgba(108,92,231,0.2); transform: translateY(-1px); }
+.btn-edit:hover { background: rgba(249,115,22,0.2); transform: translateY(-1px); }
 
 /* ── Controls bar ── */
 .controls-bar {
@@ -861,9 +861,9 @@
 }
 
 .calendar-badge {
-  background: rgba(108, 92, 231, 0.15);
+  background: rgba(249, 115, 22, 0.15);
   color: var(--accent-light);
-  border: 1px solid rgba(108, 92, 231, 0.3);
+  border: 1px solid rgba(249, 115, 22, 0.3);
   padding: 2px 8px;
   border-radius: 99px;
   font-size: 11px;
@@ -1001,8 +1001,8 @@
 }
 
 .calendar-day.today {
-  border-color: rgba(108, 92, 231, 0.4);
-  background: rgba(108, 92, 231, 0.03);
+  border-color: rgba(249, 115, 22, 0.4);
+  background: rgba(249, 115, 22, 0.03);
 }
 
 .calendar-day.today .day-number {
@@ -1018,15 +1018,15 @@
 }
 
 .calendar-day.has-leaves {
-  background: rgba(108, 92, 231, 0.04);
-  border-color: rgba(108, 92, 231, 0.15);
+  background: rgba(249, 115, 22, 0.04);
+  border-color: rgba(249, 115, 22, 0.15);
 }
 
 .calendar-day.has-leaves:hover {
-  background: rgba(108, 92, 231, 0.08);
-  border-color: rgba(108, 92, 231, 0.3);
+  background: rgba(249, 115, 22, 0.08);
+  border-color: rgba(249, 115, 22, 0.3);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(108, 92, 231, 0.1);
+  box-shadow: 0 4px 12px rgba(249, 115, 22, 0.1);
 }
 
 .day-leaves-count {
@@ -1037,9 +1037,9 @@
 }
 
 .leaves-count-badge {
-  background: rgba(108, 92, 231, 0.12);
+  background: rgba(249, 115, 22, 0.12);
   color: var(--accent-light);
-  border: 1px solid rgba(108, 92, 231, 0.25);
+  border: 1px solid rgba(249, 115, 22, 0.25);
   padding: 4px 10px;
   border-radius: 99px;
   font-size: 12px;
@@ -1049,9 +1049,9 @@
 }
 
 .calendar-day:hover .leaves-count-badge {
-  background: rgba(108, 92, 231, 0.25);
-  border-color: rgba(108, 92, 231, 0.5);
-  box-shadow: 0 0 10px rgba(108, 92, 231, 0.2);
+  background: rgba(249, 115, 22, 0.25);
+  border-color: rgba(249, 115, 22, 0.5);
+  box-shadow: 0 0 10px rgba(249, 115, 22, 0.2);
 }
 
 @media (max-width: 900px) {
@@ -1110,10 +1110,10 @@
 }
 
 .emp-subtab.active {
-  background: rgba(108, 92, 231, 0.12);
+  background: rgba(249, 115, 22, 0.12);
   color: var(--accent-light);
   font-weight: 600;
-  box-shadow: 0 2px 8px rgba(108, 92, 231, 0.15);
+  box-shadow: 0 2px 8px rgba(249, 115, 22, 0.15);
 }
 
 /* ===================================================
@@ -1145,7 +1145,7 @@
 .overview-dept-card:hover {
   transform: translateY(-3px);
   box-shadow: var(--shadow-md);
-  border-color: rgba(108, 92, 231, 0.2);
+  border-color: rgba(249, 115, 22, 0.2);
 }
 
 .overview-dept-header {
@@ -1162,8 +1162,8 @@
   height: 42px;
   min-width: 42px;
   border-radius: 12px;
-  background: linear-gradient(135deg, rgba(108, 92, 231, 0.2), rgba(162, 155, 254, 0.12));
-  border: 1px solid rgba(108, 92, 231, 0.15);
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.2), rgba(251, 146, 60, 0.12));
+  border: 1px solid rgba(249, 115, 22, 0.15);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1195,8 +1195,8 @@
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: rgba(108, 92, 231, 0.1);
-  border: 1px solid rgba(108, 92, 231, 0.2);
+  background: rgba(249, 115, 22, 0.1);
+  border: 1px solid rgba(249, 115, 22, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1240,7 +1240,7 @@
 
 .overview-role-bar {
   height: 100%;
-  background: linear-gradient(90deg, #6c5ce7, #a29bfe);
+  background: linear-gradient(90deg, #f97316, #fb923c);
   border-radius: 99px;
   transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
   min-width: 4px;
@@ -1298,7 +1298,7 @@
   border-radius: 50%;
 }
 
-.leave-legend-annual { background: #6c5ce7; }
+.leave-legend-annual { background: #f97316; }
 .leave-legend-sick   { background: #fdcb6e; }
 .leave-legend-casual { background: #00b894; }
 .leave-legend-maxday { background: #e17055; }
@@ -1314,9 +1314,9 @@
 }
 
 .leave-days-annual {
-  background: rgba(108, 92, 231, 0.12);
+  background: rgba(249, 115, 22, 0.12);
   color: var(--accent-light);
-  border: 1px solid rgba(108, 92, 231, 0.25);
+  border: 1px solid rgba(249, 115, 22, 0.25);
 }
 
 .leave-days-sick {
@@ -1348,8 +1348,8 @@
 }
 
 .leave-field-annual input:focus {
-  border-color: #6c5ce7;
-  box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.15);
+  border-color: #f97316;
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15);
 }
 
 .leave-field-sick input:focus {
@@ -1414,8 +1414,8 @@
   align-items: center;
   justify-content: space-between;
   padding: 14px 18px;
-  background: rgba(108, 92, 231, 0.06);
-  border: 1px dashed rgba(108, 92, 231, 0.2);
+  background: rgba(249, 115, 22, 0.06);
+  border: 1px dashed rgba(249, 115, 22, 0.2);
   border-radius: var(--border-radius-sm);
   font-size: 13px;
   color: var(--text-secondary);
@@ -1562,7 +1562,7 @@
 
 .lr-role-row:hover {
   background: rgba(255, 255, 255, 0.03);
-  border-color: rgba(108, 92, 231, 0.2);
+  border-color: rgba(249, 115, 22, 0.2);
 }
 
 .lr-role-info {

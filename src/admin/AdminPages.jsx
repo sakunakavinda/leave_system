@@ -1113,7 +1113,7 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
                   <p className="leave-maxday-hint">
                     Maximum number of <strong>{getRole(ruleForm.role_id)?.title || 'employees'}</strong> in <strong>{getBranch(ruleForm.branch_id)?.name || 'this branch'}</strong> that can be on leave on the same day, regardless of leave type.
                     <br />
-                    <span style={{ display: 'inline-block', marginTop: '6px', padding: '4px 8px', background: 'rgba(108, 92, 231, 0.1)', color: 'var(--accent-light)', borderRadius: '4px', fontSize: '11px', fontWeight: 600 }}>
+                    <span style={{ display: 'inline-block', marginTop: '6px', padding: '4px 8px', background: 'rgba(249, 115, 22, 0.1)', color: 'var(--accent-light)', borderRadius: '4px', fontSize: '11px', fontWeight: 600 }}>
                       Currently there {availableEmployeesCount === 1 ? 'is' : 'are'} {availableEmployeesCount} {availableEmployeesCount === 1 ? 'employee' : 'employees'} with this role in this branch.
                     </span>
                   </p>
@@ -1167,8 +1167,8 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
                   Their secret code is:
                 </p>
                 <div style={{
-                  background: 'rgba(108, 92, 231, 0.1)',
-                  border: '2px dashed rgba(108, 92, 231, 0.3)',
+                  background: 'rgba(249, 115, 22, 0.1)',
+                  border: '2px dashed rgba(249, 115, 22, 0.3)',
                   borderRadius: '12px',
                   padding: '16px 24px',
                   display: 'inline-block'
