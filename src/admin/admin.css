@@ -102,6 +102,15 @@
   }
 }
 
+.fade-out-anim {
+  animation: fadeOut 0.5s ease-out forwards;
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
 .sidebar-brand-icon {
   width: 40px;
   height: 40px;

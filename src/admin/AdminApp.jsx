@@ -106,6 +106,7 @@ export default function AdminApp() {
   const [showProfileModal, setShowProfileModal] = useState(false)
   const loginLogoRef = useRef(null)
   const [logoFlight, setLogoFlight]     = useState(null)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
 
   const [activePage, setActivePage]     = useState('dashboard')
   const [applications, setApplications] = useState([])
@@ -252,7 +253,7 @@ export default function AdminApp() {
 
 
   return (
-    <div className="admin-shell">
+    <div className={`admin-shell ${isLoggingOut ? 'fade-out-anim' : ''}`}>
       {/* ── Sidebar ── */}
       <aside className="admin-sidebar">
         {/* Brand */}
@@ -294,7 +295,16 @@ export default function AdminApp() {
 
         {/* Footer */}
         <div className="sidebar-footer">
-          <button className="exit-btn" id="logout-btn" onClick={() => { if(window.confirm('Are you sure you want to logout?')) { setCurrentUser(null); setLoginForm({ username: '', password: '' }); } }}>
+          <button className="exit-btn" id="logout-btn" onClick={() => { 
+            if(window.confirm('Are you sure you want to logout?')) { 
+              setIsLoggingOut(true);
+              setTimeout(() => {
+                setCurrentUser(null); 
+                setLoginForm({ username: '', password: '' });
+                setIsLoggingOut(false);
+              }, 450);
+            } 
+          }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
               <polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
