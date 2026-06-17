@@ -570,8 +570,8 @@
   width: 32px;
   height: 32px;
   min-width: 32px;
-  border-radius: 50%;
-  background: var(--accent-gradient);
+  border-radius: 10px;
+  background: linear-gradient(135deg, #00b894, #55efc4);
   display: flex;
   align-items: center;
   justify-content: center;

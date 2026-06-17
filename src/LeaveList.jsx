@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import './LeaveList.css'
 
+const BRANCHES = ['Colombo', 'Kandy', 'Galle', 'Negombo', 'Jaffna']
+
 const MOCK_APPLICATIONS = [
   {
     id: 'LA-0001',
@@ -129,10 +131,12 @@ function formatDate(dateStr) {
 export default function LeaveList({ onBack }) {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('all')
+  const [branchFilter, setBranchFilter] = useState('all')
   const [expandedId, setExpandedId] = useState(null)
 
   const filtered = MOCK_APPLICATIONS.filter((app) => {
     const matchesFilter = filter === 'all' || app.status === filter
+    const matchesBranch = branchFilter === 'all' || app.branch === branchFilter
     const query = search.toLowerCase()
     const matchesSearch =
       !query ||
@@ -140,7 +144,7 @@ export default function LeaveList({ onBack }) {
       app.branch.toLowerCase().includes(query) ||
       app.department.toLowerCase().includes(query) ||
       app.id.toLowerCase().includes(query)
-    return matchesFilter && matchesSearch
+    return matchesFilter && matchesBranch && matchesSearch
   })
 
   const counts = {
@@ -214,6 +218,16 @@ export default function LeaveList({ onBack }) {
             </button>
           )}
         </div>
+
+        <select
+          className="filter-select"
+          value={branchFilter}
+          onChange={(e) => setBranchFilter(e.target.value)}
+          id="branch-filter-select"
+        >
+          <option value="all">All Branches</option>
+          {BRANCHES.map(b => <option key={b} value={b}>{b}</option>)}
+        </select>
 
         <select
           className="filter-select"

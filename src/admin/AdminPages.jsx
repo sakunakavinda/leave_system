@@ -466,6 +466,7 @@ export function ManageEmployees({ branches, employees, setEmployees }) {
   }
 
   const handleDelete = (id) => {
+    if (!window.confirm('Are you sure you want to remove this employee?')) return
     setEmployees(prev => prev.filter(e => e.id !== id))
     showToast('Employee removed', 'danger')
   }
@@ -687,11 +688,11 @@ export function ManageEmployees({ branches, employees, setEmployees }) {
 /* ─────────────────────────────────────────────────────
    ManageBranches
 ───────────────────────────────────────────────────── */
-export function ManageBranches({ branches, setBranches }) {
+export function ManageBranches({ branches, setBranches, employees }) {
   const [search, setSearch]   = useState('')
   const [modal, setModal]     = useState(null)
   const [toast, setToast]     = useState(null)
-  const EMPTY_BR = { name:'', location:'', manager:'', employees: 0, status:'active' }
+  const EMPTY_BR = { name:'', location:'', manager:'', status:'active' }
   const [form, setForm]       = useState(EMPTY_BR)
 
   const showToast = (msg, type='success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000) }
@@ -699,20 +700,26 @@ export function ManageBranches({ branches, setBranches }) {
   const openEdit = (br)  => { setForm({ ...br }); setModal(br) }
   const closeModal = ()  => setModal(null)
 
+  const getEmployeeCount = (branchName) => {
+    return employees ? employees.filter(e => e.branch === branchName).length : 0
+  }
+
   const handleSave = () => {
     if (!form.name.trim()) return
+    const empCount = getEmployeeCount(form.name)
     if (modal === 'add') {
       const newId = `BR-${String(branches.length + 1).padStart(3, '0')}`
-      setBranches(prev => [...prev, { ...form, id: newId, employees: Number(form.employees) || 0 }])
+      setBranches(prev => [...prev, { ...form, id: newId, employees: empCount }])
       showToast('Branch added successfully')
     } else {
-      setBranches(prev => prev.map(b => b.id === modal.id ? { ...b, ...form, employees: Number(form.employees) || 0 } : b))
+      setBranches(prev => prev.map(b => b.id === modal.id ? { ...b, ...form, employees: empCount } : b))
       showToast('Branch updated')
     }
     closeModal()
   }
 
   const handleDelete = (id) => {
+    if (!window.confirm('Are you sure you want to remove this branch?')) return
     setBranches(prev => prev.filter(b => b.id !== id))
     showToast('Branch removed', 'danger')
   }
@@ -752,7 +759,7 @@ export function ManageBranches({ branches, setBranches }) {
                 <td><span style={{ fontFamily:'monospace', fontSize:'12px', color:'var(--text-muted)' }}>{br.id}</span></td>
                 <td>
                   <div className="cell-user">
-                    <div className="cell-avatar" style={{ borderRadius:'10px', background:'linear-gradient(135deg,#6c5ce7,#a29bfe)' }}>
+                    <div className="cell-avatar">
                       {br.name.slice(0,2).toUpperCase()}
                     </div>
                     <div className="cell-name">{br.name}</div>
@@ -761,7 +768,7 @@ export function ManageBranches({ branches, setBranches }) {
                 <td style={{ color:'var(--text-secondary)' }}>{br.location}</td>
                 <td>{br.manager}</td>
                 <td>
-                  <span style={{ fontWeight:600, color:'var(--text-primary)' }}>{br.employees}</span>
+                  <span style={{ fontWeight:600, color:'var(--text-primary)' }}>{getEmployeeCount(br.name)}</span>
                   <span style={{ fontSize:'12px', color:'var(--text-muted)', marginLeft:4 }}>staff</span>
                 </td>
                 <td>
@@ -813,15 +820,9 @@ export function ManageBranches({ branches, setBranches }) {
                   <input placeholder="Province / City" value={form.location} onChange={e => setForm(p=>({...p, location: e.target.value}))} />
                 </div>
               </div>
-              <div className="field-row">
-                <div className="field">
-                  <label>Branch Manager</label>
-                  <input placeholder="Manager name" value={form.manager} onChange={e => setForm(p=>({...p, manager: e.target.value}))} />
-                </div>
-                <div className="field">
-                  <label>No. of Employees</label>
-                  <input type="number" min={0} placeholder="0" value={form.employees} onChange={e => setForm(p=>({...p, employees: e.target.value}))} />
-                </div>
+              <div className="field">
+                <label>Branch Manager</label>
+                <input placeholder="Manager name" value={form.manager} onChange={e => setForm(p=>({...p, manager: e.target.value}))} />
               </div>
               <div className="field">
                 <label>Status</label>
@@ -883,6 +884,7 @@ export function ManageManagers({ branches, managers, setManagers }) {
   }
 
   const handleDelete = (id) => {
+    if (!window.confirm('Are you sure you want to remove this manager?')) return
     setManagers(prev => prev.filter(m => m.id !== id))
     showToast('Manager removed', 'danger')
   }
@@ -1057,6 +1059,7 @@ export function ManageDepartments({ departments, setDepartments }) {
   }
 
   const handleDelete = (id) => {
+    if (!window.confirm('Are you sure you want to remove this department?')) return
     setDepartments(prev => prev.filter(d => d.id !== id))
     showToast('Department removed', 'danger')
   }
@@ -1098,7 +1101,7 @@ export function ManageDepartments({ departments, setDepartments }) {
                 <td><span style={{ fontFamily:'monospace', fontSize:'12px', color:'var(--text-muted)' }}>{dept.id}</span></td>
                 <td>
                   <div className="cell-user">
-                    <div className="cell-avatar" style={{ borderRadius:'10px', background:'linear-gradient(135deg, #00b894, #55efc4)' }}>
+                    <div className="cell-avatar">
                       {dept.name.slice(0,2).toUpperCase()}
                     </div>
                     <div className="cell-name">{dept.name}</div>
@@ -1216,6 +1219,7 @@ export function ManageRoles({ departments, roles, setRoles }) {
   }
 
   const handleDelete = (id) => {
+    if (!window.confirm('Are you sure you want to remove this role?')) return
     setRoles(prev => prev.filter(r => r.id !== id))
     showToast('Role removed', 'danger')
   }
@@ -1264,7 +1268,7 @@ export function ManageRoles({ departments, roles, setRoles }) {
                 <td><span style={{ fontFamily:'monospace', fontSize:'12px', color:'var(--text-muted)' }}>{role.id}</span></td>
                 <td>
                   <div className="cell-user">
-                    <div className="cell-avatar" style={{ borderRadius:'10px', background:'linear-gradient(135deg, #fdcb6e, #e17055)' }}>
+                    <div className="cell-avatar">
                       {role.title.slice(0,2).toUpperCase()}
                     </div>
                     <div className="cell-name">{role.title}</div>

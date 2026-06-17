@@ -257,7 +257,7 @@ export default function AdminApp() {
           <ManageManagers branches={allowedBranches} managers={managers} setManagers={setManagers} />
         )}
         {activePage === 'branches' && (
-          <ManageBranches branches={allowedBranches} setBranches={setBranches} />
+          <ManageBranches branches={allowedBranches} setBranches={setBranches} employees={employees} />
         )}
         {activePage === 'departments' && (
           <ManageDepartments departments={departments} setDepartments={setDepartments} />
