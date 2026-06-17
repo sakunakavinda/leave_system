@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import './admin.css'
-import { AdminDashboard, ManageEmployees, ManageBranches, ManageManagers, ManageDepartments, ManageRoles, AccountSettings, INITIAL_APPLICATIONS, INITIAL_BRANCHES, INITIAL_MANAGERS, INITIAL_EMPLOYEES, INITIAL_DEPARTMENTS, INITIAL_ROLES } from './AdminPages.jsx'
+import { AdminDashboard, ManageEmployees, ManageBranches, ManageManagers, ManageDepartments, ManageRoles, AccountSettings } from './AdminPages.jsx'
+import { api } from '../api.js'
 
 const NAV = [
   {
@@ -93,22 +94,57 @@ export default function AdminApp() {
   const [showProfileModal, setShowProfileModal] = useState(false)
 
   const [activePage, setActivePage]     = useState('dashboard')
-  const [applications, setApplications] = useState(INITIAL_APPLICATIONS)
-  const [branches, setBranches]         = useState(INITIAL_BRANCHES)
-  const [managers, setManagers]         = useState(INITIAL_MANAGERS)
-  const [employees, setEmployees]       = useState(INITIAL_EMPLOYEES)
-  const [departments, setDepartments]   = useState(INITIAL_DEPARTMENTS)
-  const [roles, setRoles]               = useState(INITIAL_ROLES)
+  const [applications, setApplications] = useState([])
+  const [branches, setBranches]         = useState([])
+  const [managers, setManagers]         = useState([])
+  const [employees, setEmployees]       = useState([])
+  const [departments, setDepartments]   = useState([])
+  const [roles, setRoles]               = useState([])
+  const [rules, setRules]               = useState([])
+  const [loading, setLoading]           = useState(true)
 
-  const handleLogin = (e) => {
+  // Fetch initial data
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [apps, brs, mgrs, emps, depts, rls, rls_rules] = await Promise.all([
+          api.getApplications(),
+          api.getBranches(),
+          api.getManagers(),
+          api.getEmployees(),
+          api.getDepartments(),
+          api.getRoles(),
+          api.getRules()
+        ]);
+        setApplications(apps);
+        setBranches(brs);
+        setManagers(mgrs);
+        setEmployees(emps);
+        setDepartments(depts);
+        setRoles(rls);
+        setRules(rls_rules);
+        setLoading(false);
+      } catch (err) {
+        console.error("Failed to load data", err);
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, []);
+
+  if (loading) {
+    return <div style={{ padding: '40px', textAlign: 'center' }}>Loading System Data...</div>
+  }
+
+  const handleLogin = async (e) => {
     e.preventDefault()
-    const user = managers.find(m => m.username === loginForm.username)
-    if (user && loginForm.password === user.password) {
+    try {
+      const user = await api.loginManager(loginForm.username, loginForm.password);
       setCurrentUser(user)
       setLoginError('')
       setActivePage('dashboard')
-    } else {
-      setLoginError('Invalid username or password')
+    } catch (err) {
+      setLoginError(err.message || 'Invalid username or password')
     }
   }
 
@@ -164,8 +200,13 @@ export default function AdminApp() {
 
   const pendingCount = allowedApps.filter(a => a.status === 'pending').length
 
-  const handleUpdateStatus = (id, status) => {
-    setApplications(prev => prev.map(a => a.id === id ? { ...a, status } : a))
+  const handleUpdateStatus = async (id, status) => {
+    try {
+      const updated = await api.updateApplicationStatus(id, status);
+      setApplications(prev => prev.map(a => a.id === id ? { ...a, status: updated.status } : a))
+    } catch (err) {
+      alert("Failed to update status: " + err.message);
+    }
   }
 
   const meta = PAGE_META[activePage] || PAGE_META['dashboard']
@@ -254,10 +295,21 @@ export default function AdminApp() {
             employees={employees}
             roles={roles}
             departments={departments}
+            leaveRules={rules}
+            setLeaveRules={setRules}
           />
         )}
         {activePage === 'employees' && (
-          <ManageEmployees branches={allowedBranches} employees={allowedEmps} setEmployees={setEmployees} departments={departments} roles={roles} isSuper={isSuper} />
+          <ManageEmployees 
+            branches={allowedBranches} 
+            employees={allowedEmps} 
+            setEmployees={setEmployees} 
+            departments={departments} 
+            roles={roles} 
+            isSuper={isSuper} 
+            leaveRules={rules}
+            setLeaveRules={setRules}
+          />
         )}
         {activePage === 'managers' && (
           <ManageManagers branches={allowedBranches} managers={managers} setManagers={setManagers} />

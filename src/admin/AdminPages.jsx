@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import { api } from '../api.js'
 import './admin.css'
 
 /* ── Shared mock data ─────────────────────────────── */
@@ -444,30 +445,7 @@ function generateSecretCode(existingCodes) {
 const DEPARTMENTS = ['Engineering', 'Finance', 'HR', 'Operations']
 const DESIGNATIONS = ['Senior Engineer', 'Junior Developer', 'Software Engineer', 'Accountant', 'HR Manager', 'Operations Lead']
 
-const ROLE_LEAVE_DEFAULTS = [
-  { role_id: 'c3333333-3333-3333-3333-333333333331', annualLeave: 20, sickLeave: 10, casualLeave: 7,  maxPerDay: 1 },
-  { role_id: 'c3333333-3333-3333-3333-333333333332', annualLeave: 14, sickLeave: 10, casualLeave: 7,  maxPerDay: 2 },
-  { role_id: 'c3333333-3333-3333-3333-333333333333', annualLeave: 18, sickLeave: 10, casualLeave: 7,  maxPerDay: 2 },
-  { role_id: 'c3333333-3333-3333-3333-333333333334', annualLeave: 16, sickLeave: 10, casualLeave: 7,  maxPerDay: 1 },
-  { role_id: 'c3333333-3333-3333-3333-333333333335', annualLeave: 20, sickLeave: 10, casualLeave: 7,  maxPerDay: 1 },
-  { role_id: 'c3333333-3333-3333-3333-333333333336', annualLeave: 18, sickLeave: 10, casualLeave: 7,  maxPerDay: 1 },
-]
-
-const INITIAL_LEAVE_RULES = []
-let lrCounter = 0
-INITIAL_BRANCHES.forEach(branch => {
-  ROLE_LEAVE_DEFAULTS.forEach(def => {
-    lrCounter++
-    INITIAL_LEAVE_RULES.push({
-      id: `LR-${String(lrCounter).padStart(3, '0')}`,
-      ...def,
-      branch_id: branch.id,
-      status: 'active',
-    })
-  })
-})
-
-export function ManageEmployees({ branches, employees, setEmployees, departments, roles, isSuper }) {
+export function ManageEmployees({ branches, employees, setEmployees, departments, roles, isSuper, leaveRules, setLeaveRules }) {
   const [activeSubTab, setActiveSubTab] = useState('directory')
   const [search, setSearch]             = useState('')
   const [branchFilter, setBranchFilter] = useState('all')
@@ -478,10 +456,29 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
   const [form, setForm]                 = useState(EMPTY_EMP)
 
   // Leave rules state
-  const [leaveRules, setLeaveRules]     = useState(INITIAL_LEAVE_RULES)
   const [ruleModal, setRuleModal]       = useState(null)
   const EMPTY_RULE = { role_id: roles?.[0]?.id || '', branch_id: branches?.[0]?.id || '', annualLeave: 14, sickLeave: 10, casualLeave: 7, maxPerDay: 1, status: 'active' }
   const [ruleForm, setRuleForm]         = useState(EMPTY_RULE)
+
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  useEffect(() => {
+    const handleScroll = (e) => {
+      const mainEl = document.querySelector('.admin-main');
+      const scrollTop = window.scrollY || document.documentElement.scrollTop || (mainEl ? mainEl.scrollTop : 0) || (e.target.scrollTop || 0);
+      setShowScrollTop(scrollTop > 300);
+    };
+    window.addEventListener('scroll', handleScroll, true);
+    
+    return () => {
+      window.removeEventListener('scroll', handleScroll, true);
+    };
+  }, []);
+  
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const mainEl = document.querySelector('.admin-main');
+    if (mainEl) mainEl.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const getRole = (role_id) => roles?.find(r => r.id === role_id)
   const getDept = (dept_id) => departments?.find(d => d.id === dept_id)
@@ -493,26 +490,37 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
   const openEdit = (emp) => { setForm({ ...emp }); setModal(emp) }
   const closeModal = ()  => setModal(null)
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.name.trim()) return
-    if (modal === 'add') {
-      const newId = `EMP-${String(employees.length + 1).padStart(3, '0')}`
-      const existingCodes = employees.map(e => e.secretCode).filter(Boolean)
-      const newSecretCode = generateSecretCode(existingCodes)
-      setEmployees(prev => [...prev, { ...form, id: newId, secretCode: newSecretCode }])
-      setSecretCodePopup({ name: form.name, secretCode: newSecretCode })
-      closeModal()
-    } else {
-      setEmployees(prev => prev.map(e => e.id === modal.id ? { ...e, ...form } : e))
-      showToast('Employee updated')
-      closeModal()
+    try {
+      if (modal === 'add') {
+        const existingCodes = employees.map(e => e.secretCode).filter(Boolean);
+        const newSecretCode = generateSecretCode(existingCodes);
+        const payload = { ...form, secretCode: newSecretCode };
+        const addedEmp = await api.addEmployee(payload);
+        setEmployees(prev => [...prev, { ...addedEmp, secretCode: newSecretCode }]);
+        setSecretCodePopup({ name: form.name, secretCode: newSecretCode });
+        closeModal();
+      } else {
+        const updatedEmp = await api.updateEmployee(modal.id, form);
+        setEmployees(prev => prev.map(e => e.id === modal.id ? { ...updatedEmp, secretCode: e.secretCode } : e));
+        showToast('Employee updated');
+        closeModal();
+      }
+    } catch (err) {
+      alert("Error: " + err.message);
     }
   }
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to remove this employee?')) return
-    setEmployees(prev => prev.filter(e => e.id !== id))
-    showToast('Employee removed', 'danger')
+    try {
+      await api.deleteEmployee(id);
+      setEmployees(prev => prev.filter(e => e.id !== id));
+      showToast('Employee removed', 'danger');
+    } catch (err) {
+      alert("Error: " + err.message);
+    }
   }
 
   const filtered = employees.filter(e => {
@@ -536,20 +544,24 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
   const openEditRule = (rule) => { setRuleForm({ ...rule }); setRuleModal(rule) }
   const closeRuleModal = () => setRuleModal(null)
 
-  const handleSaveRule = () => {
+  const handleSaveRule = async () => {
     if (!ruleForm.role_id || !ruleForm.branch_id) return
     
-    setLeaveRules(prev => {
-      const exists = prev.find(r => r.role_id === ruleForm.role_id && r.branch_id === ruleForm.branch_id)
-      if (exists) {
-        return prev.map(r => r.role_id === ruleForm.role_id && r.branch_id === ruleForm.branch_id ? { ...r, ...ruleForm } : r)
-      } else {
-        const newId = `LR-${String(prev.length + 1).padStart(3, '0')}`
-        return [...prev, { ...ruleForm, id: newId }]
-      }
-    })
-    showToast('Leave rule saved successfully')
-    closeRuleModal()
+    try {
+      const savedRule = await api.saveRule(ruleForm);
+      setLeaveRules(prev => {
+        const exists = prev.find(r => r.role_id === savedRule.role_id && r.branch_id === savedRule.branch_id)
+        if (exists) {
+          return prev.map(r => r.role_id === savedRule.role_id && r.branch_id === savedRule.branch_id ? savedRule : r)
+        } else {
+          return [...prev, savedRule]
+        }
+      })
+      showToast('Leave rule saved successfully')
+      closeRuleModal()
+    } catch (err) {
+      alert("Error saving rule: " + err.message);
+    }
   }
 
   // Group leave rules hierarchically by branch then department
@@ -590,6 +602,7 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
   // ── Employee Overview computations ──
   const overviewBranches = isSuper ? branches : branches
   const [overviewBranchFilter, setOverviewBranchFilter] = useState('all')
+  const [showEmployeeBreakdown, setShowEmployeeBreakdown] = useState(false)
 
   const overviewEmployees = overviewBranchFilter === 'all'
     ? employees
@@ -682,7 +695,7 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
             </div>
             <select className="admin-filter-select" value={branchFilter} onChange={e => setBranchFilter(e.target.value)} id="emp-branch-filter">
               <option value="all">All Branches</option>
-              {branches.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
+              {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
             <button className="btn-primary" id="add-employee-btn" onClick={openAdd}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -712,7 +725,34 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
                         </div>
                       </div>
                     </td>
-                    <td><span style={{ fontFamily:'monospace', color:'var(--text-secondary)' }}>{emp.secretCode || '—'}</span></td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontFamily:'monospace', color:'var(--text-secondary)' }}>{emp.secretCode || '—'}</span>
+                        {emp.secretCode && (
+                          <button 
+                            onClick={() => { navigator.clipboard.writeText(emp.secretCode); showToast('Secret code copied!'); }}
+                            title="Copy secret code"
+                            style={{ 
+                              background: 'transparent', 
+                              border: 'none', 
+                              cursor: 'pointer', 
+                              color: 'var(--text-muted)', 
+                              padding: '2px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}
+                            onMouseOver={e => e.currentTarget.style.color = 'var(--text-primary)'}
+                            onMouseOut={e => e.currentTarget.style.color = 'var(--text-muted)'}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    </td>
                     <td>{getRole(emp.role_id)?.title || 'Unknown Role'}</td>
                     <td>{getBranch(emp.branch_id)?.name || 'Unknown Branch'}</td>
                     <td>
@@ -748,7 +788,12 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
         <div className="overview-section">
           {/* Overview stats row */}
           <div className="stats-row" style={{ marginBottom: '24px' }}>
-            <div className="stat-card">
+            <div 
+              className="stat-card" 
+              style={{ cursor: 'pointer' }} 
+              onClick={() => setShowEmployeeBreakdown(true)}
+              title="Click to view breakdown by branch"
+            >
               <div className="stat-icon stat-icon-purple">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
@@ -1184,7 +1229,7 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
                   </span>
                 </div>
                 <p style={{ color: 'var(--text-muted)', fontSize: '12px', margin: '16px 0 0' }}>
-                  Please share this code with the employee. It cannot be recovered later.
+                  Please share this code with the employee.
                 </p>
               </div>
             </div>
@@ -1203,6 +1248,78 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
             ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
             : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>}
           {toast.msg}
+        </div>
+      )}
+      
+      {showScrollTop && (
+        <div style={{ position: 'fixed', bottom: '32px', left: 'calc(50% + 120px)', transform: 'translateX(-50%)', zIndex: 50 }}>
+          <button 
+            onClick={scrollToTop}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '12px',
+              background: 'rgba(249, 115, 22, 0.15)',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+              color: 'var(--accent-light)',
+              border: '1px solid rgba(249, 115, 22, 0.3)',
+              boxShadow: 'var(--shadow-sm)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontWeight: 600,
+              fontSize: '12px',
+              transition: 'all var(--transition-fast)'
+            }}
+            title="Scroll to top"
+            onMouseOver={e => {
+              e.currentTarget.style.transform = 'translateY(-3px)';
+              e.currentTarget.style.background = 'rgba(249, 115, 22, 0.3)';
+              e.currentTarget.style.color = '#fff';
+            }}
+            onMouseOut={e => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.background = 'rgba(249, 115, 22, 0.15)';
+              e.currentTarget.style.color = 'var(--accent-light)';
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="18 15 12 9 6 15"></polyline>
+            </svg>
+            Scroll to Top
+          </button>
+        </div>
+      )}
+
+      {showEmployeeBreakdown && (
+        <div className="modal-backdrop" onClick={() => setShowEmployeeBreakdown(false)}>
+          <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+            <div className="modal-header">
+              <h3>Employee Breakdown by Branch</h3>
+              <button className="modal-close" onClick={() => setShowEmployeeBreakdown(false)}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            <div className="modal-body" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {overviewBranches.map(b => {
+                  const count = overviewEmployees.filter(e => e.branch_id === b.id).length;
+                  return (
+                    <div key={b.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'var(--bg-input)', borderRadius: '8px', border: '1px solid var(--bg-card-border)' }}>
+                      <div style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{b.name}</div>
+                      <div style={{ background: 'var(--accent-gradient)', color: '#fff', padding: '4px 12px', borderRadius: '20px', fontSize: '13px', fontWeight: 600 }}>{count}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-primary" onClick={() => setShowEmployeeBreakdown(false)} style={{ width: '100%', justifyContent: 'center' }}>Close</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -1234,35 +1351,48 @@ export function ManageBranches({ branches, setBranches, employees, managers, set
     return employees ? employees.filter(e => e.branch === branchName).length : 0
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.name.trim()) return
     const empCount = getEmployeeCount(form.name)
     
-    let savedBranchId = ''
-    if (modal === 'add') {
-      savedBranchId = `BR-${String(branches.length + 1).padStart(3, '0')}`
-      setBranches(prev => [...prev, { ...form, id: savedBranchId, employees: empCount }])
-      showToast('Branch added successfully')
-    } else {
-      savedBranchId = modal.id
-      setBranches(prev => prev.map(b => b.id === savedBranchId ? { ...b, ...form, employees: empCount } : b))
-      showToast('Branch updated')
-    }
+    try {
+      let savedBranchId = '';
+      if (modal === 'add') {
+        const payload = { ...form, employees: empCount };
+        const newBranch = await api.addBranch(payload);
+        savedBranchId = newBranch.id;
+        setBranches(prev => [...prev, newBranch]);
+        showToast('Branch added successfully');
+      } else {
+        savedBranchId = modal.id;
+        const payload = { ...form, employees: empCount };
+        const updatedBranch = await api.updateBranch(savedBranchId, payload);
+        setBranches(prev => prev.map(b => b.id === savedBranchId ? updatedBranch : b));
+        showToast('Branch updated');
+      }
 
-    if (setManagers) {
-      setManagers(prev => prev.map(m => {
-        if (m.id === form.manager_id) return { ...m, branch_id: savedBranchId }
-        if (m.branch_id === savedBranchId && m.id !== form.manager_id) return { ...m, branch_id: null }
-        return m
-      }))
+      if (setManagers) {
+        setManagers(prev => prev.map(m => {
+          if (m.id === form.manager_id) return { ...m, branch_id: savedBranchId }
+          if (m.branch_id === savedBranchId && m.id !== form.manager_id) return { ...m, branch_id: null }
+          return m
+        }))
+      }
+      closeModal();
+    } catch (err) {
+      alert("Error: " + err.message);
     }
-    closeModal()
   }
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to remove this branch?')) return
-    setBranches(prev => prev.filter(b => b.id !== id))
-    showToast('Branch removed', 'danger')
+    try {
+      await api.deleteBranch(id);
+      setBranches(prev => prev.filter(b => b.id !== id));
+      showToast('Branch removed', 'danger');
+    } catch (err) {
+      alert("Error: " + err.message);
+    }
   }
 
   const filtered = branches.filter(b => {
@@ -1409,7 +1539,7 @@ export function ManageManagers({ branches, managers, setManagers }) {
   const [search, setSearch]       = useState('')
   const [modal, setModal]         = useState(null) // null | 'add' | manager object
   const [toast, setToast]         = useState(null)
-  const EMPTY_MGR = { username:'', branch_id: branches[0]?.id || '', status:'active', role: 'manager' }
+  const EMPTY_MGR = { username:'', branch_id: '', status:'active', role: 'manager' }
   const [form, setForm]           = useState(EMPTY_MGR)
 
   const showToast = (msg, type='success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000) }
@@ -1418,23 +1548,33 @@ export function ManageManagers({ branches, managers, setManagers }) {
   const openEdit = (mgr) => { setForm({ ...mgr }); setModal(mgr) }
   const closeModal = ()  => setModal(null)
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.username.trim()) return
-    if (modal === 'add') {
-      const newId = `MGR-${String(managers.length + 1).padStart(3, '0')}`
-      setManagers(prev => [...prev, { ...form, id: newId }])
-      showToast('Manager added successfully')
-    } else {
-      setManagers(prev => prev.map(m => m.id === modal.id ? { ...m, ...form } : m))
-      showToast('Manager updated')
+    try {
+      if (modal === 'add') {
+        const newMgr = await api.addManager(form);
+        setManagers(prev => [...prev, newMgr]);
+        showToast('Manager added successfully');
+      } else {
+        const updatedMgr = await api.updateManager(modal.id, form);
+        setManagers(prev => prev.map(m => m.id === modal.id ? updatedMgr : m));
+        showToast('Manager updated');
+      }
+      closeModal();
+    } catch (err) {
+      alert("Error: " + err.message);
     }
-    closeModal()
   }
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to remove this manager?')) return
-    setManagers(prev => prev.filter(m => m.id !== id))
-    showToast('Manager removed', 'danger')
+    try {
+      await api.deleteManager(id);
+      setManagers(prev => prev.filter(m => m.id !== id));
+      showToast('Manager removed', 'danger');
+    } catch (err) {
+      alert("Error: " + err.message);
+    }
   }
 
   const filtered = managers.filter(m => {
@@ -1534,10 +1674,7 @@ export function ManageManagers({ branches, managers, setManagers }) {
                   <input placeholder="e.g. johndoe" value={form.username} onChange={e => setForm(p=>({...p, username: e.target.value}))} />
                 </div>
                 <div className="field">
-                  <label>Branch</label>
-                  <select value={form.branch_id} onChange={e => setForm(p=>({...p, branch_id: e.target.value}))}>
-                    {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                  </select>
+                  {/* Branch assignment happens during branch creation, so no field here. */}
                 </div>
               </div>
               <div className="field-row">
@@ -1594,23 +1731,33 @@ export function ManageDepartments({ departments, setDepartments }) {
   const openEdit = (dept)  => { setForm({ ...dept }); setModal(dept) }
   const closeModal = ()  => setModal(null)
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.name.trim()) return
-    if (modal === 'add') {
-      const newId = `DEPT-${String(departments.length + 1).padStart(3, '0')}`
-      setDepartments(prev => [...prev, { ...form, id: newId }])
-      showToast('Department added successfully')
-    } else {
-      setDepartments(prev => prev.map(d => d.id === modal.id ? { ...d, ...form } : d))
-      showToast('Department updated')
+    try {
+      if (modal === 'add') {
+        const newDept = await api.addDepartment(form);
+        setDepartments(prev => [...prev, newDept]);
+        showToast('Department added successfully');
+      } else {
+        const updatedDept = await api.updateDepartment(modal.id, form);
+        setDepartments(prev => prev.map(d => d.id === modal.id ? updatedDept : d));
+        showToast('Department updated');
+      }
+      closeModal();
+    } catch (err) {
+      alert("Error: " + err.message);
     }
-    closeModal()
   }
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to remove this department?')) return
-    setDepartments(prev => prev.filter(d => d.id !== id))
-    showToast('Department removed', 'danger')
+    try {
+      await api.deleteDepartment(id);
+      setDepartments(prev => prev.filter(d => d.id !== id));
+      showToast('Department removed', 'danger');
+    } catch (err) {
+      alert("Error: " + err.message);
+    }
   }
 
   const filtered = departments.filter(d => {
@@ -1746,7 +1893,7 @@ export function ManageRoles({ departments, roles, setRoles }) {
   const [deptFilter, setDeptFilter] = useState('all')
   const [modal, setModal]       = useState(null)
   const [toast, setToast]       = useState(null)
-  const EMPTY_ROLE = { title:'', department: departments[0]?.name || '', description:'', status:'active' }
+  const EMPTY_ROLE = { title:'', department_id: departments[0]?.id || '', description:'', status:'active' }
   const [form, setForm]         = useState(EMPTY_ROLE)
 
   const showToast = (msg, type='success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000) }
@@ -1754,31 +1901,42 @@ export function ManageRoles({ departments, roles, setRoles }) {
   const openEdit = (role)  => { setForm({ ...role }); setModal(role) }
   const closeModal = ()  => setModal(null)
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.title.trim()) return
-    if (modal === 'add') {
-      const newId = `ROLE-${String(roles.length + 1).padStart(3, '0')}`
-      setRoles(prev => [...prev, { ...form, id: newId }])
-      showToast('Role added successfully')
-    } else {
-      setRoles(prev => prev.map(r => r.id === modal.id ? { ...r, ...form } : r))
-      showToast('Role updated')
+    try {
+      if (modal === 'add') {
+        const newRole = await api.addRole(form);
+        setRoles(prev => [...prev, newRole]);
+        showToast('Role added successfully');
+      } else {
+        const updatedRole = await api.updateRole(modal.id, form);
+        setRoles(prev => prev.map(r => r.id === modal.id ? updatedRole : r));
+        showToast('Role updated');
+      }
+      closeModal();
+    } catch (err) {
+      alert("Error: " + err.message);
     }
-    closeModal()
   }
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to remove this role?')) return
-    setRoles(prev => prev.filter(r => r.id !== id))
-    showToast('Role removed', 'danger')
+    try {
+      await api.deleteRole(id);
+      setRoles(prev => prev.filter(r => r.id !== id));
+      showToast('Role removed', 'danger');
+    } catch (err) {
+      alert("Error: " + err.message);
+    }
   }
 
   const filtered = roles.filter(r => {
-    const matchDept = deptFilter === 'all' || r.department === deptFilter
+    const matchDept = deptFilter === 'all' || r.department_id === deptFilter
     const q = search.toLowerCase()
+    const dept = departments.find(d => d.id === r.department_id);
     const matchSearch = !q ||
       r.title.toLowerCase().includes(q) ||
-      r.department.toLowerCase().includes(q) ||
+      (dept?.name || '').toLowerCase().includes(q) ||
       r.description.toLowerCase().includes(q)
     return matchDept && matchSearch
   })
@@ -1871,8 +2029,8 @@ export function ManageRoles({ departments, roles, setRoles }) {
                 </div>
                 <div className="field">
                   <label>Department</label>
-                  <select value={form.department} onChange={e => setForm(p=>({...p, department: e.target.value}))}>
-                    {departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                  <select value={form.department_id} onChange={e => setForm(p=>({...p, department_id: e.target.value}))}>
+                    {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                   </select>
                 </div>
               </div>
@@ -1920,7 +2078,7 @@ export function AccountSettings({ currentUser, setCurrentUser, setManagers, onCl
   const [error, setError] = useState('')
   const [toast, setToast] = useState(null)
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.username.trim() || !form.password.trim() || !form.confirmPassword.trim()) {
       setError('All fields are required')
       return
@@ -1931,13 +2089,18 @@ export function AccountSettings({ currentUser, setCurrentUser, setManagers, onCl
     }
     
     setError('')
-    setManagers(prev => prev.map(m => m.id === currentUser.id ? { ...m, username: form.username, password: form.password } : m))
-    setCurrentUser(prev => ({ ...prev, username: form.username, password: form.password }))
-    setToast('Account settings updated')
-    setTimeout(() => {
-      setToast(null)
-      onClose()
-    }, 1500)
+    try {
+      const updatedMgr = await api.updateManager(currentUser.id, { ...currentUser, username: form.username, password: form.password });
+      setManagers(prev => prev.map(m => m.id === currentUser.id ? updatedMgr : m));
+      setCurrentUser(updatedMgr);
+      setToast('Account settings updated');
+      setTimeout(() => {
+        setToast(null)
+        onClose()
+      }, 1500)
+    } catch (err) {
+      setError(err.message || 'Failed to update credentials');
+    }
   }
 
   return (

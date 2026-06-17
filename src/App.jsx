@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import './App.css'
 import './admin/admin.css'
 import LeaveList from './LeaveList.jsx'
-import { INITIAL_BRANCHES, INITIAL_EMPLOYEES } from './admin/AdminPages.jsx'
+import { api } from './api.js'
 
 const getMinLeaveDate = () => {
   const minDate = new Date()
@@ -18,17 +18,44 @@ function App() {
   const [formData, setFormData] = useState({
     secretCode: '',
     confirmSecretCode: '',
-    branch_id: INITIAL_BRANCHES[0]?.id || '',
+    branch_id: '',
     leaveDates: [getMinLeaveDate()],
     returningDate: '',
     substitute_employee_id: '',
     leave_type: 'annual',
   })
 
+  const [branches, setBranches] = useState([])
+  const [employees, setEmployees] = useState([])
+  const [submissions, setSubmissions] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [brs, emps, apps] = await Promise.all([
+          api.getBranches(),
+          api.getEmployees(),
+          api.getApplications()
+        ]);
+        setBranches(brs);
+        setEmployees(emps);
+        setSubmissions(apps);
+        if (brs.length > 0) {
+          setFormData(prev => ({ ...prev, branch_id: brs[0].id }));
+        }
+        setLoading(false);
+      } catch (err) {
+        console.error("Failed to load data", err);
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, []);
+
   const [showToast, setShowToast] = useState(false)
   const [toastMsg, setToastMsg] = useState('')
   const [error, setError] = useState('')
-  const [submissions, setSubmissions] = useState([])
   const [subBranchFilter, setSubBranchFilter] = useState('all')
 
   // Substitution agreement modal state
@@ -85,7 +112,7 @@ function App() {
     }))
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     
     if (formData.secretCode !== formData.confirmSecretCode) {
@@ -112,69 +139,60 @@ function App() {
 
     setError('')
 
-    // Resolve employee name from secret code
-    const employee = INITIAL_EMPLOYEES.find(e => e.secretCode === formData.secretCode)
-    if (!employee) { setError('Employee not found.'); return; }
-    
-    // Resolve substitute
-    const substitute = INITIAL_EMPLOYEES.find(e => e.id === formData.substitute_employee_id)
-    if (!substitute) { setError('Substitute not found.'); return; }
+    try {
+      const payload = {
+        secretCode: formData.secretCode,
+        branch_id: formData.branch_id,
+        leaveDates: formData.leaveDates.filter(d => d),
+        returningDate: formData.returningDate,
+        substitute_employee_id: formData.substitute_employee_id,
+        leave_type: formData.leave_type,
+        appliedDate: new Date().toISOString().split('T')[0],
+      };
+      
+      await api.addApplication(payload);
+      
+      showToastMsg('Leave application submitted successfully!')
 
-    const submission = {
-      id: `SUB-${String(submissions.length + 1).padStart(3, '0')}`,
-      employee_id: employee.id,
-      employeeName: employee.name,
-      employeeSecretCode: formData.secretCode,
-      branch_id: formData.branch_id,
-      leaveDates: [...formData.leaveDates],
-      returningDate: formData.returningDate,
-      substitute_employee_id: substitute.id,
-      substituteName: substitute.name,
-      leave_type: formData.leave_type,
-      substituteConfirmed: false,
-      status: 'pending',
-      appliedDate: new Date().toISOString().split('T')[0],
+      // Refresh applications
+      const apps = await api.getApplications();
+      setSubmissions(apps);
+      
+      // Reset form
+      setFormData({
+        secretCode: '',
+        confirmSecretCode: '',
+        branch_id: branches.length > 0 ? branches[0].id : '',
+        leaveDates: [getMinLeaveDate()],
+        returningDate: '',
+        substitute_employee_id: '',
+        leave_type: 'annual',
+      })
+    } catch (err) {
+      setError(err.message || 'Failed to submit application.');
     }
-
-    setSubmissions(prev => [submission, ...prev])
-    showToastMsg('Leave application submitted successfully!')
-
-    // Reset form
-    setFormData({
-      secretCode: '',
-      confirmSecretCode: '',
-      branch_id: INITIAL_BRANCHES[0]?.id || '',
-      leaveDates: [getMinLeaveDate()],
-      returningDate: '',
-      substitute_employee_id: '',
-      leave_type: 'annual',
-    })
   }
 
   const handleAgreeSubstitution = (submission) => {
     setAgreeModal({ submission, secretCode: '', error: '' })
   }
 
-  const confirmAgreement = () => {
+  const confirmAgreement = async () => {
     const modal = agreeModal
     if (!modal) return
 
-    // Check if the entered secret code matches the designated substitute
-    const substitute = INITIAL_EMPLOYEES.find(e => e.secretCode === modal.secretCode)
-    if (!substitute) {
-      setAgreeModal({ ...modal, error: 'Invalid secret code. Employee not found.' })
-      return
+    try {
+      await api.confirmApplication(modal.submission.id, modal.secretCode);
+      
+      showToastMsg(`Substitution confirmed!`)
+      
+      // Refresh applications
+      const apps = await api.getApplications();
+      setSubmissions(apps);
+      setAgreeModal(null)
+    } catch (err) {
+      setAgreeModal({ ...modal, error: err.message || 'Failed to confirm substitution.' })
     }
-    if (substitute.id !== modal.submission.substitute_employee_id) {
-      setAgreeModal({ ...modal, error: `This secret code belongs to ${substitute.name}, not ${modal.submission.substituteName}.` })
-      return
-    }
-
-    setSubmissions(prev => prev.map(s => 
-      s.id === modal.submission.id ? { ...s, substituteConfirmed: true } : s
-    ))
-    setAgreeModal(null)
-    showToastMsg(`${substitute.name} has confirmed the substitution!`)
   }
 
   const pendingSubstitutions = submissions.filter(s => !s.substituteConfirmed)
@@ -265,8 +283,8 @@ function App() {
                 id="sub-branch-filter"
               >
                 <option value="all">All Branches</option>
-                {INITIAL_BRANCHES.filter(b => b.status === 'active').map(b => (
-                  <option key={b.id} value={b.name}>{b.name}</option>
+                {branches.filter(b => b.status === 'active').map(b => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
                 ))}
               </select>
             </div>
@@ -274,7 +292,10 @@ function App() {
             {(() => {
               const filteredSubs = subBranchFilter === 'all'
                 ? submissions
-                : submissions.filter(s => s.branch_id === subBranchFilter)
+                : submissions.filter(s => {
+                    const emp = employees.find(e => e.id === s.employee_id);
+                    return emp && emp.branch_id === subBranchFilter;
+                  })
 
               if (filteredSubs.length === 0) {
                 return (
@@ -306,8 +327,10 @@ function App() {
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
-                          <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{s.employeeName}</span>
-                          <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: '8px' }}>{INITIAL_BRANCHES.find(b => b.id === s.branch_id)?.name}</span>
+                          <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{employees.find(e => e.id === s.employee_id)?.name || 'Unknown'}</span>
+                          <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: '8px' }}>
+                            {branches.find(b => b.id === employees.find(e => e.id === s.employee_id)?.branch_id)?.name}
+                          </span>
                         </div>
                         <span style={{
                           padding: '3px 10px',
@@ -322,7 +345,7 @@ function App() {
                         </span>
                       </div>
                       <div style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', gap: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
-                        <span><strong>Substitute:</strong> {s.substituteName}</span>
+                        <span><strong>Substitute:</strong> {employees.find(e => e.id === s.substitute_employee_id)?.name || 'None'}</span>
                         <span><strong>Leave:</strong> {s.leaveDates.join(', ')}</span>
                         <span style={{ padding: '2px 6px', background: 'var(--accent-primary)', color: '#fff', borderRadius: '4px', fontSize: '10px', textTransform: 'uppercase', fontWeight: 'bold' }}>
                           {s.leave_type}
@@ -395,7 +418,7 @@ function App() {
                 onChange={handleChange}
                 required
               >
-                {INITIAL_BRANCHES.filter(b => b.status === 'active').map(b => (
+                {branches.filter(b => b.status === 'active').map(b => (
                   <option key={b.id} value={b.id}>{b.name}</option>
                 ))}
               </select>
@@ -504,7 +527,7 @@ function App() {
                 required
               >
                 <option value="">Select a substitute…</option>
-                {INITIAL_EMPLOYEES.filter(e => e.branch_id === formData.branch_id && e.status === 'active').map(e => (
+                {employees.filter(e => e.branch_id === formData.branch_id && e.status === 'active').map(e => (
                   <option key={e.id} value={e.id}>{e.name}</option>
                 ))}
               </select>
