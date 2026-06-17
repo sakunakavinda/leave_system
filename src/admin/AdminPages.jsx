@@ -262,6 +262,7 @@ export function AdminDashboard({ applications, onUpdateStatus, branches }) {
               <th>ID</th>
               <th>Applicant</th>
               <th>Branch</th>
+              <th>Role</th>
               <th>Leave Dates</th>
               <th>Returning</th>
               <th>Substitute</th>
@@ -271,7 +272,7 @@ export function AdminDashboard({ applications, onUpdateStatus, branches }) {
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={8} style={{ textAlign:'center', padding:'48px', color:'var(--text-muted)' }}>No applications found</td></tr>
+              <tr><td colSpan={9} style={{ textAlign:'center', padding:'48px', color:'var(--text-muted)' }}>No applications found</td></tr>
             ) : filtered.map((app, i) => (
               <tr key={app.id} style={{ animationDelay: `${i * 0.05}s` }}>
                 <td><span style={{ fontFamily:'monospace', fontSize:'12px', color:'var(--text-muted)' }}>{app.id}</span></td>
@@ -285,6 +286,7 @@ export function AdminDashboard({ applications, onUpdateStatus, branches }) {
                   </div>
                 </td>
                 <td>{app.branch}</td>
+                <td><span style={{ color:'var(--text-secondary)', fontSize:'14px' }}>{app.post || '—'}</span></td>
                 <td>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: '220px' }}>
                     {app.leaveDates.map(date => (
@@ -363,7 +365,7 @@ export function AdminDashboard({ applications, onUpdateStatus, branches }) {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '13px', color: 'var(--text-secondary)' }}>
                     <div><strong>Branch:</strong> {leave.branch}</div>
                     <div><strong>Department:</strong> {leave.department || '—'}</div>
-                    <div><strong>Designation:</strong> {leave.post || '—'}</div>
+                    <div><strong>Role:</strong> {leave.post || '—'}</div>
                     <div><strong>Substitute:</strong> {leave.substituteName || '—'}</div>
                     <div style={{ gridColumn: 'span 2' }}>
                       <strong>Leave Dates:</strong> {leave.leaveDates.map(d => formatDate(d)).join(', ')}
@@ -395,15 +397,32 @@ export function AdminDashboard({ applications, onUpdateStatus, branches }) {
   )
 }
 
+/* ── Generate a random unique secret code ── */
+function generateSecretCode(existingCodes) {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+  let code
+  do {
+    code = ''
+    for (let i = 0; i < 8; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length))
+    }
+  } while (existingCodes.includes(code))
+  return code
+}
+
 /* ─────────────────────────────────────────────────────
    ManageEmployees
 ───────────────────────────────────────────────────── */
+const DEPARTMENTS = ['Engineering', 'Finance', 'HR', 'Operations']
+const DESIGNATIONS = ['Senior Engineer', 'Junior Developer', 'Software Engineer', 'Accountant', 'HR Manager', 'Operations Lead']
+
 export function ManageEmployees({ branches, employees, setEmployees }) {
   const [search, setSearch]             = useState('')
   const [branchFilter, setBranchFilter] = useState('all')
   const [modal, setModal]               = useState(null) // null | 'add' | employee object
   const [toast, setToast]               = useState(null)
-  const EMPTY_EMP = { name:'', secretCode:'', post:'', department:'', branch: branches[0]?.name || '', status:'active' }
+  const [secretCodePopup, setSecretCodePopup] = useState(null)
+  const EMPTY_EMP = { name:'', post: DESIGNATIONS[0], department: DEPARTMENTS[0], branch: branches[0]?.name || '', status:'active' }
   const [form, setForm]                 = useState(EMPTY_EMP)
 
   const showToast = (msg, type='success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000) }
@@ -416,13 +435,16 @@ export function ManageEmployees({ branches, employees, setEmployees }) {
     if (!form.name.trim()) return
     if (modal === 'add') {
       const newId = `EMP-${String(employees.length + 1).padStart(3, '0')}`
-      setEmployees(prev => [...prev, { ...form, id: newId }])
-      showToast('Employee added successfully')
+      const existingCodes = employees.map(e => e.secretCode).filter(Boolean)
+      const newSecretCode = generateSecretCode(existingCodes)
+      setEmployees(prev => [...prev, { ...form, id: newId, secretCode: newSecretCode }])
+      setSecretCodePopup({ name: form.name, secretCode: newSecretCode })
+      closeModal()
     } else {
       setEmployees(prev => prev.map(e => e.id === modal.id ? { ...e, ...form } : e))
       showToast('Employee updated')
+      closeModal()
     }
-    closeModal()
   }
 
   const handleDelete = (id) => {
@@ -527,26 +549,26 @@ export function ManageEmployees({ branches, employees, setEmployees }) {
                 </div>
                 <div className="field">
                   <label>Post / Designation *</label>
-                  <input placeholder="Post" value={form.post} onChange={e => setForm(p=>({...p, post: e.target.value}))} />
+                  <select value={form.post} onChange={e => setForm(p=>({...p, post: e.target.value}))}>
+                    {DESIGNATIONS.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
                 </div>
               </div>
               <div className="field-row">
                 <div className="field">
                   <label>Department</label>
-                  <input placeholder="Department" value={form.department} onChange={e => setForm(p=>({...p, department: e.target.value}))} />
+                  <select value={form.department} onChange={e => setForm(p=>({...p, department: e.target.value}))}>
+                    {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
                 </div>
-                <div className="field">
-                  <label>Secret Code</label>
-                  <input placeholder="Secret Code" value={form.secretCode} onChange={e => setForm(p=>({...p, secretCode: e.target.value}))} />
-                </div>
-              </div>
-              <div className="field-row">
                 <div className="field">
                   <label>Branch</label>
                   <select value={form.branch} onChange={e => setForm(p=>({...p, branch: e.target.value}))}>
                     {branches.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
                   </select>
                 </div>
+              </div>
+              <div className="field-row">
                 <div className="field">
                   <label>Status</label>
                   <select value={form.status} onChange={e => setForm(p=>({...p, status: e.target.value}))}>
@@ -560,6 +582,72 @@ export function ManageEmployees({ branches, employees, setEmployees }) {
               <button className="btn-secondary" onClick={closeModal}>Cancel</button>
               <button className="btn-primary" id="save-employee-btn" onClick={handleSave}>
                 {modal === 'add' ? 'Add Employee' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Secret Code Popup */}
+      {secretCodePopup && (
+        <div className="modal-backdrop" onClick={() => setSecretCodePopup(null)}>
+          <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px' }}>
+            <div className="modal-header">
+              <h3>Employee Created Successfully</h3>
+              <button className="modal-close" onClick={() => setSecretCodePopup(null)}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            <div className="modal-body" style={{ alignItems: 'center', textAlign: 'center', padding: '32px 24px', gap: '20px' }}>
+              <div style={{
+                width: '64px',
+                height: '64px',
+                borderRadius: '50%',
+                background: 'rgba(0,184,148,0.12)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto'
+              }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="#00b894" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '28px', height: '28px' }}>
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                  <polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+              </div>
+              <div>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '14px', margin: '0 0 8px' }}>
+                  Employee <strong style={{ color: 'var(--text-primary)' }}>{secretCodePopup.name}</strong> has been added.
+                </p>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '13px', margin: '0 0 16px' }}>
+                  Their secret code is:
+                </p>
+                <div style={{
+                  background: 'rgba(108, 92, 231, 0.1)',
+                  border: '2px dashed rgba(108, 92, 231, 0.3)',
+                  borderRadius: '12px',
+                  padding: '16px 24px',
+                  display: 'inline-block'
+                }}>
+                  <span style={{
+                    fontFamily: '"Courier New", monospace',
+                    fontSize: '24px',
+                    fontWeight: 700,
+                    color: 'var(--accent-light)',
+                    letterSpacing: '4px'
+                  }}>
+                    {secretCodePopup.secretCode}
+                  </span>
+                </div>
+                <p style={{ color: 'var(--text-muted)', fontSize: '12px', margin: '16px 0 0' }}>
+                  Please share this code with the employee. It cannot be recovered later.
+                </p>
+              </div>
+            </div>
+            <div className="modal-footer" style={{ justifyContent: 'center' }}>
+              <button className="btn-primary" onClick={() => setSecretCodePopup(null)}>
+                Got it
               </button>
             </div>
           </div>
@@ -809,7 +897,7 @@ export function ManageManagers({ branches, managers, setManagers }) {
       <div className="data-table-wrap">
         <table className="data-table">
           <thead>
-            <tr><th>ID</th><th>Username</th><th>Role</th><th>Branch</th><th>Status</th><th>Actions</th></tr>
+            <tr><th>ID</th><th>Username</th><th>Type</th><th>Branch</th><th>Status</th><th>Actions</th></tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
