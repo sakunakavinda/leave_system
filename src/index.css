@@ -56,17 +56,18 @@ html {
 
 body {
   font-family: var(--font-family);
-  background: var(--bg-primary);
+  background: #0b0d18;
   color: var(--text-primary);
   line-height: 1.6;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
-  /* Subtle animated gradient background */
+  /* Rich layered background */
   background-image:
-    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(249, 115, 22, 0.12) 0%, transparent 70%),
-    radial-gradient(ellipse 60% 40% at 80% 100%, rgba(251, 146, 60, 0.06) 0%, transparent 60%);
+    radial-gradient(ellipse 90% 55% at 50% -10%, rgba(249, 115, 22, 0.14) 0%, transparent 65%),
+    radial-gradient(ellipse 50% 40% at 85% 110%, rgba(251, 146, 60, 0.08) 0%, transparent 55%),
+    radial-gradient(ellipse 60% 50% at 10% 80%, rgba(124, 58, 237, 0.05) 0%, transparent 55%);
   background-attachment: fixed;
 }
 

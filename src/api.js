@@ -59,4 +59,9 @@ export const api = {
   updateApplicationStatus: (id, status) => fetchApi(`/applications/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) }),
   confirmApplication: (id, secretCode) => fetchApi(`/applications/${id}/confirm`, { method: 'PUT', body: JSON.stringify({ secretCode }) }),
   deleteApplication: (id) => fetchApi(`/applications/${id}`, { method: 'DELETE' }),
+  getLeaveOverview: (secretCode) => fetchApi(`/applications/overview/${secretCode}`),
+
+  // Settings
+  getSettings: () => fetchApi('/settings'),
+  updateSettings: (data) => fetchApi('/settings', { method: 'PUT', body: JSON.stringify(data) }),
 };

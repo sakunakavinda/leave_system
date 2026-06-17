@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import './admin.css'
-import { AdminDashboard, ManageEmployees, ManageBranches, ManageManagers, ManageDepartments, ManageRoles, AccountSettings } from './AdminPages.jsx'
+import { AdminDashboard, ManageEmployees, ManageBranches, ManageManagers, ManageDepartments, ManageRoles, AccountSettings, SystemSettings } from './AdminPages.jsx'
 import { api } from '../api.js'
 
 const NAV = [
@@ -75,6 +75,17 @@ const NAV = [
       </svg>
     ),
   },
+  {
+    id: 'settings',
+    label: 'Settings',
+    desc: 'System settings',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+      </svg>
+    ),
+  },
 ]
 
 const PAGE_META = {
@@ -84,6 +95,7 @@ const PAGE_META = {
   branches:   { title: 'Manage Branches',   subtitle: 'Configure and track office branches'  },
   departments: { title: 'Manage Departments', subtitle: 'Configure and organize departments'  },
   roles:      { title: 'Manage Roles',      subtitle: 'Define and manage role designations'   },
+  settings:   { title: 'System Settings',   subtitle: 'Configure global system settings'      },
 }
 
 export default function AdminApp() {
@@ -322,6 +334,9 @@ export default function AdminApp() {
         )}
         {activePage === 'roles' && (
           <ManageRoles departments={departments} roles={roles} setRoles={setRoles} />
+        )}
+        {activePage === 'settings' && (
+          <SystemSettings />
         )}
       </main>
 

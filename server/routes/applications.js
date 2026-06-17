@@ -347,4 +347,100 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// GET /api/applications/overview/:secretCode — employee leave overview
+router.get('/overview/:secretCode', async (req, res) => {
+  const { secretCode } = req.params;
+  try {
+    // Lookup employee
+    const empResult = await pool.query(`
+      SELECT e.id, e.name, e.role_id, e.branch_id,
+             r.title AS role_title,
+             b.name AS branch_name,
+             d.name AS department_name
+      FROM employees e
+      LEFT JOIN roles r ON e.role_id = r.id
+      LEFT JOIN branches b ON e.branch_id = b.id
+      LEFT JOIN departments d ON r.department_id = d.id
+      WHERE e.secret_code = $1
+    `, [secretCode]);
+
+    if (empResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+
+    const emp = empResult.rows[0];
+    const year = new Date().getFullYear();
+
+    // Get leave balance for this year
+    const balanceResult = await pool.query(`
+      SELECT annual_taken, sick_taken, casual_taken
+      FROM leave_balances
+      WHERE employee_id = $1 AND year = $2
+    `, [emp.id, year]);
+
+    const balance = balanceResult.rows[0] || { annual_taken: 0, sick_taken: 0, casual_taken: 0 };
+
+    // Get leave rules for this employee's role + branch
+    const rulesResult = await pool.query(`
+      SELECT annual_leave, sick_leave, casual_leave, max_per_day
+      FROM leave_rules
+      WHERE role_id = $1 AND branch_id = $2
+    `, [emp.role_id, emp.branch_id]);
+
+    const rules = rulesResult.rows[0] || { annual_leave: 14, sick_leave: 10, casual_leave: 7, max_per_day: 1 };
+
+    // Get all leave applications for this employee
+    const appsResult = await pool.query(`
+      SELECT 
+        a.id, a.leave_type, a.applied_date, a.returning_date,
+        a.substitute_confirmed, a.status, a.created_at,
+        sub.name AS substitute_name,
+        COALESCE(
+          (SELECT array_agg(d.leave_date::text ORDER BY d.leave_date)
+           FROM leave_application_dates d
+           WHERE d.leave_application_id = a.id),
+          '{}'
+        ) AS leave_dates
+      FROM leave_applications a
+      LEFT JOIN employees sub ON a.substitute_employee_id = sub.id
+      WHERE a.employee_id = $1
+      ORDER BY a.created_at DESC
+    `, [emp.id]);
+
+    res.json({
+      employee: {
+        id: emp.id,
+        name: emp.name,
+        role: emp.role_title,
+        branch: emp.branch_name,
+        department: emp.department_name,
+      },
+      balance: {
+        annual_taken: balance.annual_taken,
+        sick_taken: balance.sick_taken,
+        casual_taken: balance.casual_taken,
+      },
+      rules: {
+        annual_leave: rules.annual_leave,
+        sick_leave: rules.sick_leave,
+        casual_leave: rules.casual_leave,
+      },
+      applications: appsResult.rows.map(row => ({
+        id: row.id,
+        leave_type: row.leave_type,
+        appliedDate: row.applied_date,
+        returningDate: row.returning_date,
+        substituteConfirmed: row.substitute_confirmed,
+        substituteName: row.substitute_name,
+        status: row.status,
+        leaveDates: row.leave_dates,
+      })),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error', details: err.message });
+  }
+});
+
 export default router;
+

@@ -2149,3 +2149,107 @@ export function AccountSettings({ currentUser, setCurrentUser, setManagers, onCl
     </div>
   )
 }
+
+/* ─────────────────────────────────────────────────────
+   SystemSettings
+───────────────────────────────────────────────────── */
+export function SystemSettings() {
+  const [logoBase64, setLogoBase64] = useState(null)
+  const [toast, setToast] = useState(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const data = await api.getSettings()
+        if (data.company_logo) setLogoBase64(data.company_logo)
+      } catch (err) {
+        console.error("Failed to load settings", err)
+      }
+    }
+    fetchSettings()
+  }, [])
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0]
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) { // 2MB limit
+        alert("Image too large. Please select an image under 2MB.");
+        return;
+      }
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setLogoBase64(reader.result)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const handleSave = async () => {
+    setLoading(true)
+    try {
+      await api.updateSettings({ company_logo: logoBase64 })
+      setToast({ msg: 'Settings saved successfully', type: 'success' })
+      setTimeout(() => setToast(null), 3000)
+    } catch (err) {
+      setToast({ msg: err.message || 'Failed to save settings', type: 'danger' })
+      setTimeout(() => setToast(null), 3000)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="admin-content" style={{ maxWidth: '800px' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '20px' }}>
+        <button className="btn-primary" onClick={handleSave} disabled={loading}>
+          {loading ? 'Saving...' : 'Save Settings'}
+        </button>
+      </div>
+
+      <div className="admin-card">
+        <div className="admin-card-header">
+          <h3 className="admin-card-title">Branding</h3>
+        </div>
+        <div className="admin-card-body">
+          <div className="field-row">
+            <div className="field">
+              <label>Company Logo</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '24px', marginTop: '12px' }}>
+                <div style={{ width: '80px', height: '80px', borderRadius: '12px', background: 'var(--bg-card)', border: '1px solid var(--bg-card-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                  {logoBase64 ? (
+                    <img src={logoBase64} alt="Company Logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                  ) : (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '32px', height: '32px', color: 'var(--text-muted)' }}>
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                      <circle cx="8.5" cy="8.5" r="1.5"/>
+                      <polyline points="21 15 16 10 5 21"/>
+                    </svg>
+                  )}
+                </div>
+                <div>
+                  <input type="file" id="logo-upload" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
+                  <label htmlFor="logo-upload" className="btn-secondary" style={{ cursor: 'pointer', display: 'inline-flex' }}>
+                    Choose Image
+                  </label>
+                  <p style={{ marginTop: '8px', fontSize: '13px', color: 'var(--text-muted)' }}>Recommended size: 256x256px (Max 2MB)</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {toast && (
+        <div className={`admin-toast admin-toast-${toast.type} show`}>
+          {toast.type === 'success' ? (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          ) : (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          )}
+          {toast.msg}
+        </div>
+      )}
+    </div>
+  )
+}
