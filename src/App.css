@@ -549,7 +549,14 @@
     font-size: 26px;
   }
 
+  .leave-header-top {
+    flex-direction: column;
+    gap: 16px;
+    align-items: stretch;
+  }
+
   .leave-header-icon {
+    align-self: center;
     width: 48px;
     height: 48px;
     border-radius: 14px;
@@ -560,7 +567,38 @@
     height: 24px;
   }
 
+  .header-nav-btns {
+    flex-direction: column;
+    width: 100%;
+    gap: 10px;
+  }
+
+  .header-nav-btns button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .leave-dates-list .leave-date-row {
+    flex-direction: row;
+    align-items: center;
+  }
+
   .conditions-section {
     padding: 16px 18px;
+  }
+
+  .modal-box {
+    width: 90%;
+    padding: 24px;
+  }
+}
+
+@media (max-width: 400px) {
+  .leave-card {
+    padding: 24px 16px;
+  }
+  
+  .leave-header h1 {
+    font-size: 22px;
   }
 }

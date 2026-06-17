@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import './App.css'
 import './admin/admin.css'
 import LeaveList from './LeaveList.jsx'
+import SubstitutionsList from './SubstitutionsList.jsx'
 import { api } from './api.js'
 
 const getMinLeaveDate = () => {
@@ -268,124 +269,15 @@ function App() {
         </header>
 
         {page === 'substitutions' ? (
-          /* ── Substitutions View ── */
-          <div style={{ animation: 'contentIn 0.35s ease both' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '24px' }}>
-              <button
-                type="button"
-                className="back-btn"
-                id="back-from-substitutions-btn"
-                onClick={() => setPage('form')}
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="19" y1="12" x2="5" y2="12" />
-                  <polyline points="12 19 5 12 12 5" />
-                </svg>
-                Back to Form
-              </button>
-              <div className="section-header" style={{ margin: 0 }}>
-                <h2>Substitution Agreements</h2>
-                <p>{pendingSubstitutions.length} pending</p>
-              </div>
-            </div>
-
-            <div className="controls-bar" style={{ marginBottom: '16px' }}>
-              <select
-                className="admin-filter-select"
-                value={subBranchFilter}
-                onChange={e => setSubBranchFilter(e.target.value)}
-                id="sub-branch-filter"
-              >
-                <option value="all">All Branches</option>
-                {branches.filter(b => b.status === 'active').map(b => (
-                  <option key={b.id} value={b.id}>{b.name}</option>
-                ))}
-              </select>
-            </div>
-
-            {(() => {
-              const mySubs = applicant ? submissions.filter(s => s.substitute_employee_id === applicant.id) : []
-              const filteredSubs = subBranchFilter === 'all'
-                ? mySubs
-                : mySubs.filter(s => {
-                    const emp = employees.find(e => e.id === s.employee_id);
-                    return emp && emp.branch_id === subBranchFilter;
-                  })
-
-              if (filteredSubs.length === 0) {
-                return (
-                  <div className="admin-empty" style={{ padding: '40px 24px' }}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                      <circle cx="9" cy="7" r="4" />
-                      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                    </svg>
-                    <h3>No substitutions yet</h3>
-                    <p>Submitted leave applications with substitutes will appear here.</p>
-                  </div>
-                )
-              }
-
-              return (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {filteredSubs.map(s => (
-                    <div key={s.id} style={{
-                      background: 'var(--bg-card)',
-                      backdropFilter: 'blur(20px)',
-                      border: `1px solid ${s.substituteConfirmed ? 'rgba(0,184,148,0.3)' : 'var(--bg-card-border)'}`,
-                      borderRadius: 'var(--border-radius-md)',
-                      padding: '18px 20px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '12px',
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                          <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{employees.find(e => e.id === s.employee_id)?.name || 'Unknown'}</span>
-                          <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: '8px' }}>
-                            {branches.find(b => b.id === employees.find(e => e.id === s.employee_id)?.branch_id)?.name}
-                          </span>
-                        </div>
-                        <span style={{
-                          padding: '3px 10px',
-                          borderRadius: '99px',
-                          fontSize: '11px',
-                          fontWeight: 700,
-                          background: s.substituteConfirmed ? 'rgba(0,184,148,0.12)' : 'rgba(253,203,110,0.12)',
-                          color: s.substituteConfirmed ? '#00b894' : '#fdcb6e',
-                          border: `1px solid ${s.substituteConfirmed ? 'rgba(0,184,148,0.25)' : 'rgba(253,203,110,0.25)'}`,
-                        }}>
-                          {s.substituteConfirmed ? 'Confirmed' : 'Pending'}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', gap: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
-                        <span><strong>Substitute:</strong> {employees.find(e => e.id === s.substitute_employee_id)?.name || 'None'}</span>
-                        <span><strong>Leave:</strong> {s.leaveDates.join(', ')}</span>
-                        <span style={{ padding: '2px 6px', background: 'var(--accent-primary)', color: '#fff', borderRadius: '4px', fontSize: '10px', textTransform: 'uppercase', fontWeight: 'bold' }}>
-                          {s.leave_type}
-                        </span>
-                      </div>
-                      {!s.substituteConfirmed && (
-                        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                          <button
-                            className="btn-primary"
-                            style={{ fontSize: '12px', padding: '7px 14px' }}
-                            onClick={() => handleAgreeSubstitution(s)}
-                          >
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '13px', height: '13px' }}>
-                              <polyline points="20 6 9 17 4 12" />
-                            </svg>
-                            Agree to Substitute
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )
-            })()}
-          </div>
+          <SubstitutionsList
+            onBack={() => setPage('form')}
+            onAgree={handleAgreeSubstitution}
+            submissions={submissions}
+            employees={employees}
+            branches={branches}
+            roles={roles}
+            applicant={applicant}
+          />
         ) : (
           /* ── Leave Application Form ── */
           <form className="leave-form" id="leave-application-form" onSubmit={handleSubmit}>

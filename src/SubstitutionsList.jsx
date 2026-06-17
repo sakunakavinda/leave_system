@@ -1,10 +1,6 @@
 import { useState } from 'react'
 import './LeaveList.css'
 
-
-
-
-
 const STATUS_CONFIG = {
   pending: {
     label: 'Pending',
@@ -16,8 +12,8 @@ const STATUS_CONFIG = {
       </svg>
     ),
   },
-  approved: {
-    label: 'Approved',
+  confirmed: {
+    label: 'Confirmed',
     className: 'status-approved',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -26,24 +22,12 @@ const STATUS_CONFIG = {
       </svg>
     ),
   },
-  rejected: {
-    label: 'Rejected',
-    className: 'status-rejected',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10" />
-        <line x1="15" y1="9" x2="9" y2="15" />
-        <line x1="9" y1="9" x2="15" y2="15" />
-      </svg>
-    ),
-  },
 }
 
 const FILTER_OPTIONS = [
-  { value: 'all', label: 'All Applications' },
+  { value: 'all', label: 'All Substitutions' },
   { value: 'pending', label: 'Pending' },
-  { value: 'approved', label: 'Approved' },
-  { value: 'rejected', label: 'Rejected' },
+  { value: 'confirmed', label: 'Confirmed' },
 ]
 
 function formatDate(dateStr) {
@@ -55,18 +39,17 @@ function formatDate(dateStr) {
   })
 }
 
-export default function LeaveList({ onBack, submissions = [], employees = [], branches = [], roles = [], applicant }) {
+export default function SubstitutionsList({ onBack, onAgree, submissions = [], employees = [], branches = [], roles = [], applicant }) {
   const [filter, setFilter] = useState('all')
   const [expandedId, setExpandedId] = useState(null)
 
-  // Filter to only show the applicant's own applications
-  const mySubmissions = submissions.filter(s => s.employee_id === applicant?.id)
+  // Filter to only show applications where the applicant is the substitute
+  const mySubs = submissions.filter(s => s.substitute_employee_id === applicant?.id)
 
-  const enrichedSubmissions = mySubmissions.map(sub => {
+  const enrichedSubmissions = mySubs.map(sub => {
     const emp = employees.find(e => e.id === sub.employee_id)
     const branch = branches.find(b => b.id === emp?.branch_id)
     const role = roles.find(r => r.id === emp?.role_id)
-    const subEmp = employees.find(e => e.id === sub.substitute_employee_id)
 
     return {
       id: sub.id,
@@ -77,8 +60,9 @@ export default function LeaveList({ onBack, submissions = [], employees = [], br
       appliedDate: sub.appliedDate,
       leaveDates: sub.leaveDates || [],
       returningDate: sub.returningDate,
-      substituteName: subEmp?.name || 'Unknown',
-      status: sub.status,
+      leave_type: sub.leave_type,
+      status: sub.substituteConfirmed ? 'confirmed' : 'pending',
+      originalSubmission: sub
     }
   })
 
@@ -89,8 +73,7 @@ export default function LeaveList({ onBack, submissions = [], employees = [], br
   const counts = {
     all: enrichedSubmissions.length,
     pending: enrichedSubmissions.filter((a) => a.status === 'pending').length,
-    approved: enrichedSubmissions.filter((a) => a.status === 'approved').length,
-    rejected: enrichedSubmissions.filter((a) => a.status === 'rejected').length,
+    confirmed: enrichedSubmissions.filter((a) => a.status === 'confirmed').length,
   }
 
   return (
@@ -104,15 +87,17 @@ export default function LeaveList({ onBack, submissions = [], employees = [], br
         </button>
 
         <div className="list-title-area">
-          <div className="list-header-icon">
+          <div className="list-header-icon" style={{ background: 'rgba(253, 203, 110, 0.1)', color: '#fdcb6e', border: '1px solid rgba(253, 203, 110, 0.3)', boxShadow: 'none' }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 11l3 3L22 4" />
-              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
             </svg>
           </div>
           <div>
-            <h1>Leave Applications</h1>
-            <p>{enrichedSubmissions.length} total records</p>
+            <h1>Substitution Agreements</h1>
+            <p>{counts.pending} pending requests</p>
           </div>
         </div>
       </div>
@@ -125,6 +110,7 @@ export default function LeaveList({ onBack, submissions = [], employees = [], br
             className={`summary-card summary-${value} ${filter === value ? 'active' : ''}`}
             onClick={() => setFilter(value)}
             id={`filter-${value}-btn`}
+            style={{ padding: '16px 20px' }}
           >
             <span className="summary-count">{counts[value]}</span>
             <span className="summary-label">{label}</span>
@@ -138,12 +124,13 @@ export default function LeaveList({ onBack, submissions = [], employees = [], br
       {filtered.length === 0 ? (
         <div className="empty-state">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
-            <path d="M14 2v6h6" />
-            <path d="M16 13H8" /><path d="M16 17H8" /><path d="M10 9H8" />
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
           </svg>
-          <h3>No applications found</h3>
-          <p>Try adjusting your search or filter.</p>
+          <h3>No substitutions found</h3>
+          <p>You have no substitution requests matching this filter.</p>
         </div>
       ) : (
         <div className="applications-list">
@@ -208,7 +195,7 @@ export default function LeaveList({ onBack, submissions = [], employees = [], br
                 {/* Expanded detail panel */}
                 {isExpanded && (
                   <div className="app-card-detail">
-                    <div className="detail-grid">
+                    <div className="detail-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
                       <div className="detail-item">
                         <span className="detail-label">Leave Dates</span>
                         <div className="detail-dates">
@@ -222,14 +209,28 @@ export default function LeaveList({ onBack, submissions = [], employees = [], br
                         <span className="detail-value">{formatDate(app.returningDate)}</span>
                       </div>
                       <div className="detail-item">
-                        <span className="detail-label">Substitute</span>
-                        <span className="detail-value">{app.substituteName}</span>
+                        <span className="detail-label">Leave Type</span>
+                        <span className="detail-value" style={{ textTransform: 'capitalize' }}>{app.leave_type}</span>
                       </div>
                       <div className="detail-item">
                         <span className="detail-label">Application ID</span>
                         <span className="detail-value mono">{app.id}</span>
                       </div>
                     </div>
+
+                    {app.status === 'pending' && (
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '24px', paddingTop: '16px', borderTop: '1px solid var(--bg-card-border)' }}>
+                        <button
+                          className="btn-primary"
+                          onClick={() => onAgree(app.originalSubmission)}
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px' }}>
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                          Agree to Substitute
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -240,3 +241,4 @@ export default function LeaveList({ onBack, submissions = [], employees = [], br
     </div>
   )
 }
+
