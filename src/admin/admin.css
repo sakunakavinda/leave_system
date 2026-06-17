@@ -85,6 +85,23 @@
   z-index: 1;
 }
 
+.flight-anim {
+  animation: logoFlightAnim 1.2s cubic-bezier(0.25, 1, 0.5, 1) forwards !important;
+}
+
+@keyframes logoFlightAnim {
+  0% {
+    top: var(--start-y);
+    left: var(--start-x);
+    transform: scale(1);
+  }
+  100% {
+    top: 28px;
+    left: 22px;
+    transform: scale(1);
+  }
+}
+
 .sidebar-brand-icon {
   width: 40px;
   height: 40px;

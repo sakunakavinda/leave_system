@@ -80,11 +80,29 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
   }
 
   const handleAction = (id, action) => {
+    let confirmMsg = '';
+    if (action === 'approved') confirmMsg = 'Are you sure you want to approve this application?';
+    if (action === 'rejected') confirmMsg = 'Are you sure you want to reject this application?';
+    if (action === 'pending') confirmMsg = 'Are you sure you want to reset this application to pending?';
+
+    if (!window.confirm(confirmMsg)) return;
+
     onUpdateStatus(id, action)
-    showToast(
-      action === 'approved' ? 'Application approved successfully' : 'Application rejected',
-      action === 'approved' ? 'success' : 'danger'
-    )
+    
+    let toastMsg = '';
+    let toastType = '';
+    if (action === 'approved') {
+      toastMsg = 'Application approved successfully';
+      toastType = 'success';
+    } else if (action === 'pending') {
+      toastMsg = 'Application reseted';
+      toastType = 'warning';
+    } else {
+      toastMsg = 'Application rejected';
+      toastType = 'danger';
+    }
+    
+    showToast(toastMsg, toastType)
   }
 
   const branchFiltered = branchFilter === 'all'
