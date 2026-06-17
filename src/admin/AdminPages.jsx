@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import './admin.css'
 
 /* ── Shared mock data ─────────────────────────────── */
@@ -429,12 +429,38 @@ function generateSecretCode(existingCodes) {
 }
 
 /* ─────────────────────────────────────────────────────
-   ManageEmployees
+   ManageEmployees — with sub-tabs
 ───────────────────────────────────────────────────── */
 const DEPARTMENTS = ['Engineering', 'Finance', 'HR', 'Operations']
 const DESIGNATIONS = ['Senior Engineer', 'Junior Developer', 'Software Engineer', 'Accountant', 'HR Manager', 'Operations Lead']
 
-export function ManageEmployees({ branches, employees, setEmployees }) {
+/* ── Generate branch-specific leave rules ── */
+const BRANCH_NAMES = ['Colombo', 'Kandy', 'Galle', 'Negombo', 'Jaffna']
+const ROLE_LEAVE_DEFAULTS = [
+  { role: 'Senior Engineer',   department: 'Engineering',  annualLeave: 20, sickLeave: 10, casualLeave: 7,  maxPerDay: 1 },
+  { role: 'Junior Developer',  department: 'Engineering',  annualLeave: 14, sickLeave: 10, casualLeave: 7,  maxPerDay: 2 },
+  { role: 'Software Engineer', department: 'Engineering',  annualLeave: 18, sickLeave: 10, casualLeave: 7,  maxPerDay: 2 },
+  { role: 'Accountant',        department: 'Finance',      annualLeave: 16, sickLeave: 10, casualLeave: 7,  maxPerDay: 1 },
+  { role: 'HR Manager',        department: 'HR',           annualLeave: 20, sickLeave: 10, casualLeave: 7,  maxPerDay: 1 },
+  { role: 'Operations Lead',   department: 'Operations',   annualLeave: 18, sickLeave: 10, casualLeave: 7,  maxPerDay: 1 },
+]
+
+const INITIAL_LEAVE_RULES = []
+let lrCounter = 0
+BRANCH_NAMES.forEach(branch => {
+  ROLE_LEAVE_DEFAULTS.forEach(def => {
+    lrCounter++
+    INITIAL_LEAVE_RULES.push({
+      id: `LR-${String(lrCounter).padStart(3, '0')}`,
+      ...def,
+      branch,
+      status: 'active',
+    })
+  })
+})
+
+export function ManageEmployees({ branches, employees, setEmployees, departments, roles, isSuper }) {
+  const [activeSubTab, setActiveSubTab] = useState('directory')
   const [search, setSearch]             = useState('')
   const [branchFilter, setBranchFilter] = useState('all')
   const [modal, setModal]               = useState(null) // null | 'add' | employee object
@@ -442,6 +468,12 @@ export function ManageEmployees({ branches, employees, setEmployees }) {
   const [secretCodePopup, setSecretCodePopup] = useState(null)
   const EMPTY_EMP = { name:'', post: DESIGNATIONS[0], department: DEPARTMENTS[0], branch: branches[0]?.name || '', status:'active' }
   const [form, setForm]                 = useState(EMPTY_EMP)
+
+  // Leave rules state
+  const [leaveRules, setLeaveRules]     = useState(INITIAL_LEAVE_RULES)
+  const [ruleModal, setRuleModal]       = useState(null)
+  const EMPTY_RULE = { role: roles?.[0]?.title || DESIGNATIONS[0], department: departments?.[0]?.name || DEPARTMENTS[0], branch: branches[0]?.name || '', annualLeave: 14, sickLeave: 10, casualLeave: 7, maxPerDay: 1, status: 'active' }
+  const [ruleForm, setRuleForm]         = useState(EMPTY_RULE)
 
   const showToast = (msg, type='success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000) }
 
@@ -478,77 +510,466 @@ export function ManageEmployees({ branches, employees, setEmployees }) {
     return matchBranch && matchSearch
   })
 
+  // ── Leave Rules handlers ──
+  const openAddRule  = () => { setRuleForm(EMPTY_RULE); setRuleModal('add') }
+  const openEditRule = (rule) => { setRuleForm({ ...rule }); setRuleModal(rule) }
+  const closeRuleModal = () => setRuleModal(null)
+
+  const handleSaveRule = () => {
+    if (!ruleForm.role.trim() || !ruleForm.branch.trim()) return
+    // Duplicate validation: same role + branch
+    const isDuplicate = leaveRules.some(r =>
+      r.role === ruleForm.role &&
+      r.branch === ruleForm.branch &&
+      (ruleModal === 'add' || r.id !== ruleModal.id)
+    )
+    if (isDuplicate) {
+      showToast(`A rule for "${ruleForm.role}" in "${ruleForm.branch}" already exists`, 'danger')
+      return
+    }
+    if (ruleModal === 'add') {
+      const newId = `LR-${String(leaveRules.length + 1).padStart(3, '0')}`
+      setLeaveRules(prev => [...prev, { ...ruleForm, id: newId }])
+      showToast('Leave rule added successfully')
+    } else {
+      setLeaveRules(prev => prev.map(r => r.id === ruleModal.id ? { ...r, ...ruleForm } : r))
+      showToast('Leave rule updated')
+    }
+    closeRuleModal()
+  }
+
+  const handleDeleteRule = (id) => {
+    if (!window.confirm('Are you sure you want to remove this leave rule?')) return
+    setLeaveRules(prev => prev.filter(r => r.id !== id))
+    showToast('Leave rule removed', 'danger')
+  }
+
+  const handleMaxPerDayChange = (id, newVal) => {
+    setLeaveRules(prev => prev.map(r => r.id === id ? { ...r, maxPerDay: Math.max(1, newVal) } : r))
+  }
+
+  // Group leave rules hierarchically by branch then department
+  const groupedLeaveRules = useMemo(() => {
+    const branchNames = branches.map(b => b.name)
+    const grouped = {}
+    branchNames.forEach(b => {
+      grouped[b] = {}
+      const branchRules = leaveRules.filter(r => r.branch === b)
+      branchRules.forEach(r => {
+        if (!grouped[b][r.department]) grouped[b][r.department] = []
+        grouped[b][r.department].push(r)
+      })
+    })
+    return grouped
+  }, [leaveRules, branches])
+
+  // ── Employee Overview computations ──
+  const overviewBranches = isSuper ? branches : branches
+  const [overviewBranchFilter, setOverviewBranchFilter] = useState('all')
+
+  const overviewEmployees = overviewBranchFilter === 'all'
+    ? employees
+    : employees.filter(e => e.branch === overviewBranchFilter)
+
+  // Build overview data: group by department, then by role
+  const activeDepts = (departments || DEPARTMENTS.map((d, i) => ({ id: `D-${i}`, name: d }))).filter(d => d.status !== 'inactive')
+
+  const overviewData = activeDepts.map(dept => {
+    const deptEmployees = overviewEmployees.filter(e => e.department === dept.name)
+    const roleMap = {}
+    deptEmployees.forEach(e => {
+      if (!roleMap[e.post]) roleMap[e.post] = 0
+      roleMap[e.post]++
+    })
+    const roleEntries = Object.entries(roleMap).sort((a, b) => b[1] - a[1])
+    return { department: dept.name, total: deptEmployees.length, roles: roleEntries }
+  })
+
+  const totalOverview = overviewEmployees.length
+  const activeDeptCount = overviewData.filter(d => d.total > 0).length
+
+  // ── Sub-tab definitions ──
+  const SUB_TABS = [
+    {
+      id: 'directory',
+      label: 'Staff Directory',
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+      ),
+    },
+    {
+      id: 'overview',
+      label: 'Employee Overview',
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/>
+          <path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/>
+          <path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/>
+        </svg>
+      ),
+    },
+    {
+      id: 'leave-rules',
+      label: 'Set Leave Rules',
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/>
+          <path d="M14 2v6h6"/>
+          <path d="M9 13h6"/><path d="M9 17h6"/><path d="M9 9h1"/>
+        </svg>
+      ),
+    },
+  ]
+
   return (
     <div className="admin-content">
-      <div className="controls-bar">
-        <div className="admin-search-box">
-          <svg className="s-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-          </svg>
-          <input placeholder="Search employees…" value={search} onChange={e => setSearch(e.target.value)} />
-        </div>
-        <select className="admin-filter-select" value={branchFilter} onChange={e => setBranchFilter(e.target.value)} id="emp-branch-filter">
-          <option value="all">All Branches</option>
-          {branches.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
-        </select>
-        <button className="btn-primary" id="add-employee-btn" onClick={openAdd}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-          </svg>
-          Add Employee
-        </button>
+      {/* Sub-tabs navigation */}
+      <div className="emp-subtabs">
+        {SUB_TABS.map(tab => (
+          <button
+            key={tab.id}
+            id={`emp-subtab-${tab.id}`}
+            className={`emp-subtab ${activeSubTab === tab.id ? 'active' : ''}`}
+            onClick={() => setActiveSubTab(tab.id)}
+          >
+            {tab.icon}
+            {tab.label}
+          </button>
+        ))}
       </div>
 
-      <div className="data-table-wrap">
-        <table className="data-table">
-          <thead>
-            <tr><th>ID</th><th>Name</th><th>Secret Code</th><th>Post</th><th>Branch</th><th>Status</th><th>Actions</th></tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 ? (
-              <tr><td colSpan={7} style={{ textAlign:'center', padding:'48px', color:'var(--text-muted)' }}>No employees found</td></tr>
-            ) : filtered.map((emp, i) => (
-              <tr key={emp.id} style={{ animationDelay: `${i * 0.04}s` }}>
-                <td><span style={{ fontFamily:'monospace', fontSize:'12px', color:'var(--text-muted)' }}>{emp.id}</span></td>
-                <td>
-                  <div className="cell-user">
-                    <div className="cell-avatar">{emp.name.split(' ').map(w=>w[0]).join('').slice(0,2)}</div>
-                    <div>
-                      <div className="cell-name">{emp.name}</div>
-                      <div className="cell-sub">{emp.department}</div>
-                    </div>
+      {/* ══════ Staff Directory Sub-tab ══════ */}
+      {activeSubTab === 'directory' && (
+        <>
+          <div className="controls-bar">
+            <div className="admin-search-box">
+              <svg className="s-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              <input placeholder="Search employees…" value={search} onChange={e => setSearch(e.target.value)} />
+            </div>
+            <select className="admin-filter-select" value={branchFilter} onChange={e => setBranchFilter(e.target.value)} id="emp-branch-filter">
+              <option value="all">All Branches</option>
+              {branches.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
+            </select>
+            <button className="btn-primary" id="add-employee-btn" onClick={openAdd}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              Add Employee
+            </button>
+          </div>
+
+          <div className="data-table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr><th>ID</th><th>Name</th><th>Secret Code</th><th>Post</th><th>Branch</th><th>Status</th><th>Actions</th></tr>
+              </thead>
+              <tbody>
+                {filtered.length === 0 ? (
+                  <tr><td colSpan={7} style={{ textAlign:'center', padding:'48px', color:'var(--text-muted)' }}>No employees found</td></tr>
+                ) : filtered.map((emp, i) => (
+                  <tr key={emp.id} style={{ animationDelay: `${i * 0.04}s` }}>
+                    <td><span style={{ fontFamily:'monospace', fontSize:'12px', color:'var(--text-muted)' }}>{emp.id}</span></td>
+                    <td>
+                      <div className="cell-user">
+                        <div className="cell-avatar">{emp.name.split(' ').map(w=>w[0]).join('').slice(0,2)}</div>
+                        <div>
+                          <div className="cell-name">{emp.name}</div>
+                          <div className="cell-sub">{emp.department}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td><span style={{ fontFamily:'monospace', color:'var(--text-secondary)' }}>{emp.secretCode || '—'}</span></td>
+                    <td>{emp.post}</td>
+                    <td>{emp.branch}</td>
+                    <td>
+                      <span className={`badge badge-${emp.status}`}>{emp.status === 'active' ? 'Active' : 'Inactive'}</span>
+                    </td>
+                    <td>
+                      <div className="action-btns">
+                        <button className="btn-edit" id={`edit-emp-${emp.id}`} onClick={() => openEdit(emp)}>
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                          </svg>
+                          Edit
+                        </button>
+                        <button className="btn-danger" id={`del-emp-${emp.id}`} onClick={() => handleDelete(emp.id)}>
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+                          </svg>
+                          Remove
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {/* ══════ Employee Overview Sub-tab ══════ */}
+      {activeSubTab === 'overview' && (
+        <div className="overview-section">
+          {/* Overview stats row */}
+          <div className="stats-row" style={{ marginBottom: '24px' }}>
+            <div className="stat-card">
+              <div className="stat-icon stat-icon-purple">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                  <circle cx="9" cy="7" r="4"/>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+              </div>
+              <div className="stat-info">
+                <div className="stat-value">{totalOverview}</div>
+                <div className="stat-label">Total Employees</div>
+              </div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-icon stat-icon-green">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                  <path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+                </svg>
+              </div>
+              <div className="stat-info">
+                <div className="stat-value">{activeDeptCount}</div>
+                <div className="stat-label">Active Departments</div>
+              </div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-icon stat-icon-amber">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                  <polyline points="9 22 9 12 15 12 15 22"/>
+                </svg>
+              </div>
+              <div className="stat-info">
+                <div className="stat-value">{overviewBranches.length}</div>
+                <div className="stat-label">{isSuper ? 'All Branches' : 'Your Branch'}</div>
+              </div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-icon stat-icon-red">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 11l3 3L22 4"/>
+                  <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                </svg>
+              </div>
+              <div className="stat-info">
+                <div className="stat-value">{new Set(overviewEmployees.map(e => e.post)).size}</div>
+                <div className="stat-label">Unique Roles</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Branch filter for overview */}
+          {isSuper && (
+            <div className="controls-bar" style={{ marginBottom: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px', color: 'var(--text-muted)' }}>
+                  <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+                </svg>
+                <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500 }}>Filter by Branch:</span>
+              </div>
+              <select className="admin-filter-select" value={overviewBranchFilter} onChange={e => setOverviewBranchFilter(e.target.value)} id="overview-branch-filter">
+                <option value="all">All Branches</option>
+                {branches.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
+              </select>
+            </div>
+          )}
+
+          {/* Department-wise breakdown cards */}
+          <div className="overview-grid">
+            {overviewData.map((dept, dIdx) => (
+              <div className="overview-dept-card" key={dept.department} style={{ animationDelay: `${dIdx * 0.06}s` }}>
+                <div className="overview-dept-header">
+                  <div className="overview-dept-icon">
+                    {dept.department.slice(0, 2).toUpperCase()}
                   </div>
-                </td>
-                <td><span style={{ fontFamily:'monospace', color:'var(--text-secondary)' }}>{emp.secretCode || '—'}</span></td>
-                <td>{emp.post}</td>
-                <td>{emp.branch}</td>
-                <td>
-                  <span className={`badge badge-${emp.status}`}>{emp.status === 'active' ? 'Active' : 'Inactive'}</span>
-                </td>
-                <td>
-                  <div className="action-btns">
-                    <button className="btn-edit" id={`edit-emp-${emp.id}`} onClick={() => openEdit(emp)}>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                      </svg>
-                      Edit
-                    </button>
-                    <button className="btn-danger" id={`del-emp-${emp.id}`} onClick={() => handleDelete(emp.id)}>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
-                      </svg>
-                      Remove
-                    </button>
+                  <div className="overview-dept-info">
+                    <h4>{dept.department}</h4>
+                    <span className="overview-dept-count">{dept.total} {dept.total === 1 ? 'employee' : 'employees'}</span>
                   </div>
-                </td>
-              </tr>
+                  <div className="overview-dept-badge">{dept.total}</div>
+                </div>
+                {dept.roles.length > 0 ? (
+                  <div className="overview-role-list">
+                    {dept.roles.map(([roleName, count]) => (
+                      <div className="overview-role-row" key={roleName}>
+                        <div className="overview-role-name">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '13px', height: '13px', color: 'var(--accent-light)', flexShrink: 0 }}>
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                            <circle cx="12" cy="7" r="4"/>
+                          </svg>
+                          {roleName}
+                        </div>
+                        <div className="overview-role-bar-wrap">
+                          <div
+                            className="overview-role-bar"
+                            style={{ width: `${Math.min(100, (count / Math.max(dept.total, 1)) * 100)}%` }}
+                          />
+                        </div>
+                        <span className="overview-role-count">{count}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="overview-empty">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '20px', height: '20px', opacity: 0.4 }}>
+                      <circle cx="12" cy="12" r="10"/>
+                      <line x1="8" y1="12" x2="16" y2="12"/>
+                    </svg>
+                    <span>No employees</span>
+                  </div>
+                )}
+              </div>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </div>
+        </div>
+      )}
 
-      {/* Modal */}
+      {/* ══════ Set Leave Rules Sub-tab ══════ */}
+      {activeSubTab === 'leave-rules' && (
+        <div className="leave-rules-section">
+          <div className="controls-bar">
+            <div className="admin-search-box">
+              <svg className="s-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              <input placeholder="Search leave rules…" id="leave-rule-search" />
+            </div>
+            {isSuper && (
+              <button className="btn-primary" id="add-leave-rule-btn" onClick={openAddRule}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                Add Rule
+              </button>
+            )}
+          </div>
+
+          {/* Leave type legend */}
+          <div className="leave-legend">
+            <div className="leave-legend-item">
+              <span className="leave-legend-dot leave-legend-annual"></span>
+              Annual Leave
+            </div>
+            <div className="leave-legend-item">
+              <span className="leave-legend-dot leave-legend-sick"></span>
+              Sick Leave
+            </div>
+            <div className="leave-legend-item">
+              <span className="leave-legend-dot leave-legend-casual"></span>
+              Casual Leave
+            </div>
+            <div className="leave-legend-item">
+              <span className="leave-legend-dot leave-legend-maxday"></span>
+              Max/Day Limit
+            </div>
+          </div>
+
+          <div className="lr-hierarchy">
+            {branches.map(branch => {
+              const depts = Object.keys(groupedLeaveRules[branch.name] || {})
+              if (depts.length === 0) return null
+              
+              return (
+                <div key={branch.id} className="lr-branch-section">
+                  <div className="lr-branch-header">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+                    </svg>
+                    {branch.name} Branch
+                  </div>
+                  
+                  <div className="lr-branch-body">
+                    {depts.map(deptName => {
+                      const rules = groupedLeaveRules[branch.name][deptName]
+                      return (
+                        <div key={deptName} className="lr-dept-group">
+                          <div className="lr-dept-header">
+                            <span className="lr-dept-icon">{deptName.slice(0,2).toUpperCase()}</span>
+                            {deptName}
+                          </div>
+                          
+                          <div className="lr-role-list">
+                            {rules.map(rule => {
+                              const availableEmployeesCount = employees.filter(e => e.post === rule.role && e.branch === rule.branch).length
+                              return (
+                                <div key={rule.id} className="lr-role-row">
+                                  <div className="lr-role-info">
+                                    <div className="lr-role-name">{rule.role}</div>
+                                    <div className="lr-role-count">
+                                      <span className="lr-count-badge">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+                                        </svg>
+                                        {availableEmployeesCount} Available
+                                      </span>
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="lr-role-days">
+                                    <span className="leave-days-chip leave-days-annual" title="Annual Leave">{rule.annualLeave} A</span>
+                                    <span className="leave-days-chip leave-days-sick" title="Sick Leave">{rule.sickLeave} S</span>
+                                    <span className="leave-days-chip leave-days-casual" title="Casual Leave">{rule.casualLeave} C</span>
+                                  </div>
+                                  
+                                  <div className="lr-role-maxday">
+                                    <label>Max/Day Allowed</label>
+                                    <input 
+                                      type="number" 
+                                      className="lr-inline-input"
+                                      min="1"
+                                      value={rule.maxPerDay}
+                                      onChange={(e) => handleMaxPerDayChange(rule.id, parseInt(e.target.value) || 1)}
+                                    />
+                                  </div>
+                                  
+                                  <div className="lr-role-actions">
+                                    <button className="btn-edit-icon" onClick={() => openEditRule(rule)} title="Edit Rule">
+                                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                                      </svg>
+                                    </button>
+                                    {isSuper && (
+                                      <button className="btn-danger-icon" onClick={() => handleDeleteRule(rule.id)} title="Remove Rule">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+                                        </svg>
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
+            
+            {branches.every(b => Object.keys(groupedLeaveRules[b.name] || {}).length === 0) && (
+              <div style={{ textAlign:'center', padding:'48px', color:'var(--text-muted)' }}>No leave rules found</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Employee Add/Edit Modal ── */}
       {modal !== null && (
         <div className="modal-backdrop" onClick={closeModal}>
           <div className="modal-box" onClick={e => e.stopPropagation()}>
@@ -606,6 +1027,107 @@ export function ManageEmployees({ branches, employees, setEmployees }) {
           </div>
         </div>
       )}
+
+      {/* ── Leave Rule Add/Edit Modal ── */}
+      {ruleModal !== null && (() => {
+        // Calculate available employees for the selected role and branch
+        const availableEmployeesCount = employees.filter(e => e.post === ruleForm.role && e.branch === ruleForm.branch).length;
+        
+        return (
+        <div className="modal-backdrop" onClick={closeRuleModal}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>{ruleModal === 'add' ? 'Add Leave Rule' : 'Edit Leave Rule'}</h3>
+              <button className="modal-close" onClick={closeRuleModal}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="field-row">
+                <div className="field">
+                  <label>Role *</label>
+                  <select value={ruleForm.role} onChange={e => setRuleForm(p=>({...p, role: e.target.value}))}>
+                    {(roles || []).filter(r => r.status === 'active').map(r => <option key={r.id} value={r.title}>{r.title}</option>)}
+                    {(!roles || roles.length === 0) && DESIGNATIONS.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
+                <div className="field">
+                  <label>Branch *</label>
+                  <select value={ruleForm.branch} onChange={e => setRuleForm(p=>({...p, branch: e.target.value}))}>
+                    {branches.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="field-row">
+                <div className="field">
+                  <label>Department</label>
+                  <select value={ruleForm.department} onChange={e => setRuleForm(p=>({...p, department: e.target.value}))}>
+                    {(departments || []).filter(d => d.status === 'active').map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                    {(!departments || departments.length === 0) && DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
+                <div className="field">
+                  <label>Status</label>
+                  <select value={ruleForm.status} onChange={e => setRuleForm(p=>({...p, status: e.target.value}))}>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </div>
+              </div>
+              <div className="leave-rule-days-grid">
+                <div className="field leave-field-annual">
+                  <label>Annual Leave (days)</label>
+                  <input type="number" min="0" max="365" value={ruleForm.annualLeave} onChange={e => setRuleForm(p=>({...p, annualLeave: parseInt(e.target.value) || 0}))} />
+                </div>
+                <div className="field leave-field-sick">
+                  <label>Sick Leave (days)</label>
+                  <input type="number" min="0" max="365" value={ruleForm.sickLeave} onChange={e => setRuleForm(p=>({...p, sickLeave: parseInt(e.target.value) || 0}))} />
+                </div>
+                <div className="field leave-field-casual">
+                  <label>Casual Leave (days)</label>
+                  <input type="number" min="0" max="365" value={ruleForm.casualLeave} onChange={e => setRuleForm(p=>({...p, casualLeave: parseInt(e.target.value) || 0}))} />
+                </div>
+              </div>
+              <div className="leave-total-preview">
+                <span>Total Leave Entitlement</span>
+                <span className="leave-total-value">{(ruleForm.annualLeave || 0) + (ruleForm.sickLeave || 0) + (ruleForm.casualLeave || 0)} days/year</span>
+              </div>
+              <div className="leave-maxday-section">
+                <div className="leave-maxday-header">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px', color: '#e17055' }}>
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="8" x2="12" y2="12"/>
+                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                  </svg>
+                  <span>Concurrent Leave Limit</span>
+                </div>
+                <div className="leave-maxday-row">
+                  <div className="field leave-field-maxday">
+                    <label>Max Leaves Per Day</label>
+                    <input type="number" min="1" max="99" value={ruleForm.maxPerDay} onChange={e => setRuleForm(p=>({...p, maxPerDay: Math.max(1, parseInt(e.target.value) || 1)}))} />
+                  </div>
+                  <p className="leave-maxday-hint">
+                    Maximum number of <strong>{ruleForm.role || 'employees'}</strong> in <strong>{ruleForm.branch || 'this branch'}</strong> that can be on leave on the same day, regardless of leave type.
+                    <br />
+                    <span style={{ display: 'inline-block', marginTop: '6px', padding: '4px 8px', background: 'rgba(108, 92, 231, 0.1)', color: 'var(--accent-light)', borderRadius: '4px', fontSize: '11px', fontWeight: 600 }}>
+                      Currently there {availableEmployeesCount === 1 ? 'is' : 'are'} {availableEmployeesCount} {availableEmployeesCount === 1 ? 'employee' : 'employees'} with this role in this branch.
+                    </span>
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={closeRuleModal}>Cancel</button>
+              <button className="btn-primary" id="save-leave-rule-btn" onClick={handleSaveRule}>
+                {ruleModal === 'add' ? 'Add Rule' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+        );
+      })()}
 
       {/* Secret Code Popup */}
       {secretCodePopup && (
