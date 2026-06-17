@@ -387,22 +387,32 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
                   flexDirection: 'column',
                   gap: '12px'
                 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <h4 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '15px', fontWeight: 600 }}>{leave.name}</h4>
-                    <span className="badge badge-approved" style={{ padding: '2px 8px' }}>Approved</span>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '13px', color: 'var(--text-secondary)' }}>
-                    <div><strong>Branch:</strong> {leave.branch}</div>
-                    <div><strong>Department:</strong> {leave.department || '—'}</div>
-                    <div><strong>Role:</strong> {leave.post || '—'}</div>
-                    <div><strong>Substitute:</strong> {leave.substituteName || '—'}</div>
-                    <div style={{ gridColumn: 'span 2' }}>
-                      <strong>Leave Dates:</strong> {leave.leaveDates.map(d => formatDate(d)).join(', ')}
-                    </div>
-                    <div style={{ gridColumn: 'span 2' }}>
-                      <strong>Returning Date:</strong> {formatDate(leave.returningDate)}
-                    </div>
-                  </div>
+                  {(() => {
+                    const emp = getEmp(leave.employee_id);
+                    const role = getRole(emp.role_id);
+                    const dept = getDept(role.department_id);
+                    const subEmp = leave.substitute_employee_id ? getEmp(leave.substitute_employee_id) : null;
+                    return (
+                      <>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <h4 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '15px', fontWeight: 600 }}>{emp.name || 'Unknown'}</h4>
+                          <span className="badge badge-approved" style={{ padding: '2px 8px' }}>Approved</span>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                          <div><strong>Branch:</strong> {getBranch(emp.branch_id)?.name || '—'}</div>
+                          <div><strong>Department:</strong> {dept?.name || '—'}</div>
+                          <div><strong>Role:</strong> {role?.title || '—'}</div>
+                          <div><strong>Substitute:</strong> {subEmp ? subEmp.name : '—'}</div>
+                          <div style={{ gridColumn: 'span 2' }}>
+                            <strong>Leave Dates:</strong> {leave.leaveDates?.map(d => formatDate(d)).join(', ') || '—'}
+                          </div>
+                          <div style={{ gridColumn: 'span 2' }}>
+                            <strong>Returning Date:</strong> {formatDate(leave.returningDate)}
+                          </div>
+                        </div>
+                      </>
+                    )
+                  })()}
                 </div>
               ))}
             </div>
@@ -445,7 +455,7 @@ function generateSecretCode(existingCodes) {
 const DEPARTMENTS = ['Engineering', 'Finance', 'HR', 'Operations']
 const DESIGNATIONS = ['Senior Engineer', 'Junior Developer', 'Software Engineer', 'Accountant', 'HR Manager', 'Operations Lead']
 
-export function ManageEmployees({ branches, employees, setEmployees, departments, roles, isSuper, leaveRules, setLeaveRules }) {
+export function ManageEmployees({ branches, employees, setEmployees, departments, roles, isSuper, leaveRules, setLeaveRules, applications = [] }) {
   const [activeSubTab, setActiveSubTab] = useState('directory')
   const [search, setSearch]             = useState('')
   const [branchFilter, setBranchFilter] = useState('all')
@@ -459,6 +469,7 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
   const [ruleModal, setRuleModal]       = useState(null)
   const EMPTY_RULE = { role_id: roles?.[0]?.id || '', branch_id: branches?.[0]?.id || '', annualLeave: 14, sickLeave: 10, casualLeave: 7, maxPerDay: 1, status: 'active' }
   const [ruleForm, setRuleForm]         = useState(EMPTY_RULE)
+  const [reportEmp, setReportEmp]       = useState(null)  // employee to show report for
 
   const [showScrollTop, setShowScrollTop] = useState(false);
   useEffect(() => {
@@ -760,6 +771,18 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
                     </td>
                     <td>
                       <div className="action-btns">
+                        <button
+                          className="btn-edit"
+                          style={{ background: 'rgba(251,191,36,0.1)', borderColor: 'rgba(251,191,36,0.25)', color: '#fbbf24' }}
+                          title="View leave report"
+                          onClick={() => setReportEmp(emp)}
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/>
+                            <path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/>
+                          </svg>
+                          Report
+                        </button>
                         <button className="btn-edit" id={`edit-emp-${emp.id}`} onClick={() => openEdit(emp)}>
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
@@ -1322,6 +1345,109 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
           </div>
         </div>
       )}
+
+      {/* ── Employee Leave Report Modal ── */}
+      {reportEmp && (() => {
+        // Find this employee's applications
+        const empApps = applications.filter(a => a.employee_id === reportEmp.id && a.status === 'approved')
+        
+        // Calculate totals
+        let totalAnnual = 0; let totalSick = 0; let totalCasual = 0;
+        empApps.forEach(a => {
+          const days = a.leaveDates ? a.leaveDates.length : 0;
+          if (a.leave_type === 'annual') totalAnnual += days;
+          if (a.leave_type === 'sick') totalSick += days;
+          if (a.leave_type === 'casual') totalCasual += days;
+        });
+
+        const totalDays = totalAnnual + totalSick + totalCasual;
+
+        const dateStr = (d) => {
+          if (!d) return '—';
+          return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+        }
+
+        return (
+          <div className="modal-backdrop" onClick={() => setReportEmp(null)}>
+            <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: '700px', width: '90%' }}>
+              <div className="modal-header" style={{ padding: '24px', borderBottom: '1px solid var(--bg-card-border)' }}>
+                <div>
+                  <h3 style={{ fontSize: '20px', marginBottom: '4px' }}>Leave Report</h3>
+                  <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '14px' }}>{reportEmp.name} • {getRole(reportEmp.role_id)?.title} • {getBranch(reportEmp.branch_id)?.name}</p>
+                </div>
+                <button className="modal-close" onClick={() => setReportEmp(null)}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                </button>
+              </div>
+
+              <div className="modal-body" style={{ padding: '24px', maxHeight: '65vh', overflowY: 'auto' }}>
+                {/* Minimal Summary Boxes */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '32px' }}>
+                  <div style={{ padding: '16px', background: 'var(--bg-input)', borderRadius: '8px', border: '1px solid var(--bg-card-border)' }}>
+                    <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '0.05em', marginBottom: '4px' }}>Total Taken</div>
+                    <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-primary)' }}>{totalDays} <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-muted)' }}>days</span></div>
+                  </div>
+                  <div style={{ padding: '16px', background: 'var(--bg-input)', borderRadius: '8px', border: '1px solid var(--bg-card-border)' }}>
+                    <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '0.05em', marginBottom: '4px' }}>Annual</div>
+                    <div style={{ fontSize: '24px', fontWeight: 700, color: '#a78bfa' }}>{totalAnnual}</div>
+                  </div>
+                  <div style={{ padding: '16px', background: 'var(--bg-input)', borderRadius: '8px', border: '1px solid var(--bg-card-border)' }}>
+                    <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '0.05em', marginBottom: '4px' }}>Sick</div>
+                    <div style={{ fontSize: '24px', fontWeight: 700, color: '#f472b6' }}>{totalSick}</div>
+                  </div>
+                  <div style={{ padding: '16px', background: 'var(--bg-input)', borderRadius: '8px', border: '1px solid var(--bg-card-border)' }}>
+                    <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '0.05em', marginBottom: '4px' }}>Casual</div>
+                    <div style={{ fontSize: '24px', fontWeight: 700, color: '#34d399' }}>{totalCasual}</div>
+                  </div>
+                </div>
+
+                {/* Report Table */}
+                <h4 style={{ fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)', marginBottom: '12px' }}>Detailed Log</h4>
+                {empApps.length === 0 ? (
+                  <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)', background: 'var(--bg-input)', borderRadius: '8px', border: '1px dashed var(--bg-card-border)' }}>
+                    No approved leaves found for this employee.
+                  </div>
+                ) : (
+                  <div style={{ border: '1px solid var(--bg-card-border)', borderRadius: '8px', overflow: 'hidden' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+                      <thead style={{ background: 'var(--bg-input)' }}>
+                        <tr>
+                          <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--bg-card-border)' }}>Type</th>
+                          <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--bg-card-border)' }}>Dates</th>
+                          <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--bg-card-border)' }}>Days</th>
+                          <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--bg-card-border)' }}>Returning</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {empApps.map(app => (
+                          <tr key={app.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                            <td style={{ padding: '12px 16px', textTransform: 'capitalize', color: 'var(--text-primary)' }}>{app.leave_type}</td>
+                            <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                {app.leaveDates?.map(d => (
+                                  <span key={d} style={{ background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px', fontSize: '12px' }}>{dateStr(d)}</span>
+                                ))}
+                              </div>
+                            </td>
+                            <td style={{ padding: '12px 16px', color: 'var(--text-primary)' }}>{app.leaveDates?.length || 0}</td>
+                            <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>{dateStr(app.returningDate)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+              <div className="modal-footer" style={{ padding: '20px 24px', borderTop: '1px solid var(--bg-card-border)', display: 'flex', justifyContent: 'flex-end' }}>
+                <button className="btn-secondary" onClick={() => setReportEmp(null)}>Close</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
     </div>
   )
 }

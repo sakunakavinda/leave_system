@@ -34,16 +34,67 @@
   border-bottom: 1px solid var(--bg-card-border);
 }
 
+/* ── Neon-border logo wrapper ── */
+.admin-logo-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px;
+  border-radius: 15px; /* 12px icon + 3px */
+  background: conic-gradient(
+    from var(--neon-angle, 0deg),
+    #f97316 0%,
+    #fb923c 15%,
+    #fbbf24 30%,
+    transparent 45%,
+    transparent 55%,
+    #fb923c 70%,
+    #f97316 85%,
+    #f97316 100%
+  );
+  animation: neonSpin 2.4s linear infinite;
+  margin-bottom: 12px;
+}
+
+@property --neon-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes neonSpin {
+  to { --neon-angle: 360deg; }
+}
+
+.admin-logo-wrap::before {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 12px;
+  background: var(--bg-secondary);
+  z-index: 0;
+}
+
+.admin-login-card .admin-logo-wrap::before {
+  background: rgba(18, 20, 35, 0.95);
+}
+
+.admin-logo-wrap > * {
+  position: relative;
+  z-index: 1;
+}
+
 .sidebar-brand-icon {
   width: 40px;
   height: 40px;
-  background: var(--accent-gradient);
+  background: rgba(249,115,22,0.12);
   border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 12px;
-  box-shadow: var(--shadow-glow);
+  box-shadow: none;
+  overflow: hidden;
 }
 
 .sidebar-brand-icon svg {

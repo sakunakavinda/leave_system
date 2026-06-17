@@ -113,20 +113,22 @@ export default function AdminApp() {
   const [departments, setDepartments]   = useState([])
   const [roles, setRoles]               = useState([])
   const [rules, setRules]               = useState([])
+  const [settings, setSettings]         = useState({})
   const [loading, setLoading]           = useState(true)
 
   // Fetch initial data
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [apps, brs, mgrs, emps, depts, rls, rls_rules] = await Promise.all([
+        const [apps, brs, mgrs, emps, depts, rls, rls_rules, stgs] = await Promise.all([
           api.getApplications(),
           api.getBranches(),
           api.getManagers(),
           api.getEmployees(),
           api.getDepartments(),
           api.getRoles(),
-          api.getRules()
+          api.getRules(),
+          api.getSettings()
         ]);
         setApplications(apps);
         setBranches(brs);
@@ -135,6 +137,7 @@ export default function AdminApp() {
         setDepartments(depts);
         setRoles(rls);
         setRules(rls_rules);
+        setSettings(stgs);
         setLoading(false);
       } catch (err) {
         console.error("Failed to load data", err);
@@ -164,10 +167,16 @@ export default function AdminApp() {
     return (
       <div className="admin-login-wrapper">
         <div className="admin-login-card">
-          <div className="sidebar-brand-icon" style={{ margin: '0 auto 16px' }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
-            </svg>
+          <div className="admin-logo-wrap" style={{ display: 'flex', margin: '0 auto 16px', width: 'fit-content' }}>
+            <div className="sidebar-brand-icon" style={{ background: settings?.company_logo ? 'transparent' : '' }}>
+              {settings?.company_logo ? (
+                <img src={settings.company_logo} alt="Company Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+                </svg>
+              )}
+            </div>
           </div>
           <h2 style={{ textAlign: 'center', marginBottom: '24px', color: 'var(--text-primary)' }}>Admin Login</h2>
           <form onSubmit={handleLogin} className="admin-login-form">
@@ -230,11 +239,17 @@ export default function AdminApp() {
       <aside className="admin-sidebar">
         {/* Brand */}
         <div className="sidebar-brand">
-          <div className="sidebar-brand-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-              <path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
-            </svg>
+          <div className="admin-logo-wrap">
+            <div className="sidebar-brand-icon" style={{ background: settings?.company_logo ? 'transparent' : '' }}>
+              {settings?.company_logo ? (
+                <img src={settings.company_logo} alt="Company Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                  <path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+                </svg>
+              )}
+            </div>
           </div>
           <h2>Leave System</h2>
           <p>Admin Panel</p>
@@ -321,6 +336,7 @@ export default function AdminApp() {
             isSuper={isSuper} 
             leaveRules={rules}
             setLeaveRules={setRules}
+            applications={allowedApps}
           />
         )}
         {activePage === 'managers' && (
