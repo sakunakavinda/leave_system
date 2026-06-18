@@ -303,6 +303,21 @@ export default function AdminApp() {
           <p>Admin Panel</p>
         </div>
 
+        {/* Mobile Account Profile */}
+        <div className="show-mobile" style={{ padding: '20px 22px', borderBottom: '1px solid var(--bg-card-border)', alignItems: 'center', gap: '12px' }}>
+          <div 
+            className="admin-avatar" 
+            onClick={() => { setShowProfileModal(true); setIsMobileMenuOpen(false); }}
+            style={{ cursor: 'pointer', flexShrink: 0 }}
+          >
+            {currentUser.username.slice(0,2).toUpperCase()}
+          </div>
+          <div style={{ overflow: 'hidden' }}>
+            <div style={{ fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{currentUser.username}</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'capitalize' }}>{currentUser.role}</div>
+          </div>
+        </div>
+
         {/* Navigation */}
         <nav className="sidebar-nav">
           {['Operation', 'Management', 'System'].map((group, gIdx) => {
@@ -376,13 +391,29 @@ export default function AdminApp() {
             </div>
           </div>
           <div className="topbar-right">
-            <div 
-              className="admin-avatar" 
-              title={`${currentUser.username} (${currentUser.role})`}
-              onClick={() => setShowProfileModal(true)}
-              style={{ cursor: 'pointer', transition: 'transform 0.2s', ':hover': { transform: 'scale(1.05)' } }}
-            >
-              {currentUser.username.slice(0,2).toUpperCase()}
+            <div className="hide-mobile">
+              <div 
+                className="admin-avatar" 
+                title={`${currentUser.username} (${currentUser.role})`}
+                onClick={() => setShowProfileModal(true)}
+                style={{ cursor: 'pointer', transition: 'transform 0.2s', ':hover': { transform: 'scale(1.05)' } }}
+              >
+                {currentUser.username.slice(0,2).toUpperCase()}
+              </div>
+            </div>
+            <div className="show-mobile" style={{ height: '36px' }}>
+              <div className="admin-logo-wrap" style={{ padding: '2px', borderRadius: '8px', marginBottom: 0, height: '100%' }}>
+                <div className="sidebar-brand-icon" style={{ width: '32px', height: '32px', background: settings?.company_logo ? 'transparent' : '' }}>
+                  {settings?.company_logo ? (
+                    <img src={settings.company_logo} alt="Company Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                  ) : (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '18px', height: '18px' }}>
+                      <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                      <path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+                    </svg>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>

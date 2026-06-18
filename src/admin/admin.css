@@ -249,6 +249,7 @@
 /* ── Main Content ── */
 .admin-main {
   flex: 1;
+  min-width: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -304,6 +305,7 @@
 .admin-content {
   padding: 32px;
   flex: 1;
+  min-width: 0;
   overflow-y: auto;
 }
 
@@ -881,6 +883,7 @@
   padding: 8px;
   margin-left: -8px;
 }
+.show-mobile { display: none !important; }
 .sidebar-backdrop {
   position: fixed;
   inset: 0;
@@ -905,7 +908,8 @@
   .controls-bar { flex-wrap: wrap; }
   .controls-bar > * { flex: 1 1 100%; }
   .calendar-header { flex-wrap: wrap; gap: 16px; }
-  .hide-mobile { display: none; }
+  .hide-mobile { display: none !important; }
+  .show-mobile { display: flex !important; }
   .report-summary-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 8px !important; }
 }
 
