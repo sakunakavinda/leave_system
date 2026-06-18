@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import './admin.css'
-import { AdminDashboard, ManageEmployees, ManageBranches, ManageManagers, ManageDepartments, ManageRoles, AccountSettings, SystemSettings } from './AdminPages.jsx'
+import { AdminDashboard, ManageEmployees, ManageBranches, ManageManagers, ManageDepartments, ManageRoles, AccountSettings, SystemSettings, LeaveOverview } from './AdminPages.jsx'
 import { api } from '../api.js'
+import { applyTheme } from './theme.js'
 
 const NAV = [
   {
     id: 'dashboard',
+    group: 'Operation',
     label: 'Dashboard',
     desc: 'Leave Applications',
     icon: (
@@ -18,6 +20,7 @@ const NAV = [
   },
   {
     id: 'employees',
+    group: 'Operation',
     label: 'Manage Employees',
     desc: 'Staff directory',
     icon: (
@@ -29,7 +32,22 @@ const NAV = [
     ),
   },
   {
+    id: 'overview',
+    group: 'Operation',
+    label: 'Leave Overview',
+    desc: 'Yearly heatmap',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+        <line x1="16" y1="2" x2="16" y2="6"/>
+        <line x1="8" y1="2" x2="8" y2="6"/>
+        <line x1="3" y1="10" x2="21" y2="10"/>
+      </svg>
+    ),
+  },
+  {
     id: 'managers',
+    group: 'Management',
     label: 'Manage Managers',
     desc: 'Branch managers',
     icon: (
@@ -43,6 +61,7 @@ const NAV = [
   },
   {
     id: 'branches',
+    group: 'Management',
     label: 'Manage Branches',
     desc: 'Branch directory',
     icon: (
@@ -54,6 +73,7 @@ const NAV = [
   },
   {
     id: 'departments',
+    group: 'Management',
     label: 'Manage Departments',
     desc: 'Department directory',
     icon: (
@@ -66,6 +86,7 @@ const NAV = [
   },
   {
     id: 'roles',
+    group: 'Management',
     label: 'Manage Roles',
     desc: 'Role definitions',
     icon: (
@@ -77,6 +98,7 @@ const NAV = [
   },
   {
     id: 'settings',
+    group: 'System',
     label: 'Settings',
     desc: 'System settings',
     icon: (
@@ -107,6 +129,7 @@ export default function AdminApp() {
   const loginLogoRef = useRef(null)
   const [logoFlight, setLogoFlight]     = useState(null)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
   const [activePage, setActivePage]     = useState('dashboard')
   const [applications, setApplications] = useState([])
@@ -123,16 +146,16 @@ export default function AdminApp() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [apps, brs, mgrs, emps, depts, rls, rls_rules, stgs] = await Promise.all([
+        const [apps, brs, mgrs, emps, depts, rls, rls_rules] = await Promise.all([
           api.getApplications(),
           api.getBranches(),
           api.getManagers(),
           api.getEmployees(),
           api.getDepartments(),
           api.getRoles(),
-          api.getRules(),
-          api.getSettings()
+          api.getRules()
         ]);
+        const stgs = await api.getSettings();
         setApplications(apps);
         setBranches(brs);
         setManagers(mgrs);
@@ -141,6 +164,11 @@ export default function AdminApp() {
         setRoles(rls);
         setRules(rls_rules);
         setSettings(stgs);
+        if (stgs.theme_color) {
+          applyTheme(stgs.theme_color);
+        } else {
+          applyTheme('orange');
+        }
         setLoading(false);
       } catch (err) {
         console.error("Failed to load data", err);
@@ -229,7 +257,7 @@ export default function AdminApp() {
   }
 
   const isSuper = currentUser.role === 'super manager'
-  const allowedNav = NAV.filter(item => isSuper || ['dashboard', 'employees'].includes(item.id))
+  const allowedNav = NAV.filter(item => isSuper || ['dashboard', 'employees', 'overview'].includes(item.id))
 
   const allowedApps = isSuper ? applications : applications.filter(a => {
     const emp = employees.find(e => e.id === a.employee_id)
@@ -254,8 +282,9 @@ export default function AdminApp() {
 
   return (
     <div className={`admin-shell ${isLoggingOut ? 'fade-out-anim' : ''}`}>
+      {isMobileMenuOpen && <div className="sidebar-backdrop" onClick={() => setIsMobileMenuOpen(false)}></div>}
       {/* ── Sidebar ── */}
-      <aside className="admin-sidebar">
+      <aside className={`admin-sidebar ${isMobileMenuOpen ? 'mobile-open' : ''}`}>
         {/* Brand */}
         <div className="sidebar-brand">
           <div className="admin-logo-wrap" style={{ opacity: logoFlight ? 0 : 1 }}>
@@ -276,21 +305,29 @@ export default function AdminApp() {
 
         {/* Navigation */}
         <nav className="sidebar-nav">
-          <div className="sidebar-nav-label">Main Menu</div>
-          {allowedNav.map(item => (
-            <button
-              key={item.id}
-              id={`nav-${item.id}`}
-              className={`nav-item ${activePage === item.id ? 'active' : ''}`}
-              onClick={() => setActivePage(item.id)}
-            >
-              {item.icon}
-              {item.label}
-              {item.id === 'dashboard' && pendingCount > 0 && (
-                <span className="nav-badge">{pendingCount}</span>
-              )}
-            </button>
-          ))}
+          {['Operation', 'Management', 'System'].map((group, gIdx) => {
+            const groupItems = allowedNav.filter(item => item.group === group);
+            if (groupItems.length === 0) return null;
+            return (
+              <div key={group} style={{ marginBottom: '16px' }}>
+                <div className="sidebar-nav-label">{group}</div>
+                {groupItems.map(item => (
+                  <button
+                    key={item.id}
+                    id={`nav-${item.id}`}
+                    className={`nav-item ${activePage === item.id ? 'active' : ''}`}
+                    onClick={() => { setActivePage(item.id); setIsMobileMenuOpen(false); }}
+                  >
+                    {item.icon}
+                    {item.label}
+                    {item.id === 'applications' && pendingCount > 0 && (
+                      <span className="nav-badge">{pendingCount}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            );
+          })}
         </nav>
 
         {/* Footer */}
@@ -325,9 +362,18 @@ export default function AdminApp() {
       <main className="admin-main">
         {/* Topbar */}
         <div className="admin-topbar">
-          <div className="topbar-left">
-            <h1>{meta.title}</h1>
-            <p>{meta.subtitle}</p>
+          <div className="topbar-left" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <button className="mobile-menu-btn" onClick={() => setIsMobileMenuOpen(true)}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '24px', height: '24px' }}>
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+              </svg>
+            </button>
+            <div>
+              <h1>{meta.title}</h1>
+              <p>{meta.subtitle}</p>
+            </div>
           </div>
           <div className="topbar-right">
             <div 
@@ -352,6 +398,15 @@ export default function AdminApp() {
             departments={departments}
             leaveRules={rules}
             setLeaveRules={setRules}
+          />
+        )}
+        {activePage === 'overview' && (
+          <LeaveOverview
+            applications={allowedApps}
+            employees={allowedEmps}
+            branches={allowedBranches}
+            departments={departments}
+            roles={roles}
           />
         )}
         {activePage === 'employees' && (

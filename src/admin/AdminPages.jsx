@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { api } from '../api.js'
+import { APP_THEMES, applyTheme } from './theme.js'
 import './admin.css'
 
 /* ── Shared mock data ─────────────────────────────── */
@@ -60,8 +61,9 @@ function formatDate(d) {
 /* ─────────────────────────────────────────────────────
    AdminDashboard
 ───────────────────────────────────────────────────── */
-export function AdminDashboard({ applications, onUpdateStatus, branches, employees, roles, departments }) {
+export function AdminDashboard({ applications, onUpdateStatus, branches, employees, roles, departments, leaveRules }) {
   const [timeFilter, setTimeFilter]   = useState('this_month')
+  const [reportEmp, setReportEmp]     = useState(null)
   const [filter, setFilter]           = useState('all')
   const [branchFilter, setBranchFilter] = useState('all')
   const [search, setSearch]           = useState('')
@@ -279,7 +281,7 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
                     {hasLeaves && (
                       <div className="day-leaves-count">
                         <span className="leaves-count-badge">
-                          {dayLeaves.length} {dayLeaves.length === 1 ? 'Leave' : 'Leaves'}
+                          {dayLeaves.length}
                         </span>
                       </div>
                     )}
@@ -321,13 +323,13 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
         <table className="data-table">
           <thead>
             <tr>
-              <th>ID</th>
+              <th className="hide-mobile">ID</th>
               <th>Applicant</th>
-              <th>Branch</th>
-              <th>Role</th>
+              <th className="hide-mobile">Branch</th>
+              <th className="hide-mobile">Role</th>
               <th>Leave Dates</th>
-              <th>Returning</th>
-              <th>Substitute</th>
+              <th className="hide-mobile">Returning</th>
+              <th className="hide-mobile">Substitute</th>
               <th>Status</th>
               <th>Actions</th>
             </tr>
@@ -337,18 +339,26 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
               <tr><td colSpan={9} style={{ textAlign:'center', padding:'48px', color:'var(--text-muted)' }}>No applications found</td></tr>
             ) : filtered.map((app, i) => (
               <tr key={app.id} style={{ animationDelay: `${i * 0.05}s` }}>
-                <td><span style={{ fontFamily:'monospace', fontSize:'12px', color:'var(--text-muted)' }}>{app.id}</span></td>
+                <td className="hide-mobile"><span style={{ fontFamily:'monospace', fontSize:'12px', color:'var(--text-muted)' }}>{app.id}</span></td>
                 <td>
                   <div className="cell-user">
                     <div className="cell-avatar">{(getEmp(app.employee_id).name || 'U').split(' ').map(w=>w[0]).join('').slice(0,2)}</div>
                     <div>
-                      <div className="cell-name">{getEmp(app.employee_id).name}</div>
+                      <div className="cell-name" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        {getEmp(app.employee_id).name}
+                        <button className="btn-icon-only" title="View Leave History" onClick={() => setReportEmp(getEmp(app.employee_id))} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px', display: 'flex' }}>
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '14px', height: '14px' }}>
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                          </svg>
+                        </button>
+                      </div>
                       <div className="cell-sub">{getDept(getRole(getEmp(app.employee_id).role_id).department_id).name}</div>
                     </div>
                   </div>
                 </td>
-                <td>{getBranch(getEmp(app.employee_id).branch_id).name}</td>
-                <td><span style={{ color:'var(--text-secondary)', fontSize:'14px' }}>{getRole(getEmp(app.employee_id).role_id).title || '—'}</span></td>
+                <td className="hide-mobile">{getBranch(getEmp(app.employee_id).branch_id).name}</td>
+                <td className="hide-mobile"><span style={{ color:'var(--text-secondary)', fontSize:'14px' }}>{getRole(getEmp(app.employee_id).role_id).title || '—'}</span></td>
                 <td>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: '220px', alignItems: 'center' }}>
                     <span style={{ fontSize: '10px', fontWeight: 600, textTransform: 'uppercase', padding: '3px 6px', background: 'var(--accent-primary)', color: '#fff', borderRadius: '4px', marginRight: '4px' }}>
@@ -399,6 +409,128 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
           </tbody>
         </table>
       </div>
+
+      {/* ── Employee Leave Report Modal (Dashboard Version) ── */}
+      {reportEmp && (() => {
+        const empApps = applications
+          .filter(a => a.employee_id === reportEmp.id && a.status === 'approved')
+          .map(a => ({
+            ...a,
+            leaveDates: [...(a.leaveDates || [])].sort((d1, d2) => new Date(d1) - new Date(d2))
+          }))
+          .sort((a, b) => {
+            const dateA = a.leaveDates.length > 0 ? new Date(a.leaveDates[0]) : new Date(8640000000000000);
+            const dateB = b.leaveDates.length > 0 ? new Date(b.leaveDates[0]) : new Date(8640000000000000);
+            return dateA - dateB;
+          })
+        let totalAnnual = 0; let totalSick = 0; let totalCasual = 0;
+        empApps.forEach(a => {
+          const days = a.leaveDates ? a.leaveDates.length : 0;
+          if (a.leave_type === 'annual') totalAnnual += days;
+          if (a.leave_type === 'sick') totalSick += days;
+          if (a.leave_type === 'casual') totalCasual += days;
+        });
+        const totalDays = totalAnnual + totalSick + totalCasual;
+        const rule = (leaveRules || []).find(r => r.role_id === reportEmp.role_id && r.branch_id === reportEmp.branch_id);
+        const maxAnnual = rule ? rule.annual_leave : 0;
+        const maxSick = rule ? rule.sick_leave : 0;
+        const maxCasual = rule ? rule.casual_leave : 0;
+        const maxTotal = maxAnnual + maxSick + maxCasual;
+
+        const dateStr = (d) => {
+          if (!d) return '—';
+          return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+        }
+        return (
+          <div className="modal-backdrop" onClick={() => setReportEmp(null)}>
+            <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: '700px', width: '90%' }}>
+              <div className="modal-header" style={{ padding: '24px', borderBottom: '1px solid var(--bg-card-border)' }}>
+                <div>
+                  <h3 style={{ fontSize: '20px', marginBottom: '4px' }}>Leave Report</h3>
+                  <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '14px' }}>{reportEmp.name} • {getRole(reportEmp.role_id)?.title} • {getBranch(reportEmp.branch_id)?.name}</p>
+                </div>
+                <button className="modal-close" onClick={() => setReportEmp(null)}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                </button>
+              </div>
+              <div className="modal-body" style={{ padding: '24px', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                <div className="report-summary-grid">
+                  <div style={{ padding: '16px', background: 'var(--bg-input)', borderRadius: '8px', border: '1px solid var(--bg-card-border)' }}>
+                    <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '0.05em', marginBottom: '4px' }}>Total Taken</div>
+                    <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      {totalDays} <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-muted)' }}>/ {maxTotal} days</span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                      {Math.max(0, maxTotal - totalDays)} remaining
+                    </div>
+                  </div>
+                  <div style={{ padding: '16px', background: 'var(--bg-input)', borderRadius: '8px', border: '1px solid var(--bg-card-border)' }}>
+                    <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '0.05em', marginBottom: '4px' }}>Annual</div>
+                    <div style={{ fontSize: '24px', fontWeight: 700, color: '#a78bfa' }}>
+                      {totalAnnual} <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-muted)', marginLeft: '4px' }}>/ {maxAnnual} taken</span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                      {Math.max(0, maxAnnual - totalAnnual)} remaining
+                    </div>
+                  </div>
+                  <div style={{ padding: '16px', background: 'var(--bg-input)', borderRadius: '8px', border: '1px solid var(--bg-card-border)' }}>
+                    <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '0.05em', marginBottom: '4px' }}>Sick</div>
+                    <div style={{ fontSize: '24px', fontWeight: 700, color: '#f472b6' }}>
+                      {totalSick} <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-muted)', marginLeft: '4px' }}>/ {maxSick} taken</span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                      {Math.max(0, maxSick - totalSick)} remaining
+                    </div>
+                  </div>
+                  <div style={{ padding: '16px', background: 'var(--bg-input)', borderRadius: '8px', border: '1px solid var(--bg-card-border)' }}>
+                    <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '0.05em', marginBottom: '4px' }}>Casual</div>
+                    <div style={{ fontSize: '24px', fontWeight: 700, color: '#34d399' }}>
+                      {totalCasual} <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-muted)', marginLeft: '4px' }}>/ {maxCasual} taken</span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                      {Math.max(0, maxCasual - totalCasual)} remaining
+                    </div>
+                  </div>
+                </div>
+                <h4 style={{ fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)', marginBottom: '12px', flexShrink: 0 }}>Detailed Log</h4>
+                {empApps.length === 0 ? (
+                  <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)', background: 'var(--bg-input)', borderRadius: '8px', border: '1px dashed var(--bg-card-border)' }}>
+                    No approved leaves found for this employee.
+                  </div>
+                ) : (
+                  <div style={{ border: '1px solid var(--bg-card-border)', borderRadius: '8px', overflowY: 'auto', flex: 1, minHeight: 0 }}>
+                    <table className="report-table">
+                      <thead>
+                        <tr>
+                          <th>Type</th>
+                          <th>Dates</th>
+                          <th>Days</th>
+                          <th>Returning</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {empApps.map(app => (
+                          <tr key={app.id}>
+                            <td>{app.leave_type}</td>
+                            <td>{app.leaveDates?.map(d => dateStr(d)).join(', ')}</td>
+                            <td>{app.leaveDates?.length || 0}</td>
+                            <td>{dateStr(app.returningDate)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+              <div className="modal-footer" style={{ padding: '20px 24px', borderTop: '1px solid var(--bg-card-border)', display: 'flex', justifyContent: 'flex-end' }}>
+                <button className="btn-secondary" onClick={() => setReportEmp(null)}>Close</button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Leaves Modal */}
       {selectedDayLeaves && (
@@ -510,7 +642,7 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
   const [showScrollTop, setShowScrollTop] = useState(false);
   useEffect(() => {
     const handleScroll = (e) => {
-      const mainEl = document.querySelector('.admin-main');
+      const mainEl = document.querySelector('.admin-content');
       const scrollTop = window.scrollY || document.documentElement.scrollTop || (mainEl ? mainEl.scrollTop : 0) || (e.target.scrollTop || 0);
       setShowScrollTop(scrollTop > 300);
     };
@@ -523,7 +655,7 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
   
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    const mainEl = document.querySelector('.admin-main');
+    const mainEl = document.querySelector('.admin-content');
     if (mainEl) mainEl.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -1385,7 +1517,17 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
       {/* ── Employee Leave Report Modal ── */}
       {reportEmp && (() => {
         // Find this employee's applications
-        const empApps = applications.filter(a => a.employee_id === reportEmp.id && a.status === 'approved')
+        const empApps = applications
+          .filter(a => a.employee_id === reportEmp.id && a.status === 'approved')
+          .map(a => ({
+            ...a,
+            leaveDates: [...(a.leaveDates || [])].sort((d1, d2) => new Date(d1) - new Date(d2))
+          }))
+          .sort((a, b) => {
+            const dateA = a.leaveDates.length > 0 ? new Date(a.leaveDates[0]) : new Date(8640000000000000);
+            const dateB = b.leaveDates.length > 0 ? new Date(b.leaveDates[0]) : new Date(8640000000000000);
+            return dateA - dateB;
+          })
         
         // Calculate totals
         let totalAnnual = 0; let totalSick = 0; let totalCasual = 0;
@@ -1397,6 +1539,11 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
         });
 
         const totalDays = totalAnnual + totalSick + totalCasual;
+        const rule = (leaveRules || []).find(r => r.role_id === reportEmp.role_id && r.branch_id === reportEmp.branch_id);
+        const maxAnnual = rule ? rule.annual_leave : 0;
+        const maxSick = rule ? rule.sick_leave : 0;
+        const maxCasual = rule ? rule.casual_leave : 0;
+        const maxTotal = maxAnnual + maxSick + maxCasual;
 
         const dateStr = (d) => {
           if (!d) return '—';
@@ -1420,22 +1567,42 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
 
               <div className="modal-body" style={{ padding: '24px', flex: 1, minHeight: 0, overflow: 'hidden' }}>
                 {/* Minimal Summary Boxes */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '16px', flexShrink: 0 }}>
+                <div className="report-summary-grid">
                   <div style={{ padding: '16px', background: 'var(--bg-input)', borderRadius: '8px', border: '1px solid var(--bg-card-border)' }}>
                     <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '0.05em', marginBottom: '4px' }}>Total Taken</div>
-                    <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-primary)' }}>{totalDays} <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-muted)' }}>days</span></div>
+                    <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      {totalDays} <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-muted)' }}>/ {maxTotal} days</span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                      {Math.max(0, maxTotal - totalDays)} remaining
+                    </div>
                   </div>
                   <div style={{ padding: '16px', background: 'var(--bg-input)', borderRadius: '8px', border: '1px solid var(--bg-card-border)' }}>
                     <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '0.05em', marginBottom: '4px' }}>Annual</div>
-                    <div style={{ fontSize: '24px', fontWeight: 700, color: '#a78bfa' }}>{totalAnnual}</div>
+                    <div style={{ fontSize: '24px', fontWeight: 700, color: '#a78bfa' }}>
+                      {totalAnnual} <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-muted)', marginLeft: '4px' }}>/ {maxAnnual} taken</span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                      {Math.max(0, maxAnnual - totalAnnual)} remaining
+                    </div>
                   </div>
                   <div style={{ padding: '16px', background: 'var(--bg-input)', borderRadius: '8px', border: '1px solid var(--bg-card-border)' }}>
                     <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '0.05em', marginBottom: '4px' }}>Sick</div>
-                    <div style={{ fontSize: '24px', fontWeight: 700, color: '#f472b6' }}>{totalSick}</div>
+                    <div style={{ fontSize: '24px', fontWeight: 700, color: '#f472b6' }}>
+                      {totalSick} <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-muted)', marginLeft: '4px' }}>/ {maxSick} taken</span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                      {Math.max(0, maxSick - totalSick)} remaining
+                    </div>
                   </div>
                   <div style={{ padding: '16px', background: 'var(--bg-input)', borderRadius: '8px', border: '1px solid var(--bg-card-border)' }}>
                     <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '0.05em', marginBottom: '4px' }}>Casual</div>
-                    <div style={{ fontSize: '24px', fontWeight: 700, color: '#34d399' }}>{totalCasual}</div>
+                    <div style={{ fontSize: '24px', fontWeight: 700, color: '#34d399' }}>
+                      {totalCasual} <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-muted)', marginLeft: '4px' }}>/ {maxCasual} taken</span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                      {Math.max(0, maxCasual - totalCasual)} remaining
+                    </div>
                   </div>
                 </div>
 
@@ -1447,24 +1614,22 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
                   </div>
                 ) : (
                   <div style={{ border: '1px solid var(--bg-card-border)', borderRadius: '8px', overflowY: 'auto', flex: 1, minHeight: 0 }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12px' }}>
-                      <thead style={{ background: 'var(--bg-input)', position: 'sticky', top: 0, zIndex: 10 }}>
+                    <table className="report-table">
+                      <thead>
                         <tr>
-                          <th style={{ padding: '6px 12px', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--bg-card-border)' }}>Type</th>
-                          <th style={{ padding: '6px 12px', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--bg-card-border)' }}>Dates</th>
-                          <th style={{ padding: '6px 12px', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--bg-card-border)' }}>Days</th>
-                          <th style={{ padding: '6px 12px', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--bg-card-border)' }}>Returning</th>
+                          <th>Type</th>
+                          <th>Dates</th>
+                          <th>Days</th>
+                          <th>Returning</th>
                         </tr>
                       </thead>
                       <tbody>
                         {empApps.map(app => (
-                          <tr key={app.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                            <td style={{ padding: '6px 12px', textTransform: 'capitalize', color: 'var(--text-primary)' }}>{app.leave_type}</td>
-                            <td style={{ padding: '6px 12px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
-                              {app.leaveDates?.map(d => dateStr(d)).join(', ')}
-                            </td>
-                            <td style={{ padding: '6px 12px', color: 'var(--text-primary)' }}>{app.leaveDates?.length || 0}</td>
-                            <td style={{ padding: '6px 12px', color: 'var(--text-secondary)' }}>{dateStr(app.returningDate)}</td>
+                          <tr key={app.id}>
+                            <td>{app.leave_type}</td>
+                            <td>{app.leaveDates?.map(d => dateStr(d)).join(', ')}</td>
+                            <td>{app.leaveDates?.length || 0}</td>
+                            <td>{dateStr(app.returningDate)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -2313,6 +2478,7 @@ export function AccountSettings({ currentUser, setCurrentUser, setManagers, onCl
 ───────────────────────────────────────────────────── */
 export function SystemSettings() {
   const [logoBase64, setLogoBase64] = useState(null)
+  const [themeColor, setThemeColor] = useState('orange')
   const [toast, setToast] = useState(null)
   const [loading, setLoading] = useState(false)
 
@@ -2321,12 +2487,18 @@ export function SystemSettings() {
       try {
         const data = await api.getSettings()
         if (data.company_logo) setLogoBase64(data.company_logo)
+        if (data.theme_color) setThemeColor(data.theme_color)
       } catch (err) {
         console.error("Failed to load settings", err)
       }
     }
     fetchSettings()
   }, [])
+
+  const handleThemeSelect = (colorName) => {
+    setThemeColor(colorName)
+    applyTheme(colorName)
+  }
 
   const handleFileChange = (e) => {
     const file = e.target.files[0]
@@ -2346,7 +2518,7 @@ export function SystemSettings() {
   const handleSave = async () => {
     setLoading(true)
     try {
-      await api.updateSettings({ company_logo: logoBase64 })
+      await api.updateSettings({ company_logo: logoBase64, theme_color: themeColor })
       setToast({ msg: 'Settings saved successfully', type: 'success' })
       setTimeout(() => setToast(null), 3000)
     } catch (err) {
@@ -2415,6 +2587,30 @@ export function SystemSettings() {
             </div>
           </div>
         </div>
+
+        <div className="admin-form-group" style={{ marginTop: '32px' }}>
+          <label style={{ display: 'block', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>Accent Theme Color</label>
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+            {Object.keys(APP_THEMES).map(themeName => (
+              <div
+                key={themeName}
+                onClick={() => handleThemeSelect(themeName)}
+                style={{
+                  width: '40px', height: '40px', borderRadius: '50%', cursor: 'pointer',
+                  background: APP_THEMES[themeName]['--accent-gradient'],
+                  border: themeColor === themeName ? '2px solid white' : '2px solid transparent',
+                  boxShadow: themeColor === themeName ? `0 0 16px ${APP_THEMES[themeName]['--accent-glow']}` : 'none',
+                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                  transform: themeColor === themeName ? 'scale(1.15)' : 'scale(1)'
+                }}
+                title={themeName.charAt(0).toUpperCase() + themeName.slice(1)}
+              />
+            ))}
+          </div>
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '12px', lineHeight: '1.5' }}>
+            Select the primary brand color for the entire dashboard. This setting applies globally to all users.
+          </p>
+        </div>
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '16px', borderTop: '1px solid var(--bg-card-border)' }}>
@@ -2433,6 +2629,242 @@ export function SystemSettings() {
           {toast.msg}
         </div>
       )}
+    </div>
+  )
+}
+
+/* ─────────────────────────────────────────────────────
+   Leave Overview
+───────────────────────────────────────────────────── */
+export function LeaveOverview({ applications, employees, branches, departments, roles }) {
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
+  const [branchFilter, setBranchFilter] = useState('all')
+  const [monthsRange, setMonthsRange] = useState(12)
+  const [monthOffset, setMonthOffset] = useState(0)
+
+  const currentYear = new Date().getFullYear()
+  const years = Array.from({ length: 7 }, (_, i) => currentYear - 5 + i)
+
+  // Generate days of the selected year
+  const daysInYear = []
+  const startOfYear = new Date(selectedYear, monthOffset, 1)
+  const endOfYear = new Date(selectedYear, monthOffset + monthsRange, 0)
+  for (let d = new Date(startOfYear); d <= endOfYear; d.setDate(d.getDate() + 1)) {
+    daysInYear.push(new Date(d))
+  }
+
+  const monthDaysArray = Array.from({ length: monthsRange }, (_, i) => new Date(selectedYear, monthOffset + i + 1, 0).getDate());
+
+  const filteredEmps = (branchFilter === 'all' ? employees : employees.filter(e => e.branch_id === branchFilter))
+    .sort((a, b) => a.name.localeCompare(b.name))
+  const filteredEmpIds = new Set(filteredEmps.map(e => e.id))
+
+  // Pre-calculate approved leaves for fast lookup
+  const approvedLeaves = applications.filter(a => a.status === 'approved')
+  const leaveMap = {} // { employee_id: { 'YYYY-MM-DD': type } }
+  const empLeaveCounts = {} // { employee_id: total_leaves_in_year }
+  const monthLeaveCounts = new Array(12).fill(0) // total leaves per month globally
+  const empMonthStats = {} // { employee_id: [{total, annual, sick, casual}, ...] }
+  let totalAnnual = 0; let totalSick = 0; let totalCasual = 0;
+
+  employees.forEach(emp => {
+    empMonthStats[emp.id] = Array.from({ length: 12 }, () => ({ total: 0, annual: 0, sick: 0, casual: 0 }))
+  })
+
+  approvedLeaves.forEach(app => {
+    if (!filteredEmpIds.has(app.employee_id)) return;
+
+    if (!leaveMap[app.employee_id]) leaveMap[app.employee_id] = {}
+    if (!empLeaveCounts[app.employee_id]) empLeaveCounts[app.employee_id] = 0
+    if (app.leaveDates) {
+      app.leaveDates.forEach(dateStr => {
+        // Only count if it's in the selected year
+        if (dateStr.startsWith(selectedYear.toString())) {
+          leaveMap[app.employee_id][dateStr] = app.leave_type
+          
+          const monthIdx = parseInt(dateStr.split('-')[1], 10) - 1
+          
+          monthLeaveCounts[monthIdx]++
+          empMonthStats[app.employee_id][monthIdx].total++
+
+          if (app.leave_type === 'annual') { totalAnnual++; empMonthStats[app.employee_id][monthIdx].annual++ }
+          if (app.leave_type === 'sick') { totalSick++; empMonthStats[app.employee_id][monthIdx].sick++ }
+          if (app.leave_type === 'casual') { totalCasual++; empMonthStats[app.employee_id][monthIdx].casual++ }
+          
+          empLeaveCounts[app.employee_id]++
+        }
+      })
+    }
+  })
+
+  const totalLeaves = totalAnnual + totalSick + totalCasual
+
+  const dateStrLocal = (d) => {
+    const yyyy = d.getFullYear()
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const dd = String(d.getDate()).padStart(2, '0')
+    return `${yyyy}-${mm}-${dd}`
+  }
+
+  return (
+    <div className="admin-content-inner">
+      <div className="controls-bar" style={{ marginBottom: '12px' }}>
+        <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+          Leave Overview
+        </h2>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {branches.length > 1 && (
+            <select className="admin-filter-select" value={branchFilter} onChange={e => setBranchFilter(e.target.value)}>
+              <option value="all">All Branches</option>
+              {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          )}
+          <select className="admin-filter-select" value={selectedYear} onChange={e => setSelectedYear(parseInt(e.target.value))}>
+            {years.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+          <div style={{ display: 'flex', gap: '2px', background: 'rgba(0,0,0,0.2)', padding: '4px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.1)' }}>
+            {[12, 6, 3].map(val => (
+              <button 
+                key={val}
+                onClick={() => { setMonthsRange(val); setMonthOffset(0); }}
+                style={{
+                  minWidth: '48px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer', borderRadius: '6px',
+                  background: monthsRange === val ? 'var(--theme-color)' : 'transparent',
+                  color: monthsRange === val ? '#fff' : 'var(--text-muted)',
+                  fontWeight: monthsRange === val ? 600 : 500,
+                  border: 'none', outline: 'none',
+                  boxShadow: monthsRange === val ? '0 2px 8px rgba(0,0,0,0.2)' : 'none',
+                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                }}
+              >
+                {val}M
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="stats-row" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: '12px', gap: '12px' }}>
+        <div className="stat-card" style={{ padding: '10px 16px' }}>
+          <div className="stat-label" style={{ fontSize: '10px', marginBottom: '2px' }}>Total Leaves ({selectedYear})</div>
+          <div className="stat-val" style={{ fontSize: '20px' }}>{totalLeaves}</div>
+        </div>
+        <div className="stat-card" style={{ padding: '10px 16px' }}>
+          <div className="stat-label" style={{ fontSize: '10px', marginBottom: '2px' }}>Total Annual</div>
+          <div className="stat-val" style={{ color: '#a78bfa', fontSize: '20px' }}>{totalAnnual}</div>
+        </div>
+        <div className="stat-card" style={{ padding: '10px 16px' }}>
+          <div className="stat-label" style={{ fontSize: '10px', marginBottom: '2px' }}>Total Sick</div>
+          <div className="stat-val" style={{ color: '#f472b6', fontSize: '20px' }}>{totalSick}</div>
+        </div>
+        <div className="stat-card" style={{ padding: '10px 16px' }}>
+          <div className="stat-label" style={{ fontSize: '10px', marginBottom: '2px' }}>Total Casual</div>
+          <div className="stat-val" style={{ color: '#34d399', fontSize: '20px' }}>{totalCasual}</div>
+        </div>
+      </div>
+
+      {monthsRange < 12 && (
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', marginBottom: '12px' }}>
+          <button 
+            className="btn btn-secondary" 
+            style={{ padding: '4px 16px', fontSize: '14px', borderRadius: '6px' }}
+            disabled={monthOffset === 0}
+            onClick={() => setMonthOffset(Math.max(0, monthOffset - monthsRange))}
+          >
+            &larr;
+          </button>
+          <button 
+            className="btn btn-secondary" 
+            style={{ padding: '4px 16px', fontSize: '14px', borderRadius: '6px' }}
+            disabled={monthOffset + monthsRange >= 12}
+            onClick={() => setMonthOffset(Math.min(12 - monthsRange, monthOffset + monthsRange))}
+          >
+            &rarr;
+          </button>
+        </div>
+      )}
+
+      <div className="overview-container" style={{ background: 'var(--bg-card)', borderRadius: '8px', border: '1px solid var(--bg-card-border)', overflow: 'auto', maxHeight: 'calc(100vh - 250px)' }}>
+        <div className="leave-heatmap-grid" style={{ minWidth: monthsRange === 12 ? '800px' : monthsRange === 6 ? '400px' : '200px' }}>
+          
+          {/* Header Row (Months) */}
+          <div style={{ display: 'flex', paddingLeft: '180px', paddingRight: '16px', position: 'sticky', top: 0, background: 'var(--bg-card)', zIndex: 10, paddingTop: '16px', paddingBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${daysInYear.length}, 1fr)`, gap: '1px', flex: 1 }}>
+              {monthDaysArray.map((monthDays, i) => {
+                const absoluteMonthIdx = monthOffset + i;
+                return (
+                  <div key={absoluteMonthIdx} style={{ gridColumn: `span ${monthDays}`, fontSize: '10px', color: 'var(--text-muted)', borderLeft: '1px solid rgba(255,255,255,0.05)', paddingLeft: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span>{new Date(selectedYear, absoluteMonthIdx).toLocaleString('default', { month: 'short' })}</span>
+                    {monthLeaveCounts[absoluteMonthIdx] > 0 && (
+                      <span style={{ background: 'rgba(255,255,255,0.1)', padding: '1px 4px', borderRadius: '4px', fontSize: '8px', color: 'var(--text-primary)' }}>
+                        {monthLeaveCounts[absoluteMonthIdx]}
+                      </span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Employee Rows */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '8px 16px 16px 16px' }}>
+            {filteredEmps.length === 0 ? (
+              <div style={{ padding: '16px', color: 'var(--text-muted)' }}>No employees found.</div>
+            ) : filteredEmps.map((emp, idx) => (
+              <div key={emp.id} style={{ display: 'flex', alignItems: 'flex-start', background: idx % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent', padding: '6px 4px', borderRadius: '6px' }}>
+                <div style={{ width: '160px', flexShrink: 0, fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingRight: '10px', height: '6px', marginTop: '2px' }} title={emp.name}>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{emp.name}</span>
+                  <span style={{ background: 'var(--bg-input)', padding: '2px 6px', borderRadius: '4px', fontSize: '9px', fontWeight: 600, color: 'var(--text-primary)' }}>{empLeaveCounts[emp.id] || 0}</span>
+                </div>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, gap: '2px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: `repeat(${daysInYear.length}, 1fr)`, gap: '1px' }}>
+                    {daysInYear.map(day => {
+                      const dStr = dateStrLocal(day);
+                      const lType = leaveMap[emp.id]?.[dStr];
+                      const isAltMonth = day.getMonth() % 2 === 1;
+                      let sqClass = isAltMonth ? 'sq-empty-alt' : 'sq-empty';
+                      if (lType === 'annual') sqClass = 'sq-annual';
+                      else if (lType === 'sick') sqClass = 'sq-sick';
+                      else if (lType === 'casual') sqClass = 'sq-casual';
+                      
+                      return (
+                        <div 
+                          key={dStr} 
+                          className={`overview-sq ${sqClass}`} 
+                          title={`${dStr}${lType ? ` - ${lType}` : ''}`}
+                        ></div>
+                      )
+                    })}
+                  </div>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: `repeat(${daysInYear.length}, 1fr)`, gap: '1px' }}>
+                    {monthDaysArray.map((monthDays, i) => {
+                      const absoluteMonthIdx = monthOffset + i;
+                      const stats = empMonthStats[emp.id][absoluteMonthIdx];
+                      return (
+                        <div key={absoluteMonthIdx} style={{ gridColumn: `span ${monthDays}`, display: 'flex', alignItems: 'center', gap: '3px', fontSize: '7px', color: 'var(--text-muted)', overflow: 'hidden' }}>
+                          {stats.total > 0 && (
+                            <>
+                              <span style={{ fontWeight: 600 }}>{stats.total}</span>
+                              <div style={{ display: 'flex', gap: '1px' }}>
+                                {stats.annual > 0 && <span style={{ color: '#a78bfa' }}>●{stats.annual}</span>}
+                                {stats.sick > 0 && <span style={{ color: '#f472b6' }}>●{stats.sick}</span>}
+                                {stats.casual > 0 && <span style={{ color: '#34d399' }}>●{stats.casual}</span>}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+        </div>
+      </div>
     </div>
   )
 }

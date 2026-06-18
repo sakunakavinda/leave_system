@@ -5,7 +5,9 @@
 /* ── Layout Shell ── */
 .admin-shell {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
   background: var(--bg-primary);
 }
 
@@ -18,6 +20,7 @@
 .admin-sidebar {
   width: 240px;
   min-width: 240px;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   background: var(--bg-secondary);
   border-right: 1px solid var(--bg-card-border);
   display: flex;
@@ -44,14 +47,14 @@
   border-radius: 15px; /* 12px icon + 3px */
   background: conic-gradient(
     from var(--neon-angle, 0deg),
-    #f97316 0%,
-    #fb923c 15%,
-    #fbbf24 30%,
+    var(--accent) 0%,
+    var(--accent-light) 15%,
+    var(--accent-light) 30%,
     transparent 45%,
     transparent 55%,
-    #fb923c 70%,
-    #f97316 85%,
-    #f97316 100%
+    var(--accent-light) 70%,
+    var(--accent) 85%,
+    var(--accent) 100%
   );
   animation: neonSpin 2.4s linear infinite;
   margin-bottom: 12px;
@@ -246,7 +249,7 @@
 /* ── Main Content ── */
 .admin-main {
   flex: 1;
-  overflow-y: auto;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
@@ -301,6 +304,7 @@
 .admin-content {
   padding: 32px;
   flex: 1;
+  overflow-y: auto;
 }
 
 /* ── Stats Row ── */
@@ -868,16 +872,86 @@
 }
 
 /* ── Responsive ── */
+.mobile-menu-btn {
+  display: none;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 8px;
+  margin-left: -8px;
+}
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(4px);
+  z-index: 999;
+  animation: fadeIn 0.2s ease;
+}
+
 @media (max-width: 900px) {
-  .admin-sidebar { display: none; }
+  .mobile-menu-btn { display: flex; align-items: center; justify-content: center; }
+  .admin-sidebar {
+    position: fixed;
+    z-index: 1000;
+    transform: translateX(-100%);
+  }
+  .admin-sidebar.mobile-open {
+    transform: translateX(0);
+  }
   .stats-row { grid-template-columns: repeat(2, 1fr); }
-  .admin-content { padding: 20px; }
+  .admin-content { padding: 16px; }
+  .controls-bar { flex-wrap: wrap; }
+  .controls-bar > * { flex: 1 1 100%; }
+  .calendar-header { flex-wrap: wrap; gap: 16px; }
+  .hide-mobile { display: none; }
+  .report-summary-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 8px !important; }
 }
 
 @media (max-width: 560px) {
   .stats-row { grid-template-columns: 1fr; }
   .field-row { grid-template-columns: 1fr; }
+  .modal-box { width: 95%; max-width: 100%; margin: 16px; }
+  .report-table { font-size: 10px !important; }
+  .report-table th, .report-table td { padding: 4px 6px !important; }
 }
+
+/* ── Leave Report Modal Styles ── */
+.report-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-shrink: 0;
+}
+.report-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 12px;
+}
+.report-table thead {
+  background: var(--bg-input);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.report-table th, .report-table td {
+  padding: 6px 12px;
+}
+.report-table th {
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--bg-card-border);
+}
+.report-table tr {
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+.report-table td:nth-child(1) { text-transform: capitalize; color: var(--text-primary); }
+.report-table td:nth-child(2) { color: var(--text-secondary); line-height: 1.4; }
+.report-table td:nth-child(3) { color: var(--text-primary); }
+.report-table td:nth-child(4) { color: var(--text-secondary); }
 
 /* ===================================================
    Approved Leaves Calendar Styles
@@ -1026,6 +1100,8 @@
 
 .calendar-body {
   animation: contentIn 0.35s ease both;
+  overflow-x: auto;
+  padding-bottom: 8px;
 }
 
 .calendar-weekdays {
@@ -1135,6 +1211,28 @@
   .leaves-count-badge {
     font-size: 10px;
     padding: 2px 6px;
+  }
+}
+
+@media (max-width: 560px) {
+  .calendar-grid { gap: 2px; }
+  .calendar-weekdays { grid-template-columns: repeat(7, 1fr); }
+  .calendar-day {
+    min-height: 44px;
+    padding: 4px;
+    gap: 2px;
+  }
+  .day-number {
+    font-size: 11px;
+  }
+  .leaves-count-badge {
+    font-size: 10px;
+    padding: 2px 4px;
+    border-radius: 4px;
+  }
+  .calendar-weekday {
+    font-size: 9px;
+    letter-spacing: 0;
   }
 }
 
@@ -1756,3 +1854,25 @@
   color: #ff4757;
   border-color: rgba(255, 71, 87, 0.2);
 }
+
+/* ── Leave Overview ── */
+.overview-container::-webkit-scrollbar {
+  height: 8px;
+}
+.overview-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+.overview-sq {
+  height: 10px;
+  border-radius: 1px;
+}
+.sq-empty {
+  background: rgba(255, 255, 255, 0.04);
+}
+.sq-empty-alt {
+  background: rgba(255, 255, 255, 0.09);
+}
+.sq-annual { background: #a78bfa; }
+.sq-sick { background: #f472b6; }
+.sq-casual { background: #34d399; }
