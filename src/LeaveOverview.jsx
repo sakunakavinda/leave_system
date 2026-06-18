@@ -29,6 +29,7 @@ export default function LeaveOverview({ onBack, secretCode }) {
   const [error, setError] = useState('')
   const [expandedId, setExpandedId] = useState(null)
   const [historyFilter, setHistoryFilter] = useState('all')
+  const [heatmapExpanded, setHeatmapExpanded] = useState(true)
 
   useEffect(() => {
     const load = async () => {
@@ -90,6 +91,41 @@ export default function LeaveOverview({ onBack, secretCode }) {
   const filteredApps = historyFilter === 'all'
     ? applications
     : applications.filter(a => a.status === historyFilter)
+
+  // -- Heatmap Data Generation --
+  const currentYear = new Date().getFullYear()
+  const leaveMap = {}
+  applications.forEach(app => {
+    // Show approved leaves in heatmap (could also include pending in a different style if desired, but let's stick to approved/pending with opacity maybe? Let's just use the color)
+    if (app.status !== 'rejected') {
+      app.leaveDates.forEach(d => {
+        const dStr = new Date(d).toISOString().split('T')[0]
+        leaveMap[dStr] = { type: app.leave_type, status: app.status }
+      })
+    }
+  })
+
+  const heatmapMonths = []
+  for (let m = 0; m < 12; m++) {
+    const daysInMonth = new Date(currentYear, m + 1, 0).getDate()
+    const monthDays = []
+    for (let d = 1; d <= daysInMonth; d++) {
+      // Local time formatting to avoid timezone offset issues
+      const dateObj = new Date(currentYear, m, d)
+      // shift timezone offset to get local YYYY-MM-DD
+      const offset = dateObj.getTimezoneOffset()
+      const dStr = new Date(dateObj.getTime() - (offset*60*1000)).toISOString().split('T')[0]
+      monthDays.push({
+        date: dStr,
+        dayNum: d,
+        leave: leaveMap[dStr] || null
+      })
+    }
+    heatmapMonths.push({ 
+      name: new Date(currentYear, m, 1).toLocaleString('default', { month: 'long' }), 
+      days: monthDays 
+    })
+  }
 
   return (
     <div className="overview-page">
@@ -170,6 +206,64 @@ export default function LeaveOverview({ onBack, secretCode }) {
           )
         })}
       </div>
+
+      {/* ── Annual Heatmap ── */}
+      <button 
+        className="overview-section-title heatmap-toggle-btn" 
+        onClick={() => setHeatmapExpanded(!heatmapExpanded)}
+        style={{ marginTop: '36px', background: 'none', border: 'none', cursor: 'pointer', padding: 0, width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+      >
+        <span>Leave Heatmap — {currentYear}</span>
+        <svg 
+          viewBox="0 0 24 24" 
+          fill="none" 
+          stroke="currentColor" 
+          strokeWidth="2" 
+          strokeLinecap="round" 
+          strokeLinejoin="round" 
+          style={{ 
+            width: '16px', height: '16px', 
+            transition: 'transform 0.2s ease', 
+            transform: heatmapExpanded ? 'rotate(180deg)' : 'rotate(0deg)' 
+          }}
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+
+      {heatmapExpanded && (
+        <div className="overview-heatmap-container">
+          {heatmapMonths.map(month => (
+            <div key={month.name} className="heatmap-month-block">
+            <div className="heatmap-month-label">{month.name}</div>
+            <div className="heatmap-days-grid">
+              {month.days.map(d => {
+                let bg = 'rgba(255,255,255,0.05)'
+                let border = '1px solid rgba(255,255,255,0.02)'
+                let tooltip = formatDate(d.date)
+                if (d.leave) {
+                  const conf = LEAVE_TYPE_CONFIG[d.leave.type]
+                  bg = conf.color
+                  border = `1px solid ${conf.color}`
+                  tooltip += ` — ${conf.label} (${d.leave.status})`
+                  if (d.leave.status === 'pending') {
+                    bg = 'transparent' // hollow square for pending
+                  }
+                }
+                return (
+                  <div 
+                    key={d.date} 
+                    className={`heatmap-day-sq ${d.leave ? 'has-leave' : ''}`}
+                    style={{ background: bg, border: border }} 
+                    title={tooltip}
+                  />
+                )
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+      )}
 
       {/* ── Leave History ── */}
       <div className="overview-section-title" style={{ marginTop: '36px' }}>

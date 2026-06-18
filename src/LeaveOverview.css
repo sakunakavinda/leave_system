@@ -270,19 +270,88 @@
   font-size: 11px;
 }
 
-/* ── History list ── */
-.overview-history-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.overview-app-card {
+/* ── Heatmap ── */
+.overview-heatmap-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
   background: rgba(18, 20, 35, 0.65);
   backdrop-filter: blur(24px);
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 16px;
-  overflow: hidden;
+  padding: 24px;
+  margin-bottom: 32px;
+}
+
+.heatmap-month-block {
+  display: flex;
+  flex-direction: column;
+}
+
+.heatmap-month-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.heatmap-days-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.heatmap-day-sq {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+}
+
+.heatmap-day-sq:hover {
+  transform: scale(1.3);
+  z-index: 5;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+}
+
+.heatmap-day-sq.has-leave {
+  opacity: 0.9;
+}
+.heatmap-day-sq.has-leave:hover {
+  opacity: 1;
+}
+
+/* ── History list (Timeline) ── */
+.overview-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: relative;
+  padding-left: 28px;
+  margin-top: 12px;
+}
+
+.overview-history-list::before {
+  content: '';
+  position: absolute;
+  top: 16px;
+  bottom: 16px;
+  left: 8px;
+  width: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+}
+
+.overview-app-card {
+  position: relative;
+  background: rgba(18, 20, 35, 0.65);
+  backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  overflow: visible;
   animation: cardIn 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
   transition: border-color 0.18s ease, box-shadow 0.2s ease;
 }
@@ -314,9 +383,14 @@
 .overview-app-header:hover { background: rgba(255,255,255,0.02); }
 
 .overview-app-type-dot {
-  width: 8px;
-  height: 8px;
+  position: absolute;
+  top: 26px;
+  left: -24.5px;
+  width: 11px;
+  height: 11px;
   border-radius: 50%;
+  box-shadow: 0 0 0 5px #0b0d18;
+  z-index: 2;
   flex-shrink: 0;
 }
 
@@ -351,6 +425,8 @@
   padding: 0 20px 20px;
   border-top: 1px solid rgba(255,255,255,0.05);
   background: rgba(0,0,0,0.1);
+  border-bottom-left-radius: 16px;
+  border-bottom-right-radius: 16px;
 }
 
 /* ── Sub confirmed indicator ── */

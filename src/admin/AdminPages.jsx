@@ -339,7 +339,11 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
           <tbody>
             {filtered.length === 0 ? (
               <tr><td colSpan={9} style={{ textAlign:'center', padding:'48px', color:'var(--text-muted)' }}>No applications found</td></tr>
-            ) : filtered.map((app, i) => (
+            ) : filtered.map((app, i) => {
+              const todayStr = getYYYYMMDD(new Date())
+              const hasPastDate = app.leaveDates.some(d => d < todayStr)
+              
+              return (
               <tr key={app.id} style={{ animationDelay: `${i * 0.05}s` }}>
                 <td className="hide-mobile"><span style={{ fontFamily:'monospace', fontSize:'12px', color:'var(--text-muted)' }}>{app.id}</span></td>
                 <td>
@@ -401,13 +405,20 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
                       </button>
                     </div>
                   ) : (
-                    <button className="btn-secondary" style={{fontSize:'12px',padding:'6px 13px'}} onClick={() => handleAction(app.id, 'pending')}>
+                    <button 
+                      className="btn-secondary" 
+                      style={{fontSize:'12px',padding:'6px 13px', opacity: hasPastDate ? 0.4 : 1, cursor: hasPastDate ? 'not-allowed' : 'pointer'}} 
+                      onClick={() => !hasPastDate && handleAction(app.id, 'pending')}
+                      disabled={hasPastDate}
+                      title={hasPastDate ? "Cannot reset requests that have already started or passed" : "Reset application to pending"}
+                    >
                       Reset
                     </button>
                   )}
                 </td>
               </tr>
-            ))}
+              )
+            })}
           </tbody>
         </table>
       </div>

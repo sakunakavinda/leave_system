@@ -404,7 +404,7 @@
   .summary-cards { grid-template-columns: repeat(2, 1fr); gap: 8px; }
   .summary-count { font-size: 24px; }
 
-  .list-header-bar { flex-wrap: wrap; }
+  .list-header-bar { flex-wrap: nowrap; align-items: center; }
   .list-title-area h1 { font-size: 20px; }
 
   .detail-grid { grid-template-columns: 1fr; }
