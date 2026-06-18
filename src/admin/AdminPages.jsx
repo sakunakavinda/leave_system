@@ -306,10 +306,12 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
           <option value="this_year">This Year</option>
           <option value="all">All Time</option>
         </select>
-        <select className="admin-filter-select" value={branchFilter} onChange={e => setBranchFilter(e.target.value)} id="dash-branch-filter">
-          <option value="all">All Branches</option>
-          {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-        </select>
+        {branches.length > 1 && (
+          <select className="admin-filter-select" value={branchFilter} onChange={e => setBranchFilter(e.target.value)} id="dash-branch-filter">
+            <option value="all">All Branches</option>
+            {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+        )}
         <select className="admin-filter-select" value={filter} onChange={e => setFilter(e.target.value)} id="dash-status-filter">
           <option value="all">All Status</option>
           <option value="pending">Pending</option>
@@ -872,10 +874,12 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
               </svg>
               <input placeholder="Search employees…" value={search} onChange={e => setSearch(e.target.value)} />
             </div>
+          {branches.length > 1 && (
             <select className="admin-filter-select" value={branchFilter} onChange={e => setBranchFilter(e.target.value)} id="emp-branch-filter">
               <option value="all">All Branches</option>
               {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
+          )}
             <button className="btn-primary" id="add-employee-btn" onClick={openAdd}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>

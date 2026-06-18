@@ -391,7 +391,7 @@ export default function AdminApp() {
             </div>
           </div>
           <div className="topbar-right">
-            <div className="hide-mobile">
+            <div className="hide-mobile" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
               <div 
                 className="admin-avatar" 
                 title={`${currentUser.username} (${currentUser.role})`}
@@ -399,6 +399,9 @@ export default function AdminApp() {
                 style={{ cursor: 'pointer', transition: 'transform 0.2s', ':hover': { transform: 'scale(1.05)' } }}
               >
                 {currentUser.username.slice(0,2).toUpperCase()}
+              </div>
+              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+                {currentUser.role}
               </div>
             </div>
             <div className="show-mobile" style={{ height: '36px' }}>
