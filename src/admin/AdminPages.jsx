@@ -61,6 +61,7 @@ function formatDate(d) {
    AdminDashboard
 ───────────────────────────────────────────────────── */
 export function AdminDashboard({ applications, onUpdateStatus, branches, employees, roles, departments }) {
+  const [timeFilter, setTimeFilter]   = useState('this_month')
   const [filter, setFilter]           = useState('all')
   const [branchFilter, setBranchFilter] = useState('all')
   const [search, setSearch]           = useState('')
@@ -105,9 +106,21 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
     showToast(toastMsg, toastType)
   }
 
+  const now = new Date()
+  const currentMonth = now.getMonth()
+  const currentYear = now.getFullYear()
+
+  const timeFiltered = applications.filter(app => {
+    if (timeFilter === 'all') return true
+    const d = new Date(app.appliedDate || app.applied_date || app.leaveDates?.[0] || now)
+    if (timeFilter === 'this_year') return d.getFullYear() === currentYear
+    if (timeFilter === 'this_month') return d.getFullYear() === currentYear && d.getMonth() === currentMonth
+    return true
+  })
+
   const branchFiltered = branchFilter === 'all'
-    ? applications
-    : applications.filter(app => getEmp(app.employee_id).branch_id === branchFilter)
+    ? timeFiltered
+    : timeFiltered.filter(app => getEmp(app.employee_id).branch_id === branchFilter)
 
   const filtered = branchFiltered.filter(app => {
     const matchFilter = filter === 'all' || app.status === filter
@@ -286,6 +299,11 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
           </svg>
           <input placeholder="Search by name, branch, ID…" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
+        <select className="admin-filter-select" value={timeFilter} onChange={e => setTimeFilter(e.target.value)} id="dash-time-filter">
+          <option value="this_month">This Month</option>
+          <option value="this_year">This Year</option>
+          <option value="all">All Time</option>
+        </select>
         <select className="admin-filter-select" value={branchFilter} onChange={e => setBranchFilter(e.target.value)} id="dash-branch-filter">
           <option value="all">All Branches</option>
           {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
@@ -1400,9 +1418,9 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
                 </button>
               </div>
 
-              <div className="modal-body" style={{ padding: '24px', maxHeight: '65vh', overflowY: 'auto' }}>
+              <div className="modal-body" style={{ padding: '24px', flex: 1, minHeight: 0, overflow: 'hidden' }}>
                 {/* Minimal Summary Boxes */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '32px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '16px', flexShrink: 0 }}>
                   <div style={{ padding: '16px', background: 'var(--bg-input)', borderRadius: '8px', border: '1px solid var(--bg-card-border)' }}>
                     <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '0.05em', marginBottom: '4px' }}>Total Taken</div>
                     <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-primary)' }}>{totalDays} <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-muted)' }}>days</span></div>
@@ -1422,35 +1440,31 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
                 </div>
 
                 {/* Report Table */}
-                <h4 style={{ fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)', marginBottom: '12px' }}>Detailed Log</h4>
+                <h4 style={{ fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)', marginBottom: '12px', flexShrink: 0 }}>Detailed Log</h4>
                 {empApps.length === 0 ? (
                   <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)', background: 'var(--bg-input)', borderRadius: '8px', border: '1px dashed var(--bg-card-border)' }}>
                     No approved leaves found for this employee.
                   </div>
                 ) : (
-                  <div style={{ border: '1px solid var(--bg-card-border)', borderRadius: '8px', overflow: 'hidden' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
-                      <thead style={{ background: 'var(--bg-input)' }}>
+                  <div style={{ border: '1px solid var(--bg-card-border)', borderRadius: '8px', overflowY: 'auto', flex: 1, minHeight: 0 }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12px' }}>
+                      <thead style={{ background: 'var(--bg-input)', position: 'sticky', top: 0, zIndex: 10 }}>
                         <tr>
-                          <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--bg-card-border)' }}>Type</th>
-                          <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--bg-card-border)' }}>Dates</th>
-                          <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--bg-card-border)' }}>Days</th>
-                          <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--bg-card-border)' }}>Returning</th>
+                          <th style={{ padding: '6px 12px', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--bg-card-border)' }}>Type</th>
+                          <th style={{ padding: '6px 12px', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--bg-card-border)' }}>Dates</th>
+                          <th style={{ padding: '6px 12px', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--bg-card-border)' }}>Days</th>
+                          <th style={{ padding: '6px 12px', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--bg-card-border)' }}>Returning</th>
                         </tr>
                       </thead>
                       <tbody>
                         {empApps.map(app => (
                           <tr key={app.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                            <td style={{ padding: '12px 16px', textTransform: 'capitalize', color: 'var(--text-primary)' }}>{app.leave_type}</td>
-                            <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                                {app.leaveDates?.map(d => (
-                                  <span key={d} style={{ background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px', fontSize: '12px' }}>{dateStr(d)}</span>
-                                ))}
-                              </div>
+                            <td style={{ padding: '6px 12px', textTransform: 'capitalize', color: 'var(--text-primary)' }}>{app.leave_type}</td>
+                            <td style={{ padding: '6px 12px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
+                              {app.leaveDates?.map(d => dateStr(d)).join(', ')}
                             </td>
-                            <td style={{ padding: '12px 16px', color: 'var(--text-primary)' }}>{app.leaveDates?.length || 0}</td>
-                            <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>{dateStr(app.returningDate)}</td>
+                            <td style={{ padding: '6px 12px', color: 'var(--text-primary)' }}>{app.leaveDates?.length || 0}</td>
+                            <td style={{ padding: '6px 12px', color: 'var(--text-secondary)' }}>{dateStr(app.returningDate)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -2344,44 +2358,69 @@ export function SystemSettings() {
   }
 
   return (
-    <div className="admin-content" style={{ maxWidth: '800px' }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '20px' }}>
-        <button className="btn-primary" onClick={handleSave} disabled={loading}>
-          {loading ? 'Saving...' : 'Save Settings'}
-        </button>
-      </div>
-
+    <div className="admin-content" style={{ maxWidth: '800px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      
+      {/* Branding Section */}
       <div className="admin-card">
-        <div className="admin-card-header">
-          <h3 className="admin-card-title">Branding</h3>
+        <div className="admin-card-header" style={{ paddingBottom: '16px', borderBottom: '1px solid var(--bg-card-border)' }}>
+          <h3 className="admin-card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '20px', height: '20px' }}>
+              <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+            </svg>
+            Brand Identity
+          </h3>
+          <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--text-secondary)' }}>
+            Customize the system's appearance with your organization's logo.
+          </p>
         </div>
-        <div className="admin-card-body">
-          <div className="field-row">
-            <div className="field">
-              <label>Company Logo</label>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '24px', marginTop: '12px' }}>
-                <div style={{ width: '80px', height: '80px', borderRadius: '12px', background: 'var(--bg-card)', border: '1px solid var(--bg-card-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                  {logoBase64 ? (
-                    <img src={logoBase64} alt="Company Logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-                  ) : (
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '32px', height: '32px', color: 'var(--text-muted)' }}>
-                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                      <circle cx="8.5" cy="8.5" r="1.5"/>
-                      <polyline points="21 15 16 10 5 21"/>
-                    </svg>
-                  )}
-                </div>
-                <div>
-                  <input type="file" id="logo-upload" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
-                  <label htmlFor="logo-upload" className="btn-secondary" style={{ cursor: 'pointer', display: 'inline-flex' }}>
-                    Choose Image
-                  </label>
-                  <p style={{ marginTop: '8px', fontSize: '13px', color: 'var(--text-muted)' }}>Recommended size: 256x256px (Max 2MB)</p>
+        <div className="admin-card-body" style={{ paddingTop: '24px' }}>
+          <div className="field">
+            <label style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '12px', display: 'block' }}>Company Logo</label>
+            <div style={{ 
+              display: 'flex', alignItems: 'center', gap: '24px', 
+              background: 'rgba(255, 255, 255, 0.02)', 
+              border: '1px dashed var(--bg-card-border)', 
+              borderRadius: 'var(--border-radius-md)', 
+              padding: '24px'
+            }}>
+              <div style={{ 
+                width: '100px', height: '100px', borderRadius: '16px', 
+                background: 'var(--bg-card)', 
+                border: '1px solid var(--bg-card-border)', 
+                display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                overflow: 'hidden',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+              }}>
+                {logoBase64 ? (
+                  <img src={logoBase64} alt="Company Logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                ) : (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '40px', height: '40px', color: 'var(--text-muted)' }}>
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                    <circle cx="8.5" cy="8.5" r="1.5"/>
+                    <polyline points="21 15 16 10 5 21"/>
+                  </svg>
+                )}
+              </div>
+              <div style={{ flex: 1 }}>
+                <input type="file" id="logo-upload" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
+                <label htmlFor="logo-upload" className="btn-secondary" style={{ cursor: 'pointer', display: 'inline-flex', padding: '8px 16px' }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px', marginRight: '8px' }}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  Upload New Image
+                </label>
+                <div style={{ marginTop: '12px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                  <p style={{ margin: '0 0 4px 0' }}>• Recommended dimensions: <strong>256x256px</strong></p>
+                  <p style={{ margin: 0 }}>• Maximum file size: <strong>2MB</strong></p>
                 </div>
               </div>
             </div>
           </div>
         </div>
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '16px', borderTop: '1px solid var(--bg-card-border)' }}>
+        <button className="btn-primary" onClick={handleSave} disabled={loading} style={{ padding: '10px 24px', fontSize: '14px' }}>
+          {loading ? 'Saving...' : 'Save Settings'}
+        </button>
       </div>
 
       {toast && (
