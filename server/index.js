@@ -21,6 +21,12 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 // Mount routes
 app.use('/api/branches', branchesRouter);
 app.use('/api/departments', departmentsRouter);
@@ -30,6 +36,13 @@ app.use('/api/managers', managersRouter);
 app.use('/api/rules', rulesRouter);
 app.use('/api/applications', applicationsRouter);
 app.use('/api/settings', settingsRouter);
+
+// Serve static frontend files in production
+app.use(express.static(path.join(__dirname, '../dist')));
+
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../dist/index.html'));
+});
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
