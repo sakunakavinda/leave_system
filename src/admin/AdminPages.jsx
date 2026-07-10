@@ -68,7 +68,10 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
   const [branchFilter, setBranchFilter] = useState('all')
   const [search, setSearch]           = useState('')
   const [toast, setToast]             = useState(null)
-  const [currentDate, setCurrentDate] = useState(() => new Date(2026, 5, 1))
+  const [currentDate, setCurrentDate] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  })
   const [isCalendarExpanded, setIsCalendarExpanded] = useState(true)
   const [selectedDayLeaves, setSelectedDayLeaves] = useState(null)
 
@@ -186,30 +189,13 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
     return matchBranch && matchSearch
   })
 
+  const currentMonthStr = `${year}-${String(month + 1).padStart(2, '0')}`
+  const monthlyApprovedLeavesCount = calendarApprovedLeaves.filter(app => 
+    app.leaveDates && app.leaveDates.some(d => d.startsWith(currentMonthStr))
+  ).length
+
   return (
     <div className="admin-content">
-      {/* Stats */}
-      <div className="stats-row">
-        {[
-          { label:'Total Applications', value: counts.total,    icon:'purple', svg:<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/>, svgExtra:<><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/></> },
-          { label:'Pending',            value: counts.pending,  icon:'amber',  svg:<><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></> },
-          { label:'Approved',           value: counts.approved, icon:'green',  svg:<><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></> },
-          { label:'Rejected',           value: counts.rejected, icon:'red',    svg:<><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></> },
-        ].map(s => (
-          <div className="stat-card" key={s.label}>
-            <div className={`stat-icon stat-icon-${s.icon}`}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                {s.svg}{s.svgExtra}
-              </svg>
-            </div>
-            <div className="stat-info">
-              <div className="stat-value">{s.value}</div>
-              <div className="stat-label">{s.label}</div>
-            </div>
-          </div>
-        ))}
-      </div>
-
       {/* Approved Leaves Calendar */}
       <div className="calendar-card">
         <div className="calendar-header" onClick={() => setIsCalendarExpanded(!isCalendarExpanded)} style={{ cursor: 'pointer' }}>
@@ -223,7 +209,7 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
               </svg>
               <h3>Approved Leaves Calendar</h3>
               <span className="calendar-badge">
-                {calendarApprovedLeaves.length} Approved
+                {monthlyApprovedLeavesCount} Approved
               </span>
             </div>
             <p className="calendar-subtitle">Monthly overview of approved staff leaves</p>
@@ -291,6 +277,28 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
             </div>
           </div>
         )}
+      </div>
+
+      {/* Stats */}
+      <div className="stats-row">
+        {[
+          { label:'Total Applications', value: counts.total,    icon:'purple', svg:<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/>, svgExtra:<><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/></> },
+          { label:'Pending',            value: counts.pending,  icon:'amber',  svg:<><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></> },
+          { label:'Approved',           value: counts.approved, icon:'green',  svg:<><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></> },
+          { label:'Rejected',           value: counts.rejected, icon:'red',    svg:<><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></> },
+        ].map(s => (
+          <div className="stat-card" key={s.label}>
+            <div className={`stat-icon stat-icon-${s.icon}`}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                {s.svg}{s.svgExtra}
+              </svg>
+            </div>
+            <div className="stat-info">
+              <div className="stat-value">{s.value}</div>
+              <div className="stat-label">{s.label}</div>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Controls */}
