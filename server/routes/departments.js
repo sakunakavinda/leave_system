@@ -13,14 +13,17 @@ router.get('/', async (req, res) => {
   }
 });
 
+import crypto from 'crypto';
+
 router.post('/', async (req, res) => {
   const { name, description, status } = req.body;
+  const id = crypto.randomUUID();
   try {
     const [result] = await pool.query(
-      'INSERT INTO departments (name, description, status) VALUES (?, ?, ?)',
-      [name, description, status || 'active']
+      'INSERT INTO departments (id, name, description, status) VALUES (?, ?, ?, ?)',
+      [id, name, description, status || 'active']
     );
-    const [rows] = await pool.query('SELECT * FROM departments WHERE id = ?', [result.insertId]);
+    const [rows] = await pool.query('SELECT * FROM departments WHERE id = ?', [id]);
     res.status(201).json(rows[0]);
   } catch (err) {
     console.error(err);

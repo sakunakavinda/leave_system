@@ -13,14 +13,17 @@ router.get('/', async (req, res) => {
   }
 });
 
+import crypto from 'crypto';
+
 router.post('/', async (req, res) => {
   const { title, department_id, description, status } = req.body;
+  const id = crypto.randomUUID();
   try {
     const [result] = await pool.query(
-      'INSERT INTO roles (title, department_id, description, status) VALUES (?, ?, ?, ?)',
-      [title, department_id, description, status || 'active']
+      'INSERT INTO roles (id, title, department_id, description, status) VALUES (?, ?, ?, ?, ?)',
+      [id, title, department_id, description, status || 'active']
     );
-    const [roleRows] = await pool.query('SELECT * FROM roles WHERE id = ?', [result.insertId]);
+    const [roleRows] = await pool.query('SELECT * FROM roles WHERE id = ?', [id]);
     const newRole = roleRows[0];
 
     // Auto-generate default leave rules for all existing branches

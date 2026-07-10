@@ -13,20 +13,23 @@ router.get('/', async (req, res) => {
   }
 });
 
+import crypto from 'crypto';
+
 // Create OR Update rule (Upsert)
 router.post('/', async (req, res) => {
   const { role_id, branch_id, annualLeave, sickLeave, casualLeave, maxPerDay, status } = req.body;
+  const id = crypto.randomUUID();
   try {
     const [result] = await pool.query(
-      `INSERT INTO leave_rules (role_id, branch_id, annual_leave, sick_leave, casual_leave, max_per_day, status) 
-       VALUES (?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO leave_rules (id, role_id, branch_id, annual_leave, sick_leave, casual_leave, max_per_day, status) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE 
          annual_leave = VALUES(annual_leave),
          sick_leave = VALUES(sick_leave),
          casual_leave = VALUES(casual_leave),
          max_per_day = VALUES(max_per_day),
          status = VALUES(status)`,
-      [role_id, branch_id, annualLeave || 14, sickLeave || 10, casualLeave || 7, maxPerDay || 1, status || 'active']
+      [id, role_id, branch_id, annualLeave || 14, sickLeave || 10, casualLeave || 7, maxPerDay || 1, status || 'active']
     );
     const [rows] = await pool.query('SELECT * FROM leave_rules WHERE role_id = ? AND branch_id = ?', [role_id, branch_id]);
     res.status(200).json(rows[0]);

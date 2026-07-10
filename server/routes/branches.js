@@ -14,15 +14,18 @@ router.get('/', async (req, res) => {
   }
 });
 
+import crypto from 'crypto';
+
 // POST a new branch
 router.post('/', async (req, res) => {
   const { name, location, status, manager_id } = req.body;
+  const branchId = crypto.randomUUID();
   try {
     const [result] = await pool.query(
-      'INSERT INTO branches (name, location, status) VALUES (?, ?, ?)',
-      [name, location, status || 'active']
+      'INSERT INTO branches (id, name, location, status) VALUES (?, ?, ?, ?)',
+      [branchId, name, location, status || 'active']
     );
-    const branchId = result.insertId;
+
     
     const [branchRows] = await pool.query('SELECT * FROM branches WHERE id = ?', [branchId]);
     const branch = branchRows[0];

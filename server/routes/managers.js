@@ -40,15 +40,16 @@ router.post('/login', async (req, res) => {
 router.post('/', async (req, res) => {
   const { username, password, role, branch_id, status } = req.body;
   const hash = hashPassword(password || 'password');
+  const id = crypto.randomUUID();
   
   try {
     const [result] = await pool.query(
-      'INSERT INTO managers (username, password_hash, role, branch_id, status) VALUES (?, ?, ?, ?, ?)',
-      [username, hash, role || 'manager', branch_id || null, status || 'active']
+      'INSERT INTO managers (id, username, password_hash, role, branch_id, status) VALUES (?, ?, ?, ?, ?, ?)',
+      [id, username, hash, role || 'manager', branch_id || null, status || 'active']
     );
     const [rows] = await pool.query(
       'SELECT id, username, role, branch_id, status, created_at FROM managers WHERE id = ?',
-      [result.insertId]
+      [id]
     );
     res.status(201).json(rows[0]);
   } catch (err) {

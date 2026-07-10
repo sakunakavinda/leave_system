@@ -10,12 +10,9 @@ router.get('/', async (req, res) => {
         a.id, a.employee_id, a.substitute_employee_id, a.leave_type, 
         a.applied_date, a.returning_date, a.substitute_confirmed, a.status,
         a.created_at, a.updated_at,
-        COALESCE(
-          (SELECT JSON_ARRAYAGG(DATE_FORMAT(d.leave_date, '%Y-%m-%d')) 
-           FROM leave_application_dates d 
-           WHERE d.leave_application_id = a.id), 
-          JSON_ARRAY()
-        ) AS leave_dates
+        (SELECT GROUP_CONCAT(DATE_FORMAT(d.leave_date, '%Y-%m-%d')) 
+         FROM leave_application_dates d 
+         WHERE d.leave_application_id = a.id) AS leave_dates
       FROM leave_applications a
       ORDER BY a.created_at DESC
     `);
@@ -29,7 +26,9 @@ router.get('/', async (req, res) => {
       returningDate: row.returning_date,
       substituteConfirmed: row.substitute_confirmed,
       status: row.status,
-      leaveDates: typeof row.leave_dates === 'string' ? JSON.parse(row.leave_dates) : row.leave_dates || []
+      leaveDates: row.leave_dates ? row.leave_dates.split(',') : [],
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
     }));
     
     res.json(apps);
@@ -38,6 +37,8 @@ router.get('/', async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
+
+import crypto from 'crypto';
 
 router.post('/', async (req, res) => {
   const { secretCode, leave_type, appliedDate, leaveDates, returningDate, substitute_employee_id } = req.body;
@@ -69,9 +70,10 @@ router.post('/', async (req, res) => {
       let [takenRows] = await connection.query('SELECT * FROM leave_balances WHERE employee_id = ? AND year = ?', [employee_id, currentYear]);
       
       if (takenRows.length === 0) {
+        const balanceId = crypto.randomUUID();
         await connection.query(
-          'INSERT INTO leave_balances (employee_id, year, annual_taken, sick_taken, casual_taken) VALUES (?, ?, 0, 0, 0)',
-          [employee_id, currentYear]
+          'INSERT INTO leave_balances (id, employee_id, year, annual_taken, sick_taken, casual_taken) VALUES (?, ?, ?, 0, 0, 0)',
+          [balanceId, employee_id, currentYear]
         );
         [takenRows] = await connection.query('SELECT * FROM leave_balances WHERE employee_id = ? AND year = ?', [employee_id, currentYear]);
       }
@@ -85,7 +87,7 @@ router.post('/', async (req, res) => {
       
       if (taken + requestedDays > quota) {
         await connection.rollback();
-        return res.status(400).json({ error: \`You only have \${quota - taken} \${leave_type} leave days remaining.\` });
+        return res.status(400).json({ error: `You only have ${quota - taken} ${leave_type} leave days remaining.` });
       }
 
       // Max Per Day Check
@@ -104,7 +106,7 @@ router.post('/', async (req, res) => {
         const countOnLeave = parseInt(onLeaveRows[0].count);
         if (countOnLeave >= rule.max_per_day) {
           await connection.rollback();
-          return res.status(400).json({ error: \`Maximum allowed employees on leave reached for date: \${date}\` });
+          return res.status(400).json({ error: `Maximum allowed employees on leave reached for date: ${date}` });
         }
 
         // Substitute Check
@@ -121,7 +123,7 @@ router.post('/', async (req, res) => {
         if (subCheckRows.length > 0) {
           await connection.rollback();
           const requesterName = subCheckRows[0].name;
-          return res.status(400).json({ error: \`You cannot take leave on \${date} because you are assigned as a substitute for \${requesterName}.\` });
+          return res.status(400).json({ error: `You cannot take leave on ${date} because you are assigned as a substitute for ${requesterName}.` });
         }
 
         // Double Substitute Check
@@ -141,25 +143,25 @@ router.post('/', async (req, res) => {
             const requesterName = doubleSubCheck[0].name;
             const [subEmpRows] = await connection.query('SELECT name FROM employees WHERE id = ?', [substitute_employee_id]);
             const subName = subEmpRows[0]?.name || 'the selected substitute';
-            return res.status(400).json({ error: \`\${subName} cannot be your substitute on \${date} because they are already substituting for \${requesterName}.\` });
+            return res.status(400).json({ error: `${subName} cannot be your substitute on ${date} because they are already substituting for ${requesterName}.` });
           }
         }
       }
     }
     
+    const appId = crypto.randomUUID();
     const [appResult] = await connection.query(
-      \`INSERT INTO leave_applications (employee_id, substitute_employee_id, leave_type, applied_date, returning_date, status) 
-       VALUES (?, ?, ?, ?, ?, 'pending')\`,
-      [employee_id, substitute_employee_id || null, leave_type, appliedDate, returningDate]
+      `INSERT INTO leave_applications (id, employee_id, substitute_employee_id, leave_type, applied_date, returning_date, status) 
+       VALUES (?, ?, ?, ?, ?, ?, 'pending')`,
+      [appId, employee_id, substitute_employee_id || null, leave_type, appliedDate, returningDate]
     );
-    
-    const appId = appResult.insertId;
     
     if (leaveDates && leaveDates.length > 0) {
       for (const date of leaveDates) {
+        const dateId = crypto.randomUUID();
         await connection.query(
-          'INSERT INTO leave_application_dates (leave_application_id, leave_date) VALUES (?, ?)',
-          [appId, date]
+          'INSERT INTO leave_application_dates (id, leave_application_id, leave_date) VALUES (?, ?, ?)',
+          [dateId, appId, date]
         );
       }
     }
@@ -173,7 +175,7 @@ router.post('/', async (req, res) => {
       if (updateCol) {
         const currentYear = new Date().getFullYear();
         await connection.query(`
-          UPDATE leave_balances SET \${updateCol} = \${updateCol} + ? 
+          UPDATE leave_balances SET ${updateCol} = ${updateCol} + ? 
           WHERE employee_id = ? AND year = ?
         `, [requestedDays, employee_id, currentYear]);
       }
@@ -217,7 +219,7 @@ router.put('/:id/status', async (req, res) => {
 
       if (updateCol) {
         await connection.query(`
-          UPDATE leave_balances SET \${updateCol} = \${updateCol} - ? 
+          UPDATE leave_balances SET ${updateCol} = ${updateCol} - ? 
           WHERE employee_id = ? AND year = ?
         `, [requestedDays, app.employee_id, currentYear]);
       }
@@ -239,7 +241,7 @@ router.put('/:id/status', async (req, res) => {
 
       if (updateCol) {
         await connection.query(`
-          UPDATE leave_balances SET \${updateCol} = \${updateCol} + ? 
+          UPDATE leave_balances SET ${updateCol} = ${updateCol} + ? 
           WHERE employee_id = ? AND year = ?
         `, [requestedDays, app.employee_id, currentYear]);
       }
@@ -321,7 +323,7 @@ router.delete('/:id', async (req, res) => {
 
     if (updateCol) {
       await connection.query(`
-        UPDATE leave_balances SET \${updateCol} = \${updateCol} - ? 
+        UPDATE leave_balances SET ${updateCol} = ${updateCol} - ? 
         WHERE employee_id = ? AND year = ?
       `, [requestedDays, app.employee_id, currentYear]);
     }
@@ -383,12 +385,9 @@ router.get('/overview/:secretCode', async (req, res) => {
         a.id, a.leave_type, a.applied_date, a.returning_date,
         a.substitute_confirmed, a.status, a.created_at,
         sub.name AS substitute_name,
-        COALESCE(
-          (SELECT JSON_ARRAYAGG(DATE_FORMAT(d.leave_date, '%Y-%m-%d'))
-           FROM leave_application_dates d
-           WHERE d.leave_application_id = a.id),
-          JSON_ARRAY()
-        ) AS leave_dates
+        (SELECT GROUP_CONCAT(DATE_FORMAT(d.leave_date, '%Y-%m-%d'))
+         FROM leave_application_dates d
+         WHERE d.leave_application_id = a.id) AS leave_dates
       FROM leave_applications a
       LEFT JOIN employees sub ON a.substitute_employee_id = sub.id
       WHERE a.employee_id = ?
@@ -421,7 +420,7 @@ router.get('/overview/:secretCode', async (req, res) => {
         substituteConfirmed: row.substitute_confirmed,
         substituteName: row.substitute_name,
         status: row.status,
-        leaveDates: typeof row.leave_dates === 'string' ? JSON.parse(row.leave_dates) : row.leave_dates || [],
+        leaveDates: row.leave_dates ? row.leave_dates.split(',') : [],
       })),
     });
   } catch (err) {
