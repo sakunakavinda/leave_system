@@ -41,7 +41,11 @@ app.use('/api/settings', settingsRouter);
 app.use(express.static(path.join(__dirname, '../dist')));
 
 app.use((req, res) => {
-  res.sendFile(path.join(__dirname, '../dist/index.html'));
+  res.sendFile(path.join(__dirname, '../dist/index.html'), (err) => {
+    if (err) {
+      res.status(404).send('<h1>Frontend Not Built</h1><p>The "dist" folder is missing on the server! Please make sure you have run "npm run build" and pushed the "dist" folder to Plesk.</p>');
+    }
+  });
 });
 
 app.listen(PORT, () => {
