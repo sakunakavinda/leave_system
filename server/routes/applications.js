@@ -5,23 +5,22 @@ const router = express.Router();
 
 router.get('/', async (req, res) => {
   try {
-    const result = await pool.query(`
+    const [rows] = await pool.query(`
       SELECT 
         a.id, a.employee_id, a.substitute_employee_id, a.leave_type, 
         a.applied_date, a.returning_date, a.substitute_confirmed, a.status,
         a.created_at, a.updated_at,
         COALESCE(
-          (SELECT array_agg(d.leave_date::text) 
+          (SELECT JSON_ARRAYAGG(DATE_FORMAT(d.leave_date, '%Y-%m-%d')) 
            FROM leave_application_dates d 
            WHERE d.leave_application_id = a.id), 
-          '{}'
+          JSON_ARRAY()
         ) AS leave_dates
       FROM leave_applications a
       ORDER BY a.created_at DESC
     `);
     
-    // Map leave_dates correctly to match frontend (camelCase where necessary)
-    const apps = result.rows.map(row => ({
+    const apps = rows.map(row => ({
       id: row.id,
       employee_id: row.employee_id,
       substitute_employee_id: row.substitute_employee_id,
@@ -30,7 +29,7 @@ router.get('/', async (req, res) => {
       returningDate: row.returning_date,
       substituteConfirmed: row.substitute_confirmed,
       status: row.status,
-      leaveDates: row.leave_dates
+      leaveDates: typeof row.leave_dates === 'string' ? JSON.parse(row.leave_dates) : row.leave_dates || []
     }));
     
     res.json(apps);
@@ -42,40 +41,41 @@ router.get('/', async (req, res) => {
 
 router.post('/', async (req, res) => {
   const { secretCode, leave_type, appliedDate, leaveDates, returningDate, substitute_employee_id } = req.body;
-  const client = await pool.connect();
+  const connection = await pool.getConnection();
   
   try {
-    await client.query('BEGIN');
+    await connection.beginTransaction();
     
     // Lookup employee
-    const empResult = await client.query('SELECT id, role_id, branch_id FROM employees WHERE secret_code = $1', [secretCode]);
-    if (empResult.rows.length === 0) {
-      await client.query('ROLLBACK');
+    const [empRows] = await connection.query('SELECT id, role_id, branch_id FROM employees WHERE secret_code = ?', [secretCode]);
+    if (empRows.length === 0) {
+      await connection.rollback();
       return res.status(401).json({ error: 'Invalid secret code. Employee not found.' });
     }
     
-    const { id: employee_id, role_id, branch_id } = empResult.rows[0];
+    const { id: employee_id, role_id, branch_id } = empRows[0];
 
     // Balance & Quota Check
     const requestedDays = leaveDates ? leaveDates.length : 0;
     if (requestedDays > 0) {
-      const rulesResult = await client.query('SELECT * FROM leave_rules WHERE role_id = $1 AND branch_id = $2', [role_id, branch_id]);
-      if (rulesResult.rows.length === 0) {
-        await client.query('ROLLBACK');
+      const [rulesRows] = await connection.query('SELECT * FROM leave_rules WHERE role_id = ? AND branch_id = ?', [role_id, branch_id]);
+      if (rulesRows.length === 0) {
+        await connection.rollback();
         return res.status(400).json({ error: 'Leave rules not found for your role and branch. Please contact Admin.' });
       }
-      const rule = rulesResult.rows[0];
+      const rule = rulesRows[0];
 
       const currentYear = new Date().getFullYear();
-      let takenResult = await client.query('SELECT * FROM leave_balances WHERE employee_id = $1 AND year = $2', [employee_id, currentYear]);
+      let [takenRows] = await connection.query('SELECT * FROM leave_balances WHERE employee_id = ? AND year = ?', [employee_id, currentYear]);
       
-      if (takenResult.rows.length === 0) {
-        takenResult = await client.query(
-          'INSERT INTO leave_balances (employee_id, year, annual_taken, sick_taken, casual_taken) VALUES ($1, $2, 0, 0, 0) RETURNING *',
+      if (takenRows.length === 0) {
+        await connection.query(
+          'INSERT INTO leave_balances (employee_id, year, annual_taken, sick_taken, casual_taken) VALUES (?, ?, 0, 0, 0)',
           [employee_id, currentYear]
         );
+        [takenRows] = await connection.query('SELECT * FROM leave_balances WHERE employee_id = ? AND year = ?', [employee_id, currentYear]);
       }
-      const balances = takenResult.rows[0];
+      const balances = takenRows[0];
 
       let quota = 0;
       let taken = 0;
@@ -84,88 +84,86 @@ router.post('/', async (req, res) => {
       else if (leave_type === 'casual') { quota = rule.casual_leave; taken = balances.casual_taken; }
       
       if (taken + requestedDays > quota) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({ error: `You only have ${quota - taken} ${leave_type} leave days remaining.` });
+        await connection.rollback();
+        return res.status(400).json({ error: \`You only have \${quota - taken} \${leave_type} leave days remaining.\` });
       }
 
       // Max Per Day Check
       for (const date of leaveDates) {
-        const onLeaveResult = await client.query(`
-          SELECT COUNT(DISTINCT a.employee_id) 
+        const [onLeaveRows] = await connection.query(`
+          SELECT COUNT(DISTINCT a.employee_id) AS count
           FROM leave_applications a
           JOIN leave_application_dates d ON a.id = d.leave_application_id
           JOIN employees e ON a.employee_id = e.id
-          WHERE d.leave_date = $1 
-            AND e.role_id = $2 
-            AND e.branch_id = $3
+          WHERE d.leave_date = ? 
+            AND e.role_id = ? 
+            AND e.branch_id = ?
             AND a.status IN ('approved', 'pending')
         `, [date, role_id, branch_id]);
 
-        const countOnLeave = parseInt(onLeaveResult.rows[0].count);
+        const countOnLeave = parseInt(onLeaveRows[0].count);
         if (countOnLeave >= rule.max_per_day) {
-          await client.query('ROLLBACK');
-          return res.status(400).json({ error: `Maximum allowed employees on leave reached for date: ${date}` });
+          await connection.rollback();
+          return res.status(400).json({ error: \`Maximum allowed employees on leave reached for date: \${date}\` });
         }
 
-        // Substitute Check: Can't take leave if you are acting as a substitute for someone else that day
-        const subCheckResult = await client.query(`
+        // Substitute Check
+        const [subCheckRows] = await connection.query(`
           SELECT e.name 
           FROM leave_applications a
           JOIN leave_application_dates d ON a.id = d.leave_application_id
           JOIN employees e ON a.employee_id = e.id
-          WHERE a.substitute_employee_id = $1
-            AND d.leave_date = $2
+          WHERE a.substitute_employee_id = ?
+            AND d.leave_date = ?
             AND a.status IN ('pending', 'approved')
         `, [employee_id, date]);
 
-        if (subCheckResult.rows.length > 0) {
-          await client.query('ROLLBACK');
-          const requesterName = subCheckResult.rows[0].name;
-          return res.status(400).json({ error: `You cannot take leave on ${date} because you are assigned as a substitute for ${requesterName}.` });
+        if (subCheckRows.length > 0) {
+          await connection.rollback();
+          const requesterName = subCheckRows[0].name;
+          return res.status(400).json({ error: \`You cannot take leave on \${date} because you are assigned as a substitute for \${requesterName}.\` });
         }
 
-        // Double Substitute Check: Can't be assigned as a substitute if already substituting for someone else that day
+        // Double Substitute Check
         if (substitute_employee_id) {
-          const doubleSubCheck = await client.query(`
+          const [doubleSubCheck] = await connection.query(`
             SELECT e.name 
             FROM leave_applications a
             JOIN leave_application_dates d ON a.id = d.leave_application_id
             JOIN employees e ON a.employee_id = e.id
-            WHERE a.substitute_employee_id = $1
-              AND d.leave_date = $2
+            WHERE a.substitute_employee_id = ?
+              AND d.leave_date = ?
               AND a.status IN ('pending', 'approved')
           `, [substitute_employee_id, date]);
 
-          if (doubleSubCheck.rows.length > 0) {
-            await client.query('ROLLBACK');
-            const requesterName = doubleSubCheck.rows[0].name;
-            const subEmpResult = await client.query('SELECT name FROM employees WHERE id = $1', [substitute_employee_id]);
-            const subName = subEmpResult.rows[0]?.name || 'the selected substitute';
-            return res.status(400).json({ error: `${subName} cannot be your substitute on ${date} because they are already substituting for ${requesterName}.` });
+          if (doubleSubCheck.length > 0) {
+            await connection.rollback();
+            const requesterName = doubleSubCheck[0].name;
+            const [subEmpRows] = await connection.query('SELECT name FROM employees WHERE id = ?', [substitute_employee_id]);
+            const subName = subEmpRows[0]?.name || 'the selected substitute';
+            return res.status(400).json({ error: \`\${subName} cannot be your substitute on \${date} because they are already substituting for \${requesterName}.\` });
           }
         }
       }
     }
     
-    const appResult = await client.query(
-      `INSERT INTO leave_applications (employee_id, substitute_employee_id, leave_type, applied_date, returning_date, status) 
-       VALUES ($1, $2, $3, $4, $5, 'pending') RETURNING id`,
+    const [appResult] = await connection.query(
+      \`INSERT INTO leave_applications (employee_id, substitute_employee_id, leave_type, applied_date, returning_date, status) 
+       VALUES (?, ?, ?, ?, ?, 'pending')\`,
       [employee_id, substitute_employee_id || null, leave_type, appliedDate, returningDate]
     );
     
-    const appId = appResult.rows[0].id;
+    const appId = appResult.insertId;
     
     if (leaveDates && leaveDates.length > 0) {
       for (const date of leaveDates) {
-        await client.query(
-          'INSERT INTO leave_application_dates (leave_application_id, leave_date) VALUES ($1, $2)',
+        await connection.query(
+          'INSERT INTO leave_application_dates (leave_application_id, leave_date) VALUES (?, ?)',
           [appId, date]
         );
       }
     }
     
-    
-    // Immediately deduct the balance since the request is pending and takes up quota
     if (requestedDays > 0) {
       let updateCol = '';
       if (leave_type === 'annual') updateCol = 'annual_taken';
@@ -174,44 +172,42 @@ router.post('/', async (req, res) => {
 
       if (updateCol) {
         const currentYear = new Date().getFullYear();
-        await client.query(`
-          UPDATE leave_balances SET ${updateCol} = ${updateCol} + $1 
-          WHERE employee_id = $2 AND year = $3
+        await connection.query(`
+          UPDATE leave_balances SET \${updateCol} = \${updateCol} + ? 
+          WHERE employee_id = ? AND year = ?
         `, [requestedDays, employee_id, currentYear]);
       }
     }
 
-    await client.query('COMMIT');
-    
+    await connection.commit();
     res.status(201).json({ id: appId, message: 'Application submitted successfully' });
   } catch (err) {
-    await client.query('ROLLBACK');
+    await connection.rollback();
     console.error(err);
     res.status(500).json({ error: 'Server error', details: err.message });
   } finally {
-    client.release();
+    connection.release();
   }
 });
 
 router.put('/:id/status', async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
-  const client = await pool.connect();
+  const connection = await pool.getConnection();
   
   try {
-    await client.query('BEGIN');
+    await connection.beginTransaction();
     
-    const appResult = await client.query('SELECT * FROM leave_applications WHERE id = $1', [id]);
-    if (appResult.rows.length === 0) {
-      await client.query('ROLLBACK');
+    const [appRows] = await connection.query('SELECT * FROM leave_applications WHERE id = ?', [id]);
+    if (appRows.length === 0) {
+      await connection.rollback();
       return res.status(404).json({ error: 'Application not found' });
     }
-    const app = appResult.rows[0];
+    const app = appRows[0];
 
-    // If changing to 'rejected' from an active state (refund)
     if (app.status !== 'rejected' && status === 'rejected') {
-      const daysResult = await client.query('SELECT COUNT(*) FROM leave_application_dates WHERE leave_application_id = $1', [id]);
-      const requestedDays = parseInt(daysResult.rows[0].count);
+      const [daysRows] = await connection.query('SELECT COUNT(*) AS count FROM leave_application_dates WHERE leave_application_id = ?', [id]);
+      const requestedDays = parseInt(daysRows[0].count);
       const currentYear = new Date(app.applied_date).getFullYear();
 
       let updateCol = '';
@@ -220,22 +216,20 @@ router.put('/:id/status', async (req, res) => {
       else if (app.leave_type === 'casual') updateCol = 'casual_taken';
 
       if (updateCol) {
-        await client.query(`
-          UPDATE leave_balances SET ${updateCol} = ${updateCol} - $1 
-          WHERE employee_id = $2 AND year = $3
+        await connection.query(`
+          UPDATE leave_balances SET \${updateCol} = \${updateCol} - ? 
+          WHERE employee_id = ? AND year = ?
         `, [requestedDays, app.employee_id, currentYear]);
       }
     } 
-    // If changing from 'rejected' to an active state (deduct)
     else if (app.status === 'rejected' && status !== 'rejected') {
-      const daysResult = await client.query('SELECT COUNT(*) FROM leave_application_dates WHERE leave_application_id = $1', [id]);
-      const requestedDays = parseInt(daysResult.rows[0].count);
+      const [daysRows] = await connection.query('SELECT COUNT(*) AS count FROM leave_application_dates WHERE leave_application_id = ?', [id]);
+      const requestedDays = parseInt(daysRows[0].count);
       const currentYear = new Date(app.applied_date).getFullYear();
 
-      await client.query(`
-        INSERT INTO leave_balances (employee_id, year, annual_taken, sick_taken, casual_taken) 
-        VALUES ($1, $2, 0, 0, 0) 
-        ON CONFLICT (employee_id, year) DO NOTHING
+      await connection.query(`
+        INSERT IGNORE INTO leave_balances (employee_id, year, annual_taken, sick_taken, casual_taken) 
+        VALUES (?, ?, 0, 0, 0)
       `, [app.employee_id, currentYear]);
 
       let updateCol = '';
@@ -244,26 +238,27 @@ router.put('/:id/status', async (req, res) => {
       else if (app.leave_type === 'casual') updateCol = 'casual_taken';
 
       if (updateCol) {
-        await client.query(`
-          UPDATE leave_balances SET ${updateCol} = ${updateCol} + $1 
-          WHERE employee_id = $2 AND year = $3
+        await connection.query(`
+          UPDATE leave_balances SET \${updateCol} = \${updateCol} + ? 
+          WHERE employee_id = ? AND year = ?
         `, [requestedDays, app.employee_id, currentYear]);
       }
     }
 
-    const result = await client.query(
-      'UPDATE leave_applications SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
+    await connection.query(
+      'UPDATE leave_applications SET status = ? WHERE id = ?',
       [status, id]
     );
 
-    await client.query('COMMIT');
-    res.json(result.rows[0]);
+    const [updatedRows] = await connection.query('SELECT * FROM leave_applications WHERE id = ?', [id]);
+    await connection.commit();
+    res.json(updatedRows[0]);
   } catch (err) {
-    await client.query('ROLLBACK');
+    await connection.rollback();
     console.error(err);
     res.status(500).json({ error: 'Server error', details: err.message });
   } finally {
-    client.release();
+    connection.release();
   }
 });
 
@@ -272,24 +267,23 @@ router.put('/:id/confirm', async (req, res) => {
   const { secretCode } = req.body;
   
   try {
-    // First, verify the secret code belongs to the designated substitute
-    const appResult = await pool.query('SELECT substitute_employee_id FROM leave_applications WHERE id = $1', [id]);
-    if (appResult.rows.length === 0) return res.status(404).json({ error: 'Application not found' });
+    const [appRows] = await pool.query('SELECT substitute_employee_id FROM leave_applications WHERE id = ?', [id]);
+    if (appRows.length === 0) return res.status(404).json({ error: 'Application not found' });
     
-    const { substitute_employee_id } = appResult.rows[0];
+    const { substitute_employee_id } = appRows[0];
     if (!substitute_employee_id) return res.status(400).json({ error: 'No substitute assigned' });
     
-    const empResult = await pool.query('SELECT id FROM employees WHERE secret_code = $1 AND id = $2', [secretCode, substitute_employee_id]);
-    if (empResult.rows.length === 0) {
+    const [empRows] = await pool.query('SELECT id FROM employees WHERE secret_code = ? AND id = ?', [secretCode, substitute_employee_id]);
+    if (empRows.length === 0) {
       return res.status(401).json({ error: 'Invalid secret code for the designated substitute.' });
     }
     
-    // Update the application
-    const result = await pool.query(
-      'UPDATE leave_applications SET substitute_confirmed = true, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *',
+    await pool.query(
+      'UPDATE leave_applications SET substitute_confirmed = true WHERE id = ?',
       [id]
     );
-    res.json(result.rows[0]);
+    const [updatedRows] = await pool.query('SELECT * FROM leave_applications WHERE id = ?', [id]);
+    res.json(updatedRows[0]);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error', details: err.message });
@@ -298,27 +292,26 @@ router.put('/:id/confirm', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   const { id } = req.params;
-  const client = await pool.connect();
+  const connection = await pool.getConnection();
   
   try {
-    await client.query('BEGIN');
+    await connection.beginTransaction();
     
-    const appResult = await client.query('SELECT * FROM leave_applications WHERE id = $1', [id]);
-    if (appResult.rows.length === 0) {
-      await client.query('ROLLBACK');
+    const [appRows] = await connection.query('SELECT * FROM leave_applications WHERE id = ?', [id]);
+    if (appRows.length === 0) {
+      await connection.rollback();
       return res.status(404).json({ error: 'Application not found' });
     }
     
-    const app = appResult.rows[0];
+    const app = appRows[0];
     
     if (app.status !== 'pending') {
-      await client.query('ROLLBACK');
+      await connection.rollback();
       return res.status(400).json({ error: 'Can only undo pending applications' });
     }
     
-    // Refund the leave balance since it was deducted on submission
-    const daysResult = await client.query('SELECT COUNT(*) FROM leave_application_dates WHERE leave_application_id = $1', [id]);
-    const requestedDays = parseInt(daysResult.rows[0].count);
+    const [daysRows] = await connection.query('SELECT COUNT(*) AS count FROM leave_application_dates WHERE leave_application_id = ?', [id]);
+    const requestedDays = parseInt(daysRows[0].count);
     const currentYear = new Date(app.applied_date).getFullYear();
 
     let updateCol = '';
@@ -327,32 +320,30 @@ router.delete('/:id', async (req, res) => {
     else if (app.leave_type === 'casual') updateCol = 'casual_taken';
 
     if (updateCol) {
-      await client.query(`
-        UPDATE leave_balances SET ${updateCol} = ${updateCol} - $1 
-        WHERE employee_id = $2 AND year = $3
+      await connection.query(`
+        UPDATE leave_balances SET \${updateCol} = \${updateCol} - ? 
+        WHERE employee_id = ? AND year = ?
       `, [requestedDays, app.employee_id, currentYear]);
     }
     
-    await client.query('DELETE FROM leave_application_dates WHERE leave_application_id = $1', [id]);
-    await client.query('DELETE FROM leave_applications WHERE id = $1', [id]);
+    await connection.query('DELETE FROM leave_application_dates WHERE leave_application_id = ?', [id]);
+    await connection.query('DELETE FROM leave_applications WHERE id = ?', [id]);
     
-    await client.query('COMMIT');
+    await connection.commit();
     res.json({ success: true, message: 'Application deleted successfully' });
   } catch (err) {
-    await client.query('ROLLBACK');
+    await connection.rollback();
     console.error(err);
     res.status(500).json({ error: 'Server error', details: err.message });
   } finally {
-    client.release();
+    connection.release();
   }
 });
 
-// GET /api/applications/overview/:secretCode — employee leave overview
 router.get('/overview/:secretCode', async (req, res) => {
   const { secretCode } = req.params;
   try {
-    // Lookup employee
-    const empResult = await pool.query(`
+    const [empRows] = await pool.query(`
       SELECT e.id, e.name, e.role_id, e.branch_id,
              r.title AS role_title,
              b.name AS branch_name,
@@ -361,49 +352,46 @@ router.get('/overview/:secretCode', async (req, res) => {
       LEFT JOIN roles r ON e.role_id = r.id
       LEFT JOIN branches b ON e.branch_id = b.id
       LEFT JOIN departments d ON r.department_id = d.id
-      WHERE e.secret_code = $1
+      WHERE e.secret_code = ?
     `, [secretCode]);
 
-    if (empResult.rows.length === 0) {
+    if (empRows.length === 0) {
       return res.status(404).json({ error: 'Employee not found' });
     }
 
-    const emp = empResult.rows[0];
+    const emp = empRows[0];
     const year = new Date().getFullYear();
 
-    // Get leave balance for this year
-    const balanceResult = await pool.query(`
+    const [balanceRows] = await pool.query(`
       SELECT annual_taken, sick_taken, casual_taken
       FROM leave_balances
-      WHERE employee_id = $1 AND year = $2
+      WHERE employee_id = ? AND year = ?
     `, [emp.id, year]);
 
-    const balance = balanceResult.rows[0] || { annual_taken: 0, sick_taken: 0, casual_taken: 0 };
+    const balance = balanceRows[0] || { annual_taken: 0, sick_taken: 0, casual_taken: 0 };
 
-    // Get leave rules for this employee's role + branch
-    const rulesResult = await pool.query(`
+    const [rulesRows] = await pool.query(`
       SELECT annual_leave, sick_leave, casual_leave, max_per_day
       FROM leave_rules
-      WHERE role_id = $1 AND branch_id = $2
+      WHERE role_id = ? AND branch_id = ?
     `, [emp.role_id, emp.branch_id]);
 
-    const rules = rulesResult.rows[0] || { annual_leave: 14, sick_leave: 10, casual_leave: 7, max_per_day: 1 };
+    const rules = rulesRows[0] || { annual_leave: 14, sick_leave: 10, casual_leave: 7, max_per_day: 1 };
 
-    // Get all leave applications for this employee
-    const appsResult = await pool.query(`
+    const [appsRows] = await pool.query(`
       SELECT 
         a.id, a.leave_type, a.applied_date, a.returning_date,
         a.substitute_confirmed, a.status, a.created_at,
         sub.name AS substitute_name,
         COALESCE(
-          (SELECT array_agg(d.leave_date::text ORDER BY d.leave_date)
+          (SELECT JSON_ARRAYAGG(DATE_FORMAT(d.leave_date, '%Y-%m-%d'))
            FROM leave_application_dates d
            WHERE d.leave_application_id = a.id),
-          '{}'
+          JSON_ARRAY()
         ) AS leave_dates
       FROM leave_applications a
       LEFT JOIN employees sub ON a.substitute_employee_id = sub.id
-      WHERE a.employee_id = $1
+      WHERE a.employee_id = ?
       ORDER BY a.created_at DESC
     `, [emp.id]);
 
@@ -425,7 +413,7 @@ router.get('/overview/:secretCode', async (req, res) => {
         sick_leave: rules.sick_leave,
         casual_leave: rules.casual_leave,
       },
-      applications: appsResult.rows.map(row => ({
+      applications: appsRows.map(row => ({
         id: row.id,
         leave_type: row.leave_type,
         appliedDate: row.applied_date,
@@ -433,7 +421,7 @@ router.get('/overview/:secretCode', async (req, res) => {
         substituteConfirmed: row.substitute_confirmed,
         substituteName: row.substitute_name,
         status: row.status,
-        leaveDates: row.leave_dates,
+        leaveDates: typeof row.leave_dates === 'string' ? JSON.parse(row.leave_dates) : row.leave_dates || [],
       })),
     });
   } catch (err) {
@@ -443,4 +431,3 @@ router.get('/overview/:secretCode', async (req, res) => {
 });
 
 export default router;
-

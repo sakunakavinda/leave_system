@@ -6,8 +6,8 @@ const router = express.Router();
 // GET all branches
 router.get('/', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM branches ORDER BY created_at ASC');
-    res.json(result.rows);
+    const [rows] = await pool.query('SELECT * FROM branches ORDER BY created_at ASC');
+    res.json(rows);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
@@ -18,22 +18,25 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   const { name, location, status, manager_id } = req.body;
   try {
-    const result = await pool.query(
-      'INSERT INTO branches (name, location, status) VALUES ($1, $2, $3) RETURNING *',
+    const [result] = await pool.query(
+      'INSERT INTO branches (name, location, status) VALUES (?, ?, ?)',
       [name, location, status || 'active']
     );
-    const branch = result.rows[0];
+    const branchId = result.insertId;
+    
+    const [branchRows] = await pool.query('SELECT * FROM branches WHERE id = ?', [branchId]);
+    const branch = branchRows[0];
     
     if (manager_id) {
-      await pool.query('UPDATE managers SET branch_id = $1 WHERE id = $2', [branch.id, manager_id]);
+      await pool.query('UPDATE managers SET branch_id = ? WHERE id = ?', [branchId, manager_id]);
     }
     
     // Auto-generate default leave rules for all existing roles
-    const rolesResult = await pool.query('SELECT id FROM roles');
-    for (const r of rolesResult.rows) {
+    const [rolesRows] = await pool.query('SELECT id FROM roles');
+    for (const r of rolesRows) {
       await pool.query(
-        'INSERT INTO leave_rules (role_id, branch_id) VALUES ($1, $2) ON CONFLICT (role_id, branch_id) DO NOTHING',
-        [r.id, branch.id]
+        'INSERT IGNORE INTO leave_rules (role_id, branch_id) VALUES (?, ?)',
+        [r.id, branchId]
       );
     }
 
@@ -49,21 +52,23 @@ router.put('/:id', async (req, res) => {
   const { id } = req.params;
   const { name, location, status, manager_id } = req.body;
   try {
-    const result = await pool.query(
-      'UPDATE branches SET name = $1, location = $2, status = $3 WHERE id = $4 RETURNING *',
+    const [result] = await pool.query(
+      'UPDATE branches SET name = ?, location = ?, status = ? WHERE id = ?',
       [name, location, status, id]
     );
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Branch not found' });
+    
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Branch not found' });
     
     // Unlink old managers for this branch
-    await pool.query('UPDATE managers SET branch_id = NULL WHERE branch_id = $1', [id]);
+    await pool.query('UPDATE managers SET branch_id = NULL WHERE branch_id = ?', [id]);
     
     // Link new manager
     if (manager_id) {
-      await pool.query('UPDATE managers SET branch_id = $1 WHERE id = $2', [id, manager_id]);
+      await pool.query('UPDATE managers SET branch_id = ? WHERE id = ?', [id, manager_id]);
     }
     
-    res.json(result.rows[0]);
+    const [branchRows] = await pool.query('SELECT * FROM branches WHERE id = ?', [id]);
+    res.json(branchRows[0]);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
@@ -74,8 +79,10 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    const result = await pool.query('DELETE FROM branches WHERE id = $1 RETURNING *', [id]);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Branch not found' });
+    const [branchRows] = await pool.query('SELECT * FROM branches WHERE id = ?', [id]);
+    if (branchRows.length === 0) return res.status(404).json({ error: 'Branch not found' });
+    
+    await pool.query('DELETE FROM branches WHERE id = ?', [id]);
     res.json({ message: 'Branch deleted' });
   } catch (err) {
     console.error(err);

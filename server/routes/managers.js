@@ -10,26 +10,27 @@ const hashPassword = (password) => {
 
 router.get('/', async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, username, role, branch_id, status, created_at FROM managers ORDER BY created_at ASC');
-    res.json(result.rows);
+    const [rows] = await pool.query('SELECT id, username, role, branch_id, status, created_at FROM managers ORDER BY created_at ASC');
+    res.json(rows);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
   }
 });
+
 router.post('/login', async (req, res) => {
   const { username, password } = req.body;
   const hash = hashPassword(password || '');
   
   try {
-    const result = await pool.query(
-      'SELECT id, username, role, branch_id, status FROM managers WHERE username = $1 AND password_hash = $2 AND status = $3',
+    const [rows] = await pool.query(
+      'SELECT id, username, role, branch_id, status FROM managers WHERE username = ? AND password_hash = ? AND status = ?',
       [username, hash, 'active']
     );
-    if (result.rows.length === 0) {
+    if (rows.length === 0) {
       return res.status(401).json({ error: 'Invalid username or password' });
     }
-    res.json(result.rows[0]);
+    res.json(rows[0]);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
@@ -41,11 +42,15 @@ router.post('/', async (req, res) => {
   const hash = hashPassword(password || 'password');
   
   try {
-    const result = await pool.query(
-      'INSERT INTO managers (username, password_hash, role, branch_id, status) VALUES ($1, $2, $3, $4, $5) RETURNING id, username, role, branch_id, status, created_at',
+    const [result] = await pool.query(
+      'INSERT INTO managers (username, password_hash, role, branch_id, status) VALUES (?, ?, ?, ?, ?)',
       [username, hash, role || 'manager', branch_id || null, status || 'active']
     );
-    res.status(201).json(result.rows[0]);
+    const [rows] = await pool.query(
+      'SELECT id, username, role, branch_id, status, created_at FROM managers WHERE id = ?',
+      [result.insertId]
+    );
+    res.status(201).json(rows[0]);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
@@ -60,19 +65,24 @@ router.put('/:id', async (req, res) => {
     let result;
     if (password && password.trim() !== '') {
       const hash = hashPassword(password);
-      result = await pool.query(
-        'UPDATE managers SET username = $1, password_hash = $2, role = $3, branch_id = $4, status = $5 WHERE id = $6 RETURNING id, username, role, branch_id, status',
+      [result] = await pool.query(
+        'UPDATE managers SET username = ?, password_hash = ?, role = ?, branch_id = ?, status = ? WHERE id = ?',
         [username, hash, role, branch_id || null, status, id]
       );
     } else {
-      result = await pool.query(
-        'UPDATE managers SET username = $1, role = $2, branch_id = $3, status = $4 WHERE id = $5 RETURNING id, username, role, branch_id, status',
+      [result] = await pool.query(
+        'UPDATE managers SET username = ?, role = ?, branch_id = ?, status = ? WHERE id = ?',
         [username, role, branch_id || null, status, id]
       );
     }
     
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Manager not found' });
-    res.json(result.rows[0]);
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Manager not found' });
+    
+    const [rows] = await pool.query(
+      'SELECT id, username, role, branch_id, status FROM managers WHERE id = ?',
+      [id]
+    );
+    res.json(rows[0]);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
@@ -82,8 +92,10 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    const result = await pool.query('DELETE FROM managers WHERE id = $1 RETURNING id', [id]);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Manager not found' });
+    const [rows] = await pool.query('SELECT id FROM managers WHERE id = ?', [id]);
+    if (rows.length === 0) return res.status(404).json({ error: 'Manager not found' });
+    
+    await pool.query('DELETE FROM managers WHERE id = ?', [id]);
     res.json({ message: 'Manager deleted' });
   } catch (err) {
     console.error(err);

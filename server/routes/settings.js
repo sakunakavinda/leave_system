@@ -6,9 +6,9 @@ const router = express.Router();
 // GET /api/settings - Fetch all settings
 router.get('/', async (req, res) => {
   try {
-    const result = await pool.query('SELECT setting_key, setting_value FROM settings');
+    const [rows] = await pool.query('SELECT setting_key, setting_value FROM settings');
     const settings = {};
-    result.rows.forEach(row => {
+    rows.forEach(row => {
       settings[row.setting_key] = row.setting_value;
     });
     res.json(settings);
@@ -21,27 +21,27 @@ router.get('/', async (req, res) => {
 // PUT /api/settings - Update settings
 router.put('/', async (req, res) => {
   const settingsData = req.body;
-  const client = await pool.connect();
+  const connection = await pool.getConnection();
   
   try {
-    await client.query('BEGIN');
+    await connection.beginTransaction();
     
     for (const [key, value] of Object.entries(settingsData)) {
-      await client.query(`
+      await connection.query(`
         INSERT INTO settings (setting_key, setting_value) 
-        VALUES ($1, $2)
-        ON CONFLICT (setting_key) DO UPDATE SET setting_value = $2
+        VALUES (?, ?)
+        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
       `, [key, value]);
     }
     
-    await client.query('COMMIT');
+    await connection.commit();
     res.json({ message: 'Settings updated successfully' });
   } catch (err) {
-    await client.query('ROLLBACK');
+    await connection.rollback();
     console.error(err);
     res.status(500).json({ error: 'Server error updating settings', details: err.message });
   } finally {
-    client.release();
+    connection.release();
   }
 });
 

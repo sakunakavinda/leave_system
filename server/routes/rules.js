@@ -5,8 +5,8 @@ const router = express.Router();
 
 router.get('/', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM leave_rules ORDER BY created_at ASC');
-    res.json(result.rows);
+    const [rows] = await pool.query('SELECT * FROM leave_rules ORDER BY created_at ASC');
+    res.json(rows);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
@@ -17,21 +17,19 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   const { role_id, branch_id, annualLeave, sickLeave, casualLeave, maxPerDay, status } = req.body;
   try {
-    const result = await pool.query(
+    const [result] = await pool.query(
       `INSERT INTO leave_rules (role_id, branch_id, annual_leave, sick_leave, casual_leave, max_per_day, status) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       ON CONFLICT (role_id, branch_id) 
-       DO UPDATE SET 
-         annual_leave = EXCLUDED.annual_leave,
-         sick_leave = EXCLUDED.sick_leave,
-         casual_leave = EXCLUDED.casual_leave,
-         max_per_day = EXCLUDED.max_per_day,
-         status = EXCLUDED.status,
-         updated_at = CURRENT_TIMESTAMP
-       RETURNING *`,
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE 
+         annual_leave = VALUES(annual_leave),
+         sick_leave = VALUES(sick_leave),
+         casual_leave = VALUES(casual_leave),
+         max_per_day = VALUES(max_per_day),
+         status = VALUES(status)`,
       [role_id, branch_id, annualLeave || 14, sickLeave || 10, casualLeave || 7, maxPerDay || 1, status || 'active']
     );
-    res.status(200).json(result.rows[0]);
+    const [rows] = await pool.query('SELECT * FROM leave_rules WHERE role_id = ? AND branch_id = ?', [role_id, branch_id]);
+    res.status(200).json(rows[0]);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
@@ -42,12 +40,14 @@ router.put('/:id', async (req, res) => {
   const { id } = req.params;
   const { annualLeave, sickLeave, casualLeave, maxPerDay, status } = req.body;
   try {
-    const result = await pool.query(
-      'UPDATE leave_rules SET annual_leave = $1, sick_leave = $2, casual_leave = $3, max_per_day = $4, status = $5 WHERE id = $6 RETURNING *',
+    const [result] = await pool.query(
+      'UPDATE leave_rules SET annual_leave = ?, sick_leave = ?, casual_leave = ?, max_per_day = ?, status = ? WHERE id = ?',
       [annualLeave, sickLeave, casualLeave, maxPerDay, status, id]
     );
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Rule not found' });
-    res.json(result.rows[0]);
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Rule not found' });
+    
+    const [rows] = await pool.query('SELECT * FROM leave_rules WHERE id = ?', [id]);
+    res.json(rows[0]);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
