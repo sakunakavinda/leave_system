@@ -1693,13 +1693,13 @@ export function ManageBranches({ branches, setBranches, employees, managers, set
   }
   const closeModal = ()  => setModal(null)
 
-  const getEmployeeCount = (branchName) => {
-    return employees ? employees.filter(e => e.branch === branchName).length : 0
+  const getEmployeeCount = (branchId) => {
+    return employees ? employees.filter(e => e.branch_id === branchId).length : 0
   }
 
   const handleSave = async () => {
     if (!form.name.trim()) return
-    const empCount = getEmployeeCount(form.name)
+    const empCount = modal === 'add' ? 0 : getEmployeeCount(modal.id)
     
     try {
       let savedBranchId = '';
@@ -1789,7 +1789,7 @@ export function ManageBranches({ branches, setBranches, employees, managers, set
                 <td style={{ color:'var(--text-secondary)' }}>{br.location}</td>
                 <td>{getBranchManager(br.id)?.username || '—'}</td>
                 <td>
-                  <span style={{ fontWeight:600, color:'var(--text-primary)' }}>{getEmployeeCount(br.name)}</span>
+                  <span style={{ fontWeight:600, color:'var(--text-primary)' }}>{getEmployeeCount(br.id)}</span>
                   <span style={{ fontSize:'12px', color:'var(--text-muted)', marginLeft:4 }}>staff</span>
                 </td>
                 <td>
