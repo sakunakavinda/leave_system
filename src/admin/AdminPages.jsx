@@ -115,7 +115,9 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
   const currentMonth = now.getMonth()
   const currentYear = now.getFullYear()
 
-  const timeFiltered = applications.filter(app => {
+  const validApplications = applications.filter(app => !app.substitute_employee_id || app.substituteConfirmed)
+
+  const timeFiltered = validApplications.filter(app => {
     if (timeFilter === 'all') return true
     const d = new Date(app.appliedDate || app.applied_date || app.leaveDates?.[0] || now)
     if (timeFilter === 'this_year') return d.getFullYear() === currentYear
@@ -177,7 +179,7 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
     cells.push({ date: d, isCurrentMonth: false, dateString: getYYYYMMDD(d) })
   }
 
-  const calendarApprovedLeaves = applications.filter(app => {
+  const calendarApprovedLeaves = validApplications.filter(app => {
     if (app.status !== 'approved') return false
     const emp = getEmp(app.employee_id)
     const matchBranch = branchFilter === 'all' || emp.branch_id === branchFilter
