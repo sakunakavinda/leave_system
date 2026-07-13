@@ -5,6 +5,7 @@ import LeaveList from './LeaveList.jsx'
 import LeaveOverview from './LeaveOverview.jsx'
 import SubstitutionsList from './SubstitutionsList.jsx'
 import { api } from './api.js'
+import { applyTheme } from './admin/theme.js'
 
 const getMinLeaveDate = () => {
   const minDate = new Date()
@@ -47,6 +48,9 @@ function App() {
         setEmployees(emps);
         setSubmissions(apps);
         setSettings(sysSettings);
+        if (sysSettings.theme_color) {
+          applyTheme(sysSettings.theme_color);
+        }
         setLoading(false);
       } catch (err) {
         console.error("Failed to load data", err);
