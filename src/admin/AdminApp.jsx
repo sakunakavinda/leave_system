@@ -165,9 +165,14 @@ export default function AdminApp() {
         setRules(rls_rules);
         setSettings(stgs);
         if (stgs.theme_color) {
-          applyTheme(stgs.theme_color);
+          applyTheme(stgs.theme_color, 'primary');
         } else {
-          applyTheme('orange');
+          applyTheme('orange', 'primary');
+        }
+        if (stgs.theme_color_secondary) {
+          applyTheme(stgs.theme_color_secondary, 'secondary');
+        } else {
+          applyTheme('orange', 'secondary');
         }
         setLoading(false);
       } catch (err) {

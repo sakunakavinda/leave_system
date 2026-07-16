@@ -79,12 +79,17 @@ export const APP_THEMES = {
   }
 };
 
-export const applyTheme = (themeName) => {
+export const applyTheme = (themeName, type = 'primary') => {
   const theme = APP_THEMES[themeName];
   if (!theme) return;
   
   const root = document.documentElement;
+  const suffix = type === 'secondary' ? '-secondary' : '';
+  
   Object.entries(theme).forEach(([key, value]) => {
-    root.style.setProperty(key, value);
+    // key is like '--accent', '--accent-light' etc.
+    // we want to inject '-secondary' before the end of the key if type is secondary
+    const newKey = type === 'secondary' ? key.replace('--accent', '--accent-secondary') : key;
+    root.style.setProperty(newKey, value);
   });
 };

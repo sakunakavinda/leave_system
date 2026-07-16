@@ -2504,6 +2504,7 @@ export function AccountSettings({ currentUser, setCurrentUser, setManagers, onCl
 export function SystemSettings() {
   const [logoBase64, setLogoBase64] = useState(null)
   const [themeColor, setThemeColor] = useState('orange')
+  const [themeColorSecondary, setThemeColorSecondary] = useState('orange')
   const [toast, setToast] = useState(null)
   const [loading, setLoading] = useState(false)
 
@@ -2513,6 +2514,7 @@ export function SystemSettings() {
         const data = await api.getSettings()
         if (data.company_logo) setLogoBase64(data.company_logo)
         if (data.theme_color) setThemeColor(data.theme_color)
+        if (data.theme_color_secondary) setThemeColorSecondary(data.theme_color_secondary)
       } catch (err) {
         console.error("Failed to load settings", err)
       }
@@ -2522,7 +2524,12 @@ export function SystemSettings() {
 
   const handleThemeSelect = (colorName) => {
     setThemeColor(colorName)
-    applyTheme(colorName)
+    applyTheme(colorName, 'primary')
+  }
+
+  const handleSecondaryThemeSelect = (colorName) => {
+    setThemeColorSecondary(colorName)
+    applyTheme(colorName, 'secondary')
   }
 
   const handleFileChange = (e) => {
@@ -2543,7 +2550,7 @@ export function SystemSettings() {
   const handleSave = async () => {
     setLoading(true)
     try {
-      await api.updateSettings({ company_logo: logoBase64, theme_color: themeColor })
+      await api.updateSettings({ company_logo: logoBase64, theme_color: themeColor, theme_color_secondary: themeColorSecondary })
       setToast({ msg: 'Settings saved successfully', type: 'success' })
       setTimeout(() => setToast(null), 3000)
     } catch (err) {
@@ -2614,7 +2621,7 @@ export function SystemSettings() {
         </div>
 
         <div className="admin-form-group" style={{ marginTop: '32px' }}>
-          <label style={{ display: 'block', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>Accent Theme Color</label>
+          <label style={{ display: 'block', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>Primary Accent Theme Color</label>
           <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
             {Object.keys(APP_THEMES).map(themeName => (
               <div
@@ -2634,6 +2641,30 @@ export function SystemSettings() {
           </div>
           <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '12px', lineHeight: '1.5' }}>
             Select the primary brand color for the entire dashboard. This setting applies globally to all users.
+          </p>
+        </div>
+
+        <div className="admin-form-group" style={{ marginTop: '32px' }}>
+          <label style={{ display: 'block', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>Secondary Accent Theme Color</label>
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+            {Object.keys(APP_THEMES).map(themeName => (
+              <div
+                key={themeName}
+                onClick={() => handleSecondaryThemeSelect(themeName)}
+                style={{
+                  width: '40px', height: '40px', borderRadius: '50%', cursor: 'pointer',
+                  background: APP_THEMES[themeName]['--accent-gradient'],
+                  border: themeColorSecondary === themeName ? '2px solid white' : '2px solid transparent',
+                  boxShadow: themeColorSecondary === themeName ? `0 0 16px ${APP_THEMES[themeName]['--accent-glow']}` : 'none',
+                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                  transform: themeColorSecondary === themeName ? 'scale(1.15)' : 'scale(1)'
+                }}
+                title={themeName.charAt(0).toUpperCase() + themeName.slice(1)}
+              />
+            ))}
+          </div>
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '12px', lineHeight: '1.5' }}>
+            Select the secondary brand color for buttons, chips, and highlights. This setting applies globally to all users.
           </p>
         </div>
       </div>

@@ -49,7 +49,12 @@ function App() {
         setSubmissions(apps);
         setSettings(sysSettings);
         if (sysSettings.theme_color) {
-          applyTheme(sysSettings.theme_color);
+          applyTheme(sysSettings.theme_color, 'primary');
+        }
+        if (sysSettings.theme_color_secondary) {
+          applyTheme(sysSettings.theme_color_secondary, 'secondary');
+        } else {
+          applyTheme('orange', 'secondary');
         }
         setLoading(false);
       } catch (err) {

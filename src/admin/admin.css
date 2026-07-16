@@ -1415,7 +1415,7 @@
 
 .overview-role-bar {
   height: 100%;
-  background: linear-gradient(90deg, #f97316, #fb923c);
+  background: var(--accent-gradient);
   border-radius: 99px;
   transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
   min-width: 4px;
@@ -1473,7 +1473,7 @@
   border-radius: 50%;
 }
 
-.leave-legend-annual { background: #f97316; }
+.leave-legend-annual { background: var(--accent); }
 .leave-legend-sick   { background: #fdcb6e; }
 .leave-legend-casual { background: #00b894; }
 .leave-legend-maxday { background: #e17055; }
@@ -1489,9 +1489,9 @@
 }
 
 .leave-days-annual {
-  background: rgba(249, 115, 22, 0.12);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--accent-light);
-  border: 1px solid rgba(249, 115, 22, 0.25);
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
 }
 
 .leave-days-sick {
@@ -1523,8 +1523,8 @@
 }
 
 .leave-field-annual input:focus {
-  border-color: #f97316;
-  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
 .leave-field-sick input:focus {
