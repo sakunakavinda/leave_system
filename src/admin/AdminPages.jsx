@@ -61,7 +61,7 @@ function formatDate(d) {
 /* ─────────────────────────────────────────────────────
    AdminDashboard
 ───────────────────────────────────────────────────── */
-export function AdminDashboard({ applications, onUpdateStatus, branches, employees, roles, departments, leaveRules }) {
+export function AdminDashboard({ applications, onUpdateStatus, branches, employees, roles, departments, leaveRules, onRefreshApplications }) {
   const [timeFilter, setTimeFilter]   = useState('this_month')
   const [reportEmp, setReportEmp]     = useState(null)
   const [filter, setFilter]           = useState('all')
@@ -74,6 +74,116 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
   })
   const [isCalendarExpanded, setIsCalendarExpanded] = useState(true)
   const [selectedDayLeaves, setSelectedDayLeaves] = useState(null)
+
+  // Special Leave Application state for Manager Override
+  const getTodayStr = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const [showSpecialModal, setShowSpecialModal] = useState(false);
+  const [specialError, setSpecialError] = useState('');
+  const [isSubmittingSpecial, setIsSubmittingSpecial] = useState(false);
+  const [specialBranchFilter, setSpecialBranchFilter] = useState('all');
+  const [specialEmpSearch, setSpecialEmpSearch] = useState('');
+  const [specialForm, setSpecialForm] = useState({
+    employee_id: '',
+    leave_type: 'annual',
+    leaveDates: [getTodayStr()],
+    returningDate: '',
+    substitute_employee_id: '',
+    status: 'approved',
+  });
+
+  const openSpecialModal = () => {
+    const today = getTodayStr();
+    setSpecialBranchFilter('all');
+    setSpecialEmpSearch('');
+    setSpecialForm({
+      employee_id: '',
+      leave_type: 'annual',
+      leaveDates: [today],
+      returningDate: '',
+      substitute_employee_id: '',
+      status: 'approved',
+    });
+    setSpecialError('');
+    setShowSpecialModal(true);
+  };
+
+  const updateReturningDate = (dates) => {
+    const validDates = dates.filter(Boolean);
+    if (validDates.length > 0) {
+      const maxDateStr = validDates.reduce((max, cur) => cur > max ? cur : max, validDates[0]);
+      const maxDate = new Date(maxDateStr);
+      maxDate.setDate(maxDate.getDate() + 1);
+      const year = maxDate.getFullYear();
+      const month = String(maxDate.getMonth() + 1).padStart(2, '0');
+      const day = String(maxDate.getDate()).padStart(2, '0');
+      setSpecialForm(prev => ({ ...prev, returningDate: `${year}-${month}-${day}` }));
+    } else {
+      setSpecialForm(prev => ({ ...prev, returningDate: '' }));
+    }
+  };
+
+  const handleSpecialDateChange = (idx, value) => {
+    const updated = [...specialForm.leaveDates];
+    updated[idx] = value;
+    setSpecialForm(prev => ({ ...prev, leaveDates: updated }));
+    updateReturningDate(updated);
+  };
+
+  const addSpecialDate = () => {
+    const updated = [...specialForm.leaveDates, getTodayStr()];
+    setSpecialForm(prev => ({ ...prev, leaveDates: updated }));
+    updateReturningDate(updated);
+  };
+
+  const removeSpecialDate = (idx) => {
+    const updated = specialForm.leaveDates.filter((_, i) => i !== idx);
+    setSpecialForm(prev => ({ ...prev, leaveDates: updated }));
+    updateReturningDate(updated);
+  };
+
+  const handleSpecialLeaveSubmit = async (e) => {
+    e.preventDefault();
+    if (!specialForm.employee_id) {
+      setSpecialError('Please select an employee.');
+      return;
+    }
+    const validDates = specialForm.leaveDates.filter(Boolean);
+    if (validDates.length === 0) {
+      setSpecialError('Please select at least one leave date.');
+      return;
+    }
+    setSpecialError('');
+    setIsSubmittingSpecial(true);
+
+    try {
+      const payload = {
+        employee_id: specialForm.employee_id,
+        isManagerOverride: true,
+        leave_type: specialForm.leave_type,
+        leaveDates: validDates,
+        returningDate: specialForm.returningDate,
+        substitute_employee_id: specialForm.substitute_employee_id || null,
+        status: specialForm.status,
+        appliedDate: getTodayStr(),
+      };
+
+      await api.addApplication(payload);
+      showToast('Special leave application scheduled successfully!', 'success');
+      setShowSpecialModal(false);
+      if (onRefreshApplications) await onRefreshApplications();
+    } catch (err) {
+      setSpecialError(err.message || 'Failed to schedule special leave.');
+    } finally {
+      setIsSubmittingSpecial(false);
+    }
+  };
 
   const getEmp = (id) => employees?.find(e => e.id === id) || {}
   const getRole = (id) => roles?.find(r => r.id === id) || {}
@@ -328,6 +438,16 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
           <option value="approved">Approved</option>
           <option value="rejected">Rejected</option>
         </select>
+        <button 
+          className="btn-primary" 
+          onClick={openSpecialModal} 
+          style={{ display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap', padding: '10px 16px', background: 'linear-gradient(135deg, var(--accent-primary), #6366f1)' }}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px' }}>
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+          </svg>
+          Special Leave Application
+        </button>
       </div>
 
       {/* Table */}
@@ -610,6 +730,261 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
             <div className="modal-footer">
               <button className="btn-primary" onClick={() => setSelectedDayLeaves(null)}>Close</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Special Leave Application Modal (Manager Override) ── */}
+      {showSpecialModal && (
+        <div className="modal-backdrop" onClick={() => setShowSpecialModal(false)}>
+          <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px', width: '90%' }}>
+            <div className="modal-header">
+              <div>
+                <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '20px', height: '20px' }}>
+                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                  </svg>
+                  Special Leave Application
+                </h3>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '4px 0 0' }}>
+                  Manager Override: Schedule leave for an employee for any date (including dates closer than 3 days).
+                </p>
+              </div>
+              <button className="modal-close" onClick={() => setShowSpecialModal(false)}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleSpecialLeaveSubmit}>
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '70vh', overflowY: 'auto' }}>
+                {specialError && (
+                  <div style={{ color: '#ff5252', fontSize: '13px', background: 'rgba(255,82,82,0.1)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,82,82,0.2)' }}>
+                    {specialError}
+                  </div>
+                )}
+
+                {/* Branch & Name Search Filter Controls */}
+                {(() => {
+                  const filteredEmps = employees.filter(e => {
+                    if (e.status !== 'active') return false;
+                    if (specialBranchFilter !== 'all' && e.branch_id !== specialBranchFilter) return false;
+                    if (specialEmpSearch.trim() !== '') {
+                      const q = specialEmpSearch.toLowerCase();
+                      return (e.name || '').toLowerCase().includes(q);
+                    }
+                    return true;
+                  });
+
+                  return (
+                    <>
+                      <div style={{ display: 'grid', gridTemplateColumns: branches.length > 1 ? '1fr 1fr' : '1fr', gap: '12px' }}>
+                        {branches.length > 1 && (
+                          <div className="form-group">
+                            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                              Filter by Branch
+                            </label>
+                            <select
+                              className="admin-filter-select"
+                              style={{ width: '100%' }}
+                              value={specialBranchFilter}
+                              onChange={e => setSpecialBranchFilter(e.target.value)}
+                            >
+                              <option value="all">All Branches</option>
+                              {branches.map(b => (
+                                <option key={b.id} value={b.id}>{b.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+
+                        <div className="form-group">
+                          <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                            Search Employee Name
+                          </label>
+                          <div className="admin-search-box" style={{ width: '100%', height: '42px', position: 'relative' }}>
+                            <svg className="s-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                            </svg>
+                            <input
+                              type="text"
+                              placeholder="Type name to search…"
+                              value={specialEmpSearch}
+                              onChange={e => setSpecialEmpSearch(e.target.value)}
+                              style={{ paddingRight: specialEmpSearch ? '28px' : '12px' }}
+                            />
+                            {specialEmpSearch && (
+                              <button
+                                type="button"
+                                onClick={() => setSpecialEmpSearch('')}
+                                style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '14px' }}
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Select Employee */}
+                      <div className="form-group">
+                        <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                          Select Employee <span style={{ color: '#f87171' }}>*</span>
+                          <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: '8px', fontWeight: 'normal' }}>
+                            ({filteredEmps.length} active employee{filteredEmps.length === 1 ? '' : 's'} available)
+                          </span>
+                        </label>
+                        <select
+                          className="admin-filter-select"
+                          style={{ width: '100%' }}
+                          value={specialForm.employee_id}
+                          onChange={e => {
+                            const empId = e.target.value;
+                            setSpecialForm(prev => ({ ...prev, employee_id: empId, substitute_employee_id: '' }));
+                          }}
+                          required
+                        >
+                          <option value="">-- Choose Employee --</option>
+                          {filteredEmps.length === 0 ? (
+                            <option value="" disabled>No active employees match your search/filter</option>
+                          ) : (
+                            filteredEmps.map(emp => {
+                              const br = getBranch(emp.branch_id);
+                              const rl = getRole(emp.role_id);
+                              return (
+                                <option key={emp.id} value={emp.id}>
+                                  {emp.name} ({br.name || 'Branch'} • {rl.title || 'Role'})
+                                </option>
+                              );
+                            })
+                          )}
+                        </select>
+                      </div>
+                    </>
+                  );
+                })()}
+
+                {/* Leave Type */}
+                <div className="form-group">
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                    Leave Type <span style={{ color: '#f87171' }}>*</span>
+                  </label>
+                  <select
+                    className="admin-filter-select"
+                    style={{ width: '100%' }}
+                    value={specialForm.leave_type}
+                    onChange={e => setSpecialForm(p => ({ ...p, leave_type: e.target.value }))}
+                    required
+                  >
+                    <option value="annual">Annual Leave</option>
+                    <option value="sick">Sick Leave</option>
+                    <option value="casual">Casual Leave</option>
+                  </select>
+                </div>
+
+                {/* Leave Dates */}
+                <div className="form-group">
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                    Leave Dates <span style={{ color: '#f87171' }}>*</span>
+                    <span style={{ fontSize: '12px', color: 'var(--accent-primary)', marginLeft: '8px', fontWeight: 'normal' }}>
+                      (Allowed dates closer than 3 days)
+                    </span>
+                  </label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {specialForm.leaveDates.map((ld, idx) => (
+                      <div key={idx} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <input
+                          type="date"
+                          className="admin-filter-select"
+                          style={{ flex: 1 }}
+                          value={ld}
+                          onChange={e => handleSpecialDateChange(idx, e.target.value)}
+                          required
+                        />
+                        {specialForm.leaveDates.length > 1 && (
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            onClick={() => removeSpecialDate(idx)}
+                            style={{ padding: '8px 12px', color: '#f87171', borderColor: 'rgba(248,113,113,0.3)' }}
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={addSpecialDate}
+                      style={{ alignSelf: 'flex-start', marginTop: '4px', fontSize: '13px' }}
+                    >
+                      + Add Date
+                    </button>
+                  </div>
+                </div>
+
+                {/* Returning Date */}
+                <div className="form-group">
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                    Returning Date
+                  </label>
+                  <input
+                    type="date"
+                    className="admin-filter-select"
+                    style={{ width: '100%', opacity: 0.7, cursor: 'not-allowed' }}
+                    value={specialForm.returningDate}
+                    readOnly
+                  />
+                </div>
+
+                {/* Substitute Employee */}
+                <div className="form-group">
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                    Substitute Employee (Optional)
+                  </label>
+                  <select
+                    className="admin-filter-select"
+                    style={{ width: '100%' }}
+                    value={specialForm.substitute_employee_id}
+                    onChange={e => setSpecialForm(p => ({ ...p, substitute_employee_id: e.target.value }))}
+                  >
+                    <option value="">-- No Substitute / Optional --</option>
+                    {(() => {
+                      const selEmp = employees.find(e => e.id === specialForm.employee_id);
+                      const candidates = selEmp
+                        ? employees.filter(e => e.id !== selEmp.id && e.branch_id === selEmp.branch_id && e.status === 'active')
+                        : employees.filter(e => e.status === 'active');
+                      return candidates.map(sub => (
+                        <option key={sub.id} value={sub.id}>{sub.name}</option>
+                      ));
+                    })()}
+                  </select>
+                </div>
+
+                {/* Application Status */}
+                <div className="form-group">
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                    Status
+                  </label>
+                  <select
+                    className="admin-filter-select"
+                    style={{ width: '100%' }}
+                    value={specialForm.status}
+                    onChange={e => setSpecialForm(p => ({ ...p, status: e.target.value }))}
+                  >
+                    <option value="approved">Approved (Default)</option>
+                    <option value="pending">Pending</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="modal-footer" style={{ padding: '16px 24px', borderTop: '1px solid var(--bg-card-border)', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                <button type="button" className="btn-secondary" onClick={() => setShowSpecialModal(false)}>Cancel</button>
+                <button type="submit" className="btn-primary" disabled={isSubmittingSpecial}>
+                  {isSubmittingSpecial ? 'Scheduling...' : 'Schedule Leave'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

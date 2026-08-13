@@ -282,6 +282,15 @@ export default function AdminApp() {
     }
   }
 
+  const refreshApplications = async () => {
+    try {
+      const apps = await api.getApplications();
+      setApplications(apps);
+    } catch (err) {
+      console.error("Failed to refresh applications", err);
+    }
+  }
+
   const meta = PAGE_META[activePage] || PAGE_META['dashboard']
 
 
@@ -437,6 +446,7 @@ export default function AdminApp() {
             departments={departments}
             leaveRules={rules}
             setLeaveRules={setRules}
+            onRefreshApplications={refreshApplications}
           />
         )}
         {activePage === 'overview' && (

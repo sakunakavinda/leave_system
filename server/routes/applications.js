@@ -41,20 +41,33 @@ router.get('/', async (req, res) => {
 import crypto from 'crypto';
 
 router.post('/', async (req, res) => {
-  const { secretCode, leave_type, appliedDate, leaveDates, returningDate, substitute_employee_id } = req.body;
+  const { secretCode, employee_id: reqEmployeeId, isManagerOverride, leave_type, appliedDate, leaveDates, returningDate, substitute_employee_id, status: reqStatus } = req.body;
   const connection = await pool.getConnection();
   
   try {
     await connection.beginTransaction();
     
     // Lookup employee
-    const [empRows] = await connection.query('SELECT id, role_id, branch_id FROM employees WHERE secret_code = ?', [secretCode]);
-    if (empRows.length === 0) {
-      await connection.rollback();
-      return res.status(401).json({ error: 'Invalid secret code. Employee not found.' });
+    let employee_id, role_id, branch_id;
+    if (isManagerOverride && reqEmployeeId) {
+      const [empRows] = await connection.query('SELECT id, role_id, branch_id FROM employees WHERE id = ?', [reqEmployeeId]);
+      if (empRows.length === 0) {
+        await connection.rollback();
+        return res.status(404).json({ error: 'Employee not found.' });
+      }
+      employee_id = empRows[0].id;
+      role_id = empRows[0].role_id;
+      branch_id = empRows[0].branch_id;
+    } else {
+      const [empRows] = await connection.query('SELECT id, role_id, branch_id FROM employees WHERE secret_code = ?', [secretCode]);
+      if (empRows.length === 0) {
+        await connection.rollback();
+        return res.status(401).json({ error: 'Invalid secret code. Employee not found.' });
+      }
+      employee_id = empRows[0].id;
+      role_id = empRows[0].role_id;
+      branch_id = empRows[0].branch_id;
     }
-    
-    const { id: employee_id, role_id, branch_id } = empRows[0];
 
     // Balance & Quota Check
     const requestedDays = leaveDates ? leaveDates.length : 0;
@@ -149,11 +162,14 @@ router.post('/', async (req, res) => {
       }
     }
     
+    const initialStatus = isManagerOverride ? (reqStatus || 'approved') : 'pending';
+    const initialSubConfirmed = isManagerOverride ? true : false;
+    const finalAppliedDate = appliedDate || new Date().toISOString().split('T')[0];
     const appId = crypto.randomUUID();
     const [appResult] = await connection.query(
-      `INSERT INTO leave_applications (id, employee_id, substitute_employee_id, leave_type, applied_date, returning_date, status) 
-       VALUES (?, ?, ?, ?, ?, ?, 'pending')`,
-      [appId, employee_id, substitute_employee_id || null, leave_type, appliedDate, returningDate]
+      `INSERT INTO leave_applications (id, employee_id, substitute_employee_id, leave_type, applied_date, returning_date, status, substitute_confirmed) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [appId, employee_id, substitute_employee_id || null, leave_type, finalAppliedDate, returningDate, initialStatus, initialSubConfirmed]
     );
     
     if (leaveDates && leaveDates.length > 0) {
