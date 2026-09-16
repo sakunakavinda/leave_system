@@ -1103,7 +1103,7 @@ function generateSecretCode(existingCodes) {
 const DEPARTMENTS = ['Engineering', 'Finance', 'HR', 'Operations']
 const DESIGNATIONS = ['Senior Engineer', 'Junior Developer', 'Software Engineer', 'Accountant', 'HR Manager', 'Operations Lead']
 
-export function ManageEmployees({ branches, employees, setEmployees, departments, roles, isSuper, leaveRules, setLeaveRules, applications = [] }) {
+export function ManageEmployees({ branches, employees, setEmployees, departments, roles, isSuper, leaveRules, setLeaveRules, applications = [], leaveTypes = [] }) {
   const [activeSubTab, setActiveSubTab] = useState('directory')
   const [search, setSearch]             = useState('')
   const [branchFilter, setBranchFilter] = useState('all')
@@ -1206,8 +1206,19 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
   const handleSaveRule = async () => {
     if (!ruleForm.role_id || !ruleForm.branch_id) return
     
+    // Build leaveAllocations dynamically from leaveTypes
+    const leaveAllocations = {};
+    leaveTypes.forEach(lt => {
+      leaveAllocations[lt.code] = parseInt(ruleForm[`${lt.code}_leave`]) || 0;
+    });
+
+    const payload = {
+      ...ruleForm,
+      leaveAllocations
+    };
+
     try {
-      const savedRule = await api.saveRule(ruleForm);
+      const savedRule = await api.saveRule(payload);
       setLeaveRules(prev => {
         const exists = prev.find(r => r.role_id === savedRule.role_id && r.branch_id === savedRule.branch_id)
         if (exists) {
@@ -1664,10 +1675,15 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
                                     </div>
                                   </div>
                                   
-                                  <div className="lr-role-days">
-                                    <span className="leave-days-chip leave-days-annual" title="Annual Leave">{rule.annualLeave} A</span>
-                                    <span className="leave-days-chip leave-days-sick" title="Sick Leave">{rule.sickLeave} S</span>
-                                    <span className="leave-days-chip leave-days-casual" title="Casual Leave">{rule.casualLeave} C</span>
+                                  <div className="lr-role-days" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                    {leaveTypes.map(lt => {
+                                      const days = rule[`${lt.code}_leave`] || 0;
+                                      return (
+                                        <span key={lt.id} className="leave-days-chip" style={{ background: `${lt.color}15`, color: lt.color, borderColor: `${lt.color}30` }} title={lt.name}>
+                                          {days} {lt.name.charAt(0).toUpperCase()}
+                                        </span>
+                                      );
+                                    })}
                                   </div>
                                   
                                   <div className="lr-role-maxday">
@@ -1796,23 +1812,25 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
                   <input readOnly value={ruleForm.status} style={{ opacity: 0.7, cursor: 'not-allowed', textTransform: 'capitalize' }} />
                 </div>
               </div>
-              <div className="leave-rule-days-grid">
-                <div className="field leave-field-annual">
-                  <label>Annual Leave (days)</label>
-                  <input type="number" min="0" max="365" value={ruleForm.annualLeave} onChange={e => setRuleForm(p=>({...p, annualLeave: parseInt(e.target.value) || 0}))} />
-                </div>
-                <div className="field leave-field-sick">
-                  <label>Sick Leave (days)</label>
-                  <input type="number" min="0" max="365" value={ruleForm.sickLeave} onChange={e => setRuleForm(p=>({...p, sickLeave: parseInt(e.target.value) || 0}))} />
-                </div>
-                <div className="field leave-field-casual">
-                  <label>Casual Leave (days)</label>
-                  <input type="number" min="0" max="365" value={ruleForm.casualLeave} onChange={e => setRuleForm(p=>({...p, casualLeave: parseInt(e.target.value) || 0}))} />
-                </div>
+              <div className="leave-rule-days-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '16px' }}>
+                {leaveTypes.map(lt => (
+                  <div key={lt.id} className="field">
+                    <label>{lt.name} (days)</label>
+                    <input 
+                      type="number" 
+                      min="0" 
+                      max="365" 
+                      value={ruleForm[`${lt.code}_leave`] ?? 0} 
+                      onChange={e => setRuleForm(p => ({...p, [`${lt.code}_leave`]: parseInt(e.target.value) || 0}))} 
+                    />
+                  </div>
+                ))}
               </div>
               <div className="leave-total-preview">
                 <span>Total Leave Entitlement</span>
-                <span className="leave-total-value">{(ruleForm.annualLeave || 0) + (ruleForm.sickLeave || 0) + (ruleForm.casualLeave || 0)} days/year</span>
+                <span className="leave-total-value">
+                  {leaveTypes.reduce((sum, lt) => sum + (parseInt(ruleForm[`${lt.code}_leave`]) || 0), 0)} days/year
+                </span>
               </div>
               <div className="leave-maxday-section">
                 <div className="leave-maxday-header">

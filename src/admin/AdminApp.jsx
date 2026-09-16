@@ -486,6 +486,7 @@ export default function AdminApp() {
             leaveRules={rules}
             setLeaveRules={setRules}
             applications={allowedApps}
+            leaveTypes={leaveTypes}
           />
         )}
         {activePage === 'managers' && (

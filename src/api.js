@@ -49,9 +49,9 @@ export const api = {
   deleteManager: (id) => fetchApi(`/managers/${id}`, { method: 'DELETE' }),
 
   // Rules
-  getRules: () => fetchApi('/rules').then(res => res.map(r => ({ ...r, annualLeave: r.annual_leave, sickLeave: r.sick_leave, casualLeave: r.casual_leave, maxPerDay: r.max_per_day }))),
-  saveRule: (data) => fetchApi('/rules', { method: 'POST', body: JSON.stringify(data) }).then(r => ({ ...r, annualLeave: r.annual_leave, sickLeave: r.sick_leave, casualLeave: r.casual_leave, maxPerDay: r.max_per_day })),
-  updateRule: (id, data) => fetchApi(`/rules/${id}`, { method: 'PUT', body: JSON.stringify(data) }).then(r => ({ ...r, annualLeave: r.annual_leave, sickLeave: r.sick_leave, casualLeave: r.casual_leave, maxPerDay: r.max_per_day })),
+  getRules: () => fetchApi('/rules').then(res => res.map(r => ({ ...r, maxPerDay: r.max_per_day }))),
+  saveRule: (data) => fetchApi('/rules', { method: 'POST', body: JSON.stringify(data) }).then(r => ({ ...r, maxPerDay: r.max_per_day })),
+  updateRule: (id, data) => fetchApi(`/rules/${id}`, { method: 'PUT', body: JSON.stringify(data) }).then(r => ({ ...r, maxPerDay: r.max_per_day })),
 
   // Applications
   getApplications: () => fetchApi('/applications'),
