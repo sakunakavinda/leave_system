@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import './admin.css'
-import { AdminDashboard, ManageEmployees, ManageBranches, ManageManagers, ManageDepartments, ManageRoles, AccountSettings, SystemSettings, LeaveOverview } from './AdminPages.jsx'
+import { AdminDashboard, ManageEmployees, ManageBranches, ManageManagers, ManageDepartments, ManageRoles, ManageLeaveTypes, AccountSettings, SystemSettings, LeaveOverview } from './AdminPages.jsx'
 import { api } from '../api.js'
 import { applyTheme } from './theme.js'
 
@@ -97,6 +97,18 @@ const NAV = [
     ),
   },
   {
+    id: 'leave_types',
+    group: 'Management',
+    label: 'Manage Leave Types',
+    desc: 'Custom leave type definitions',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
+        <line x1="7" y1="7" x2="7.01" y2="7"/>
+      </svg>
+    ),
+  },
+  {
     id: 'settings',
     group: 'System',
     label: 'Settings',
@@ -117,6 +129,7 @@ const PAGE_META = {
   branches:   { title: 'Manage Branches',   subtitle: 'Configure and track office branches'  },
   departments: { title: 'Manage Departments', subtitle: 'Configure and organize departments'  },
   roles:      { title: 'Manage Roles',      subtitle: 'Define and manage role designations'   },
+  leave_types: { title: 'Manage Leave Types', subtitle: 'Create and configure custom leave types' },
   settings:   { title: 'System Settings',   subtitle: 'Configure global system settings'      },
 }
 
@@ -139,6 +152,7 @@ export default function AdminApp() {
   const [departments, setDepartments]   = useState([])
   const [roles, setRoles]               = useState([])
   const [rules, setRules]               = useState([])
+  const [leaveTypes, setLeaveTypes]     = useState([])
   const [settings, setSettings]         = useState({})
   const [loading, setLoading]           = useState(true)
 
@@ -146,14 +160,15 @@ export default function AdminApp() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [apps, brs, mgrs, emps, depts, rls, rls_rules] = await Promise.all([
+        const [apps, brs, mgrs, emps, depts, rls, rls_rules, l_types] = await Promise.all([
           api.getApplications(),
           api.getBranches(),
           api.getManagers(),
           api.getEmployees(),
           api.getDepartments(),
           api.getRoles(),
-          api.getRules()
+          api.getRules(),
+          api.getLeaveTypes().catch(() => [])
         ]);
         const stgs = await api.getSettings();
         setApplications(apps);
@@ -163,6 +178,7 @@ export default function AdminApp() {
         setDepartments(depts);
         setRoles(rls);
         setRules(rls_rules);
+        setLeaveTypes(l_types);
         setSettings(stgs);
         if (stgs.theme_color) {
           applyTheme(stgs.theme_color, 'primary');
@@ -447,6 +463,7 @@ export default function AdminApp() {
             leaveRules={rules}
             setLeaveRules={setRules}
             onRefreshApplications={refreshApplications}
+            leaveTypes={leaveTypes}
           />
         )}
         {activePage === 'overview' && (
@@ -482,6 +499,9 @@ export default function AdminApp() {
         )}
         {activePage === 'roles' && (
           <ManageRoles departments={departments} roles={roles} setRoles={setRoles} />
+        )}
+        {activePage === 'leave_types' && (
+          <ManageLeaveTypes leaveTypes={leaveTypes} setLeaveTypes={setLeaveTypes} />
         )}
         {activePage === 'settings' && (
           <SystemSettings />

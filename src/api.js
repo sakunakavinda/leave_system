@@ -64,4 +64,10 @@ export const api = {
   // Settings
   getSettings: () => fetchApi('/settings'),
   updateSettings: (data) => fetchApi('/settings', { method: 'PUT', body: JSON.stringify(data) }),
+
+  // Leave Types
+  getLeaveTypes: () => fetchApi('/leave-types'),
+  addLeaveType: (data) => fetchApi('/leave-types', { method: 'POST', body: JSON.stringify(data) }),
+  updateLeaveType: (id, data) => fetchApi(`/leave-types/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteLeaveType: (id) => fetchApi(`/leave-types/${id}`, { method: 'DELETE' }),
 };

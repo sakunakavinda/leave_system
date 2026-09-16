@@ -30,24 +30,27 @@ function App() {
   const [roles, setRoles] = useState([])
   const [employees, setEmployees] = useState([])
   const [submissions, setSubmissions] = useState([])
+  const [leaveTypes, setLeaveTypes] = useState([])
   const [settings, setSettings] = useState({})
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [brs, rls, emps, apps, sysSettings] = await Promise.all([
+        const [brs, rls, emps, apps, sysSettings, lTypes] = await Promise.all([
           api.getBranches(),
           api.getRoles(),
           api.getEmployees(),
           api.getApplications(),
-          api.getSettings().catch(() => ({}))
+          api.getSettings().catch(() => ({})),
+          api.getLeaveTypes().catch(() => [])
         ]);
         setBranches(brs);
         setRoles(rls);
         setEmployees(emps);
         setSubmissions(apps);
         setSettings(sysSettings);
+        setLeaveTypes(lTypes);
         if (sysSettings.theme_color) {
           applyTheme(sysSettings.theme_color, 'primary');
         }
@@ -365,9 +368,17 @@ function App() {
                 onChange={handleChange}
                 required
               >
-                <option value="annual">Annual Leave</option>
-                <option value="sick">Sick Leave</option>
-                <option value="casual">Casual Leave</option>
+                {leaveTypes && leaveTypes.length > 0 ? (
+                  leaveTypes.filter(lt => lt.status === 'active').map(lt => (
+                    <option key={lt.id} value={lt.code}>{lt.name}</option>
+                  ))
+                ) : (
+                  <>
+                    <option value="annual">Annual Leave</option>
+                    <option value="sick">Sick Leave</option>
+                    <option value="casual">Casual Leave</option>
+                  </>
+                )}
               </select>
             </div>
 

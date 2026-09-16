@@ -11,6 +11,7 @@ import managersRouter from './routes/managers.js';
 import rulesRouter from './routes/rules.js';
 import applicationsRouter from './routes/applications.js';
 import settingsRouter from './routes/settings.js';
+import leaveTypesRouter from './routes/leaveTypes.js';
 
 dotenv.config();
 
@@ -36,6 +37,7 @@ app.use('/api/managers', managersRouter);
 app.use('/api/rules', rulesRouter);
 app.use('/api/applications', applicationsRouter);
 app.use('/api/settings', settingsRouter);
+app.use('/api/leave-types', leaveTypesRouter);
 
 // Serve static frontend files in production
 app.use(express.static(path.join(__dirname, '../dist')));

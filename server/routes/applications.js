@@ -90,13 +90,19 @@ router.post('/', async (req, res) => {
         );
         [takenRows] = await connection.query('SELECT * FROM leave_balances WHERE employee_id = ? AND year = ?', [employee_id, currentYear]);
       }
-      const balances = takenRows[0];
+      const ruleCol = `${leave_type}_leave`;
+      const balanceCol = `${leave_type}_taken`;
 
       let quota = 0;
       let taken = 0;
-      if (leave_type === 'annual') { quota = rule.annual_leave; taken = balances.annual_taken; }
-      else if (leave_type === 'sick') { quota = rule.sick_leave; taken = balances.sick_taken; }
-      else if (leave_type === 'casual') { quota = rule.casual_leave; taken = balances.casual_taken; }
+
+      if (rule[ruleCol] !== undefined && rule[ruleCol] !== null) {
+        quota = rule[ruleCol];
+      } else {
+        const [ltRows] = await connection.query('SELECT default_days FROM leave_types WHERE code = ? OR id = ?', [leave_type, leave_type]);
+        quota = ltRows[0]?.default_days || 14;
+      }
+      taken = (balances[balanceCol] !== undefined && balances[balanceCol] !== null) ? balances[balanceCol] : 0;
       
       if (taken + requestedDays > quota) {
         await connection.rollback();
@@ -183,17 +189,17 @@ router.post('/', async (req, res) => {
     }
     
     if (requestedDays > 0) {
-      let updateCol = '';
-      if (leave_type === 'annual') updateCol = 'annual_taken';
-      else if (leave_type === 'sick') updateCol = 'sick_taken';
-      else if (leave_type === 'casual') updateCol = 'casual_taken';
-
-      if (updateCol) {
-        const currentYear = new Date().getFullYear();
-        await connection.query(`
-          UPDATE leave_balances SET ${updateCol} = ${updateCol} + ? 
-          WHERE employee_id = ? AND year = ?
-        `, [requestedDays, employee_id, currentYear]);
+      const currentYear = new Date().getFullYear();
+      const colName = `${leave_type}_taken`;
+      try {
+        await connection.query(`UPDATE leave_balances SET ${colName} = COALESCE(${colName}, 0) + ? WHERE employee_id = ? AND year = ?`, [requestedDays, employee_id, currentYear]);
+      } catch (err) {
+        try {
+          await connection.query(`ALTER TABLE leave_balances ADD COLUMN ${colName} INT DEFAULT 0`);
+          await connection.query(`UPDATE leave_balances SET ${colName} = COALESCE(${colName}, 0) + ? WHERE employee_id = ? AND year = ?`, [requestedDays, employee_id, currentYear]);
+        } catch (e) {
+          console.error(`Failed to update ${colName} column`, e);
+        }
       }
     }
 
@@ -227,18 +233,10 @@ router.put('/:id/status', async (req, res) => {
       const [daysRows] = await connection.query('SELECT COUNT(*) AS count FROM leave_application_dates WHERE leave_application_id = ?', [id]);
       const requestedDays = parseInt(daysRows[0].count);
       const currentYear = new Date(app.applied_date).getFullYear();
-
-      let updateCol = '';
-      if (app.leave_type === 'annual') updateCol = 'annual_taken';
-      else if (app.leave_type === 'sick') updateCol = 'sick_taken';
-      else if (app.leave_type === 'casual') updateCol = 'casual_taken';
-
-      if (updateCol) {
-        await connection.query(`
-          UPDATE leave_balances SET ${updateCol} = ${updateCol} - ? 
-          WHERE employee_id = ? AND year = ?
-        `, [requestedDays, app.employee_id, currentYear]);
-      }
+      const colName = `${app.leave_type}_taken`;
+      try {
+        await connection.query(`UPDATE leave_balances SET ${colName} = GREATEST(0, COALESCE(${colName}, 0) - ?) WHERE employee_id = ? AND year = ?`, [requestedDays, app.employee_id, currentYear]);
+      } catch (err) {}
     } 
     else if (app.status === 'rejected' && status !== 'rejected') {
       const [daysRows] = await connection.query('SELECT COUNT(*) AS count FROM leave_application_dates WHERE leave_application_id = ?', [id]);
@@ -246,21 +244,14 @@ router.put('/:id/status', async (req, res) => {
       const currentYear = new Date(app.applied_date).getFullYear();
 
       await connection.query(`
-        INSERT IGNORE INTO leave_balances (employee_id, year, annual_taken, sick_taken, casual_taken) 
-        VALUES (?, ?, 0, 0, 0)
-      `, [app.employee_id, currentYear]);
+        INSERT IGNORE INTO leave_balances (id, employee_id, year) 
+        VALUES (?, ?, ?)
+      `, [crypto.randomUUID(), app.employee_id, currentYear]);
 
-      let updateCol = '';
-      if (app.leave_type === 'annual') updateCol = 'annual_taken';
-      else if (app.leave_type === 'sick') updateCol = 'sick_taken';
-      else if (app.leave_type === 'casual') updateCol = 'casual_taken';
-
-      if (updateCol) {
-        await connection.query(`
-          UPDATE leave_balances SET ${updateCol} = ${updateCol} + ? 
-          WHERE employee_id = ? AND year = ?
-        `, [requestedDays, app.employee_id, currentYear]);
-      }
+      const colName = `${app.leave_type}_taken`;
+      try {
+        await connection.query(`UPDATE leave_balances SET ${colName} = COALESCE(${colName}, 0) + ? WHERE employee_id = ? AND year = ?`, [requestedDays, app.employee_id, currentYear]);
+      } catch (err) {}
     }
 
     await connection.query(

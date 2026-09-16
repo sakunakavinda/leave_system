@@ -669,8 +669,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
-  animation: fadeIn 0.2s ease both;
+  padding: 20px;
+  overflow: hidden;
+  animation: fadeIn 0.2s ease forwards;
 }
 
 @keyframes fadeIn {
@@ -685,10 +686,11 @@
   width: 100%;
   max-width: 520px;
   box-shadow: var(--shadow-lg);
-  animation: modalIn 0.3s cubic-bezier(0.4,0,0.2,1) both;
-  max-height: 90vh;
+  animation: modalIn 0.3s cubic-bezier(0.4,0,0.2,1) forwards;
+  max-height: calc(100vh - 40px);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 @keyframes modalIn {
@@ -697,10 +699,11 @@
 }
 
 .modal-header {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 22px 24px;
+  padding: 20px 24px;
   border-bottom: 1px solid var(--bg-card-border);
 }
 
@@ -728,9 +731,28 @@
 .modal-close svg { width: 16px; height: 16px; }
 .modal-close:hover { color: var(--text-primary); background: rgba(255,255,255,0.1); }
 
-.modal-body { padding: 24px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; }
+.modal-box form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.modal-body { 
+  padding: 24px; 
+  display: flex; 
+  flex-direction: column; 
+  gap: 16px; 
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto; 
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
 
 .modal-footer {
+  flex-shrink: 0;
   display: flex;
   justify-content: flex-end;
   gap: 10px;

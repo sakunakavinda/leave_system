@@ -61,7 +61,7 @@ function formatDate(d) {
 /* ─────────────────────────────────────────────────────
    AdminDashboard
 ───────────────────────────────────────────────────── */
-export function AdminDashboard({ applications, onUpdateStatus, branches, employees, roles, departments, leaveRules, onRefreshApplications }) {
+export function AdminDashboard({ applications, onUpdateStatus, branches, employees, roles, departments, leaveRules, onRefreshApplications, leaveTypes = [] }) {
   const [timeFilter, setTimeFilter]   = useState('this_month')
   const [reportEmp, setReportEmp]     = useState(null)
   const [filter, setFilter]           = useState('all')
@@ -102,11 +102,22 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
     const today = getTodayStr();
     setSpecialBranchFilter('all');
     setSpecialEmpSearch('');
+    
+    const maxDate = new Date(today);
+    maxDate.setDate(maxDate.getDate() + 1);
+    const year = maxDate.getFullYear();
+    const month = String(maxDate.getMonth() + 1).padStart(2, '0');
+    const day = String(maxDate.getDate()).padStart(2, '0');
+
+    const defaultLeaveType = (leaveTypes && leaveTypes.length > 0) 
+      ? (leaveTypes.find(lt => lt.status === 'active')?.code || leaveTypes[0].code) 
+      : 'annual';
+
     setSpecialForm({
       employee_id: '',
-      leave_type: 'annual',
+      leave_type: defaultLeaveType,
       leaveDates: [today],
-      returningDate: '',
+      returningDate: `${year}-${month}-${day}`,
       substitute_employee_id: '',
       status: 'approved',
     });
@@ -736,9 +747,25 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
 
       {/* ── Special Leave Application Modal (Manager Override) ── */}
       {showSpecialModal && (
-        <div className="modal-backdrop" onClick={() => setShowSpecialModal(false)}>
-          <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px', width: '90%' }}>
-            <div className="modal-header">
+        <div className="modal-backdrop" onClick={() => setShowSpecialModal(false)} style={{ zIndex: 9999, overflow: 'hidden' }}>
+          <div 
+            className="modal-box" 
+            onClick={e => e.stopPropagation()} 
+            style={{ 
+              maxWidth: '600px', 
+              width: '90%', 
+              maxHeight: 'calc(100vh - 40px)',
+              background: 'var(--bg-secondary, #131927)', 
+              border: '1px solid rgba(255, 255, 255, 0.15)',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 30px rgba(99, 102, 241, 0.15)',
+              zIndex: 10000,
+              position: 'relative',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden'
+            }}
+          >
+            <div className="modal-header" style={{ flexShrink: 0 }}>
               <div>
                 <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '20px', height: '20px' }}>
@@ -755,8 +782,20 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
               </button>
             </div>
 
-            <form onSubmit={handleSpecialLeaveSubmit}>
-              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '70vh', overflowY: 'auto' }}>
+            <form onSubmit={handleSpecialLeaveSubmit} style={{ display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0, overflow: 'hidden' }}>
+              <div 
+                className="modal-body" 
+                style={{ 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  gap: '16px', 
+                  flex: '1 1 auto', 
+                  minHeight: 0, 
+                  overflowY: 'auto', 
+                  overscrollBehavior: 'contain',
+                  WebkitOverflowScrolling: 'touch'
+                }}
+              >
                 {specialError && (
                   <div style={{ color: '#ff5252', fontSize: '13px', background: 'rgba(255,82,82,0.1)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,82,82,0.2)' }}>
                     {specialError}
@@ -765,10 +804,12 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
 
                 {/* Branch & Name Search Filter Controls */}
                 {(() => {
-                  const filteredEmps = employees.filter(e => {
+                  const safeEmployees = employees || [];
+                  const safeBranches = branches || [];
+                  const filteredEmps = safeEmployees.filter(e => {
                     if (e.status !== 'active') return false;
                     if (specialBranchFilter !== 'all' && e.branch_id !== specialBranchFilter) return false;
-                    if (specialEmpSearch.trim() !== '') {
+                    if (specialEmpSearch && specialEmpSearch.trim() !== '') {
                       const q = specialEmpSearch.toLowerCase();
                       return (e.name || '').toLowerCase().includes(q);
                     }
@@ -777,8 +818,8 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
 
                   return (
                     <>
-                      <div style={{ display: 'grid', gridTemplateColumns: branches.length > 1 ? '1fr 1fr' : '1fr', gap: '12px' }}>
-                        {branches.length > 1 && (
+                      <div style={{ display: 'grid', gridTemplateColumns: safeBranches.length > 1 ? '1fr 1fr' : '1fr', gap: '12px' }}>
+                        {safeBranches.length > 1 && (
                           <div className="form-group">
                             <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
                               Filter by Branch
@@ -790,7 +831,7 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
                               onChange={e => setSpecialBranchFilter(e.target.value)}
                             >
                               <option value="all">All Branches</option>
-                              {branches.map(b => (
+                              {safeBranches.map(b => (
                                 <option key={b.id} value={b.id}>{b.name}</option>
                               ))}
                             </select>
@@ -825,7 +866,7 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
                         </div>
                       </div>
 
-                      {/* Select Employee */}
+                      {/* Select Employee (Inline List) */}
                       <div className="form-group">
                         <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
                           Select Employee <span style={{ color: '#f87171' }}>*</span>
@@ -833,31 +874,63 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
                             ({filteredEmps.length} active employee{filteredEmps.length === 1 ? '' : 's'} available)
                           </span>
                         </label>
-                        <select
-                          className="admin-filter-select"
-                          style={{ width: '100%' }}
-                          value={specialForm.employee_id}
-                          onChange={e => {
-                            const empId = e.target.value;
-                            setSpecialForm(prev => ({ ...prev, employee_id: empId, substitute_employee_id: '' }));
+                        <div 
+                          style={{ 
+                            border: '1px solid var(--bg-card-border)', 
+                            borderRadius: '8px', 
+                            maxHeight: '180px', 
+                            overflowY: 'auto', 
+                            background: 'var(--bg-card)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            overscrollBehavior: 'contain'
                           }}
-                          required
                         >
-                          <option value="">-- Choose Employee --</option>
                           {filteredEmps.length === 0 ? (
-                            <option value="" disabled>No active employees match your search/filter</option>
+                            <div style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)', textAlign: 'center' }}>
+                              No active employees match your search.
+                            </div>
                           ) : (
                             filteredEmps.map(emp => {
                               const br = getBranch(emp.branch_id);
                               const rl = getRole(emp.role_id);
+                              const isSelected = specialForm.employee_id === emp.id;
                               return (
-                                <option key={emp.id} value={emp.id}>
-                                  {emp.name} ({br.name || 'Branch'} • {rl.title || 'Role'})
-                                </option>
+                                <div 
+                                  key={emp.id} 
+                                  onClick={() => setSpecialForm(prev => ({ ...prev, employee_id: emp.id, substitute_employee_id: '' }))}
+                                  style={{
+                                    padding: '10px 14px',
+                                    cursor: 'pointer',
+                                    borderBottom: '1px solid var(--bg-card-border)',
+                                    background: isSelected ? 'rgba(99, 102, 241, 0.15)' : 'transparent',
+                                    color: isSelected ? 'var(--accent-primary)' : 'var(--text-primary)',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    transition: 'all 0.15s ease'
+                                  }}
+                                  onMouseOver={e => !isSelected && (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
+                                  onMouseOut={e => !isSelected && (e.currentTarget.style.background = 'transparent')}
+                                >
+                                  <div>
+                                    <div style={{ fontWeight: isSelected ? 600 : 500, fontSize: '13px' }}>{emp.name}</div>
+                                    <div style={{ fontSize: '11px', color: isSelected ? 'var(--accent-primary)' : 'var(--text-muted)', opacity: isSelected ? 0.9 : 0.7, marginTop: '2px' }}>
+                                      {br?.name || 'Branch'} • {rl?.title || 'Role'}
+                                    </div>
+                                  </div>
+                                  {isSelected && (
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px' }}>
+                                      <polyline points="20 6 9 17 4 12" />
+                                    </svg>
+                                  )}
+                                </div>
                               );
                             })
                           )}
-                        </select>
+                        </div>
+                        {/* Hidden required input to maintain HTML5 form validation for required employee selection */}
+                        <input type="text" value={specialForm.employee_id} onChange={()=>{}} required style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: '1px', height: '1px', padding: 0, border: 0 }} tabIndex={-1} />
                       </div>
                     </>
                   );
@@ -875,9 +948,17 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
                     onChange={e => setSpecialForm(p => ({ ...p, leave_type: e.target.value }))}
                     required
                   >
-                    <option value="annual">Annual Leave</option>
-                    <option value="sick">Sick Leave</option>
-                    <option value="casual">Casual Leave</option>
+                    {leaveTypes && leaveTypes.length > 0 ? (
+                      leaveTypes.filter(lt => lt.status === 'active').map(lt => (
+                        <option key={lt.id} value={lt.code}>{lt.name}</option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="annual">Annual Leave</option>
+                        <option value="sick">Sick Leave</option>
+                        <option value="casual">Casual Leave</option>
+                      </>
+                    )}
                   </select>
                 </div>
 
@@ -890,7 +971,7 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
                     </span>
                   </label>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {specialForm.leaveDates.map((ld, idx) => (
+                    {(specialForm.leaveDates || []).map((ld, idx) => (
                       <div key={idx} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                         <input
                           type="date"
@@ -900,7 +981,7 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
                           onChange={e => handleSpecialDateChange(idx, e.target.value)}
                           required
                         />
-                        {specialForm.leaveDates.length > 1 && (
+                        {(specialForm.leaveDates || []).length > 1 && (
                           <button
                             type="button"
                             className="btn-secondary"
@@ -950,10 +1031,11 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
                   >
                     <option value="">-- No Substitute / Optional --</option>
                     {(() => {
-                      const selEmp = employees.find(e => e.id === specialForm.employee_id);
+                      const safeEmps = employees || [];
+                      const selEmp = safeEmps.find(e => e.id === specialForm.employee_id);
                       const candidates = selEmp
-                        ? employees.filter(e => e.id !== selEmp.id && e.branch_id === selEmp.branch_id && e.status === 'active')
-                        : employees.filter(e => e.status === 'active');
+                        ? safeEmps.filter(e => e.id !== selEmp.id && e.branch_id === selEmp.branch_id && e.status === 'active')
+                        : safeEmps.filter(e => e.status === 'active');
                       return candidates.map(sub => (
                         <option key={sub.id} value={sub.id}>{sub.name}</option>
                       ));
@@ -3298,4 +3380,301 @@ export function LeaveOverview({ applications, employees, branches, departments, 
       </div>
     </div>
   )
+}
+
+/* ─────────────────────────────────────────────────────
+   ManageLeaveTypes
+───────────────────────────────────────────────────── */
+export function ManageLeaveTypes({ leaveTypes, setLeaveTypes }) {
+  const [modal, setModal] = useState(null); // null | 'add' | lt object
+  const [search, setSearch] = useState('');
+  const [form, setForm] = useState({
+    name: '',
+    code: '',
+    color: '#7c3aed',
+    default_days: 14,
+    description: '',
+    status: 'active',
+  });
+  const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const showToast = (msg, type = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const openAdd = () => {
+    setForm({ name: '', code: '', color: '#7c3aed', default_days: 14, description: '', status: 'active' });
+    setError('');
+    setModal('add');
+  };
+
+  const openEdit = (lt) => {
+    setForm({ ...lt });
+    setError('');
+    setModal(lt);
+  };
+
+  const closeModal = () => setModal(null);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.name.trim()) {
+      setError('Leave type name is required');
+      return;
+    }
+    setError('');
+    setIsSubmitting(true);
+
+    try {
+      if (modal === 'add') {
+        const created = await api.addLeaveType(form);
+        setLeaveTypes(prev => [...prev, created]);
+        showToast('Leave type created successfully');
+      } else {
+        const updated = await api.updateLeaveType(modal.id, form);
+        setLeaveTypes(prev => prev.map(lt => lt.id === modal.id ? updated : lt));
+        showToast('Leave type updated successfully');
+      }
+      closeModal();
+    } catch (err) {
+      setError(err.message || 'Action failed');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (id, name) => {
+    if (!window.confirm(`Are you sure you want to delete the leave type "${name}"?`)) return;
+    try {
+      await api.deleteLeaveType(id);
+      setLeaveTypes(prev => prev.filter(lt => lt.id !== id));
+      showToast('Leave type deleted successfully', 'danger');
+    } catch (err) {
+      alert(err.message || 'Failed to delete leave type');
+    }
+  };
+
+  const filtered = leaveTypes.filter(lt => {
+    const q = search.toLowerCase();
+    return !q || lt.name.toLowerCase().includes(q) || (lt.code || '').toLowerCase().includes(q);
+  });
+
+  return (
+    <div className="admin-content">
+      {/* Top Controls */}
+      <div className="controls-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
+        <div className="admin-search-box" style={{ flex: 1, maxWidth: '400px' }}>
+          <svg className="s-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input
+            placeholder="Search leave types by name or code…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+        <button className="btn-primary" onClick={openAdd} style={{ gap: '6px', whiteSpace: 'nowrap' }}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '18px', height: '18px' }}>
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          Add Leave Type
+        </button>
+      </div>
+
+      {/* Table */}
+      <div className="data-table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Leave Type</th>
+              <th>Code</th>
+              <th>Color Tag</th>
+              <th>Default Days</th>
+              <th>Description</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.length === 0 ? (
+              <tr><td colSpan={7} style={{ textAlign: 'center', padding: '48px', color: 'var(--text-muted)' }}>No leave types found</td></tr>
+            ) : filtered.map(lt => (
+              <tr key={lt.id}>
+                <td>
+                  <div style={{ fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ width: '12px', height: '12px', borderRadius: '50%', background: lt.color || '#7c3aed' }}></span>
+                    {lt.name}
+                  </div>
+                </td>
+                <td><code style={{ background: 'rgba(255,255,255,0.06)', padding: '2px 8px', borderRadius: '4px', fontSize: '12px' }}>{lt.code}</code></td>
+                <td>
+                  <span style={{ background: lt.color || '#7c3aed', color: '#fff', fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '12px' }}>
+                    {lt.color || '#7c3aed'}
+                  </span>
+                </td>
+                <td style={{ fontWeight: 600 }}>{lt.default_days} days</td>
+                <td style={{ color: 'var(--text-secondary)', fontSize: '13px', maxWidth: '250px' }}>{lt.description || '—'}</td>
+                <td>
+                  <span className={`badge badge-${lt.status === 'active' ? 'approved' : 'rejected'}`}>
+                    {lt.status}
+                  </span>
+                </td>
+                <td>
+                  <div className="action-btns">
+                    <button className="btn-edit" onClick={() => openEdit(lt)} title="Edit Leave Type">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                      </svg>
+                      Edit
+                    </button>
+                    <button className="btn-danger" onClick={() => handleDelete(lt.id, lt.name)} title="Delete Leave Type">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+                      </svg>
+                      Delete
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Add / Edit Modal */}
+      {modal !== null && (
+        <div className="modal-backdrop" onClick={closeModal}>
+          <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <div className="modal-header">
+              <h3>{modal === 'add' ? 'Add Leave Type' : 'Edit Leave Type'}</h3>
+              <button className="modal-close" onClick={closeModal}>×</button>
+            </div>
+            <form onSubmit={handleSubmit}>
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {error && (
+                  <div style={{ color: '#ff5252', fontSize: '13px', background: 'rgba(255,82,82,0.1)', padding: '10px 14px', borderRadius: '8px' }}>
+                    {error}
+                  </div>
+                )}
+
+                <div className="form-group">
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                    Leave Type Name <span style={{ color: '#f87171' }}>*</span>
+                  </label>
+                  <input
+                    type="text"
+                    className="admin-filter-select"
+                    style={{ width: '100%' }}
+                    placeholder="e.g. Maternity Leave, Paternity Leave"
+                    value={form.name}
+                    onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
+                    required
+                  />
+                </div>
+
+                {modal === 'add' && (
+                  <div className="form-group">
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                      System Code (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      className="admin-filter-select"
+                      style={{ width: '100%' }}
+                      placeholder="e.g. maternity (Auto-generated if empty)"
+                      value={form.code}
+                      onChange={e => setForm(p => ({ ...p, code: e.target.value }))}
+                    />
+                  </div>
+                )}
+
+                <div className="form-group">
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                    Default Annual Quota (Days)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="365"
+                    className="admin-filter-select"
+                    style={{ width: '100%' }}
+                    value={form.default_days}
+                    onChange={e => setForm(p => ({ ...p, default_days: parseInt(e.target.value) || 0 }))}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                    Badge Color
+                  </label>
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    <input
+                      type="color"
+                      value={form.color}
+                      onChange={e => setForm(p => ({ ...p, color: e.target.value }))}
+                      style={{ width: '48px', height: '38px', padding: '2px', cursor: 'pointer', borderRadius: '6px', background: 'none', border: '1px solid var(--bg-card-border)' }}
+                    />
+                    <input
+                      type="text"
+                      className="admin-filter-select"
+                      value={form.color}
+                      onChange={e => setForm(p => ({ ...p, color: e.target.value }))}
+                      style={{ flex: 1 }}
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                    Description
+                  </label>
+                  <textarea
+                    className="admin-filter-select"
+                    style={{ width: '100%', minHeight: '80px', fontFamily: 'inherit' }}
+                    rows={3}
+                    placeholder="Brief description of this leave policy..."
+                    value={form.description}
+                    onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                    Status
+                  </label>
+                  <select
+                    className="admin-filter-select"
+                    style={{ width: '100%' }}
+                    value={form.status}
+                    onChange={e => setForm(p => ({ ...p, status: e.target.value }))}
+                  >
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="modal-footer" style={{ padding: '16px 24px', borderTop: '1px solid var(--bg-card-border)', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                <button type="button" className="btn-secondary" onClick={closeModal}>Cancel</button>
+                <button type="submit" className="btn-primary" disabled={isSubmitting}>
+                  {isSubmitting ? 'Saving...' : modal === 'add' ? 'Create Leave Type' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {toast && (
+        <div className={`admin-toast admin-toast-${toast.type} show`}>
+          {toast.msg}
+        </div>
+      )}
+    </div>
+  );
 }
