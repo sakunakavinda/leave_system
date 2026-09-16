@@ -3410,7 +3410,6 @@ export function ManageLeaveTypes({ leaveTypes, setLeaveTypes }) {
     name: '',
     code: '',
     color: '#7c3aed',
-    default_days: 14,
     description: '',
     status: 'active',
   });
@@ -3424,7 +3423,7 @@ export function ManageLeaveTypes({ leaveTypes, setLeaveTypes }) {
   };
 
   const openAdd = () => {
-    setForm({ name: '', code: '', color: '#7c3aed', default_days: 14, description: '', status: 'active' });
+    setForm({ name: '', code: '', color: '#7c3aed', description: '', status: 'active' });
     setError('');
     setModal('add');
   };
@@ -3510,7 +3509,6 @@ export function ManageLeaveTypes({ leaveTypes, setLeaveTypes }) {
               <th>Leave Type</th>
               <th>Code</th>
               <th>Color Tag</th>
-              <th>Default Days</th>
               <th>Description</th>
               <th>Status</th>
               <th>Actions</th>
@@ -3518,7 +3516,7 @@ export function ManageLeaveTypes({ leaveTypes, setLeaveTypes }) {
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={7} style={{ textAlign: 'center', padding: '48px', color: 'var(--text-muted)' }}>No leave types found</td></tr>
+              <tr><td colSpan={6} style={{ textAlign: 'center', padding: '48px', color: 'var(--text-muted)' }}>No leave types found</td></tr>
             ) : filtered.map(lt => (
               <tr key={lt.id}>
                 <td>
@@ -3533,7 +3531,6 @@ export function ManageLeaveTypes({ leaveTypes, setLeaveTypes }) {
                     {lt.color || '#7c3aed'}
                   </span>
                 </td>
-                <td style={{ fontWeight: 600 }}>{lt.default_days} days</td>
                 <td style={{ color: 'var(--text-secondary)', fontSize: '13px', maxWidth: '250px' }}>{lt.description || '—'}</td>
                 <td>
                   <span className={`badge badge-${lt.status === 'active' ? 'approved' : 'rejected'}`}>
@@ -3610,21 +3607,6 @@ export function ManageLeaveTypes({ leaveTypes, setLeaveTypes }) {
                   </div>
                 )}
 
-                <div className="form-group">
-                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
-                    Default Annual Quota (Days)
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="365"
-                    className="admin-filter-select"
-                    style={{ width: '100%' }}
-                    value={form.default_days}
-                    onChange={e => setForm(p => ({ ...p, default_days: parseInt(e.target.value) || 0 }))}
-                    required
-                  />
-                </div>
 
                 <div className="form-group">
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>

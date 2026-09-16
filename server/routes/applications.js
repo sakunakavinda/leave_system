@@ -99,8 +99,7 @@ router.post('/', async (req, res) => {
       if (rule[ruleCol] !== undefined && rule[ruleCol] !== null) {
         quota = rule[ruleCol];
       } else {
-        const [ltRows] = await connection.query('SELECT default_days FROM leave_types WHERE code = ? OR id = ?', [leave_type, leave_type]);
-        quota = ltRows[0]?.default_days || 14;
+        quota = 0;
       }
       taken = (balances[balanceCol] !== undefined && balances[balanceCol] !== null) ? balances[balanceCol] : 0;
       

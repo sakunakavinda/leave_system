@@ -186,7 +186,6 @@ leave_system/
 | code | VARCHAR(100) | Slug used as FK/column key |
 | color | VARCHAR(50) | Hex color for UI |
 | description | TEXT | |
-| default_days | INT DEFAULT 14 | |
 | status | VARCHAR(20) | |
 
 #### `settings`
@@ -421,7 +420,7 @@ When a substitute clicks "Agree", they enter their own secret code. This is sent
 - When a new **role** is created → a default `leave_rules` row is inserted for every existing branch.
 
 ### 7.4 Custom Leave Types
-- Adding a leave type → `ALTER TABLE leave_rules ADD COLUMN {code}_leave INT DEFAULT {default_days}` and `ALTER TABLE leave_balances ADD COLUMN {code}_taken INT DEFAULT 0`.
+- Adding a leave type → `ALTER TABLE leave_rules ADD COLUMN {code}_leave INT DEFAULT 0` and `ALTER TABLE leave_balances ADD COLUMN {code}_taken INT DEFAULT 0`.
 - These schema changes are not tracked in `schema.sql`.
 - Deleting a leave type does **not** drop the added columns.
 

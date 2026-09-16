@@ -26,7 +26,7 @@ router.get('/', async (req, res) => {
 
 // POST create a new leave type
 router.post('/', async (req, res) => {
-  const { name, code: customCode, color, description, default_days, status } = req.body;
+  const { name, code: customCode, color, description, status } = req.body;
   
   if (!name || name.trim() === '') {
     return res.status(400).json({ error: 'Leave type name is required' });
@@ -37,7 +37,6 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'Invalid leave type code' });
   }
 
-  const defaultDays = parseInt(default_days) || 14;
   const leaveColor = color || '#7c3aed';
   const id = crypto.randomUUID();
 
@@ -59,9 +58,9 @@ router.post('/', async (req, res) => {
 
     // Insert leave type
     await connection.query(
-      `INSERT INTO leave_types (id, name, code, color, description, default_days, status) 
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [id, name.trim(), code, leaveColor, description || '', defaultDays, status || 'active']
+      `INSERT INTO leave_types (id, name, code, color, description, status) 
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [id, name.trim(), code, leaveColor, description || '', status || 'active']
     );
 
     // Dynamically add columns to leave_rules and leave_balances tables if they don't exist
@@ -69,7 +68,7 @@ router.post('/', async (req, res) => {
     const balanceCol = `${code}_taken`;
 
     try {
-      await connection.query(`ALTER TABLE leave_rules ADD COLUMN ${ruleCol} INT DEFAULT ${defaultDays}`);
+      await connection.query(`ALTER TABLE leave_rules ADD COLUMN ${ruleCol} INT DEFAULT 0`);
     } catch (colErr) {
       // Column might already exist, ignore duplicate column error
     }
@@ -96,7 +95,7 @@ router.post('/', async (req, res) => {
 // PUT update leave type
 router.put('/:id', async (req, res) => {
   const { id } = req.params;
-  const { name, color, description, default_days, status } = req.body;
+  const { name, color, description, status } = req.body;
 
   try {
     const [existing] = await pool.query('SELECT * FROM leave_types WHERE id = ?', [id]);
@@ -108,14 +107,13 @@ router.put('/:id', async (req, res) => {
     const updatedName = name ? name.trim() : current.name;
     const updatedColor = color || current.color;
     const updatedDesc = description !== undefined ? description : current.description;
-    const updatedDays = default_days !== undefined ? parseInt(default_days) : current.default_days;
     const updatedStatus = status || current.status;
 
     await pool.query(
       `UPDATE leave_types 
-       SET name = ?, color = ?, description = ?, default_days = ?, status = ? 
+       SET name = ?, color = ?, description = ?, status = ? 
        WHERE id = ?`,
-      [updatedName, updatedColor, updatedDesc, updatedDays, updatedStatus, id]
+      [updatedName, updatedColor, updatedDesc, updatedStatus, id]
     );
 
     const [updated] = await pool.query('SELECT * FROM leave_types WHERE id = ?', [id]);
