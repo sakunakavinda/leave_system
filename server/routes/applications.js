@@ -1,21 +1,35 @@
 import express from 'express';
 import pool from '../db.js';
+import { optionalAuth, getBranchScope } from '../middleware/auth.js';
 
 const router = express.Router();
 
-router.get('/', async (req, res) => {
+router.get('/', optionalAuth, async (req, res) => {
   try {
-    const [rows] = await pool.query(`
+    const branchScope = getBranchScope(req) || req.query.branch_id;
+    
+    let sql = `
       SELECT 
         a.id, a.employee_id, a.substitute_employee_id, a.leave_type, 
         a.applied_date, a.returning_date, a.substitute_confirmed, a.status,
         a.created_at, a.updated_at,
+        e.branch_id,
         (SELECT GROUP_CONCAT(DATE_FORMAT(d.leave_date, '%Y-%m-%d')) 
          FROM leave_application_dates d 
          WHERE d.leave_application_id = a.id) AS leave_dates
       FROM leave_applications a
-      ORDER BY a.created_at DESC
-    `);
+      JOIN employees e ON a.employee_id = e.id
+    `;
+    const params = [];
+
+    if (branchScope) {
+      sql += ' WHERE e.branch_id = ?';
+      params.push(branchScope);
+    }
+
+    sql += ' ORDER BY a.created_at DESC';
+
+    const [rows] = await pool.query(sql, params);
     
     const apps = rows.map(row => ({
       id: row.id,
@@ -101,7 +115,8 @@ router.post('/', async (req, res) => {
       } else {
         quota = 0;
       }
-      taken = (balances[balanceCol] !== undefined && balances[balanceCol] !== null) ? balances[balanceCol] : 0;
+      const balanceRow = takenRows[0] || {};
+      taken = (balanceRow[balanceCol] !== undefined && balanceRow[balanceCol] !== null) ? Number(balanceRow[balanceCol]) : 0;
       
       if (taken + requestedDays > quota) {
         await connection.rollback();
@@ -213,7 +228,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-router.put('/:id/status', async (req, res) => {
+router.put('/:id/status', optionalAuth, async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
   const connection = await pool.getConnection();
@@ -221,12 +236,24 @@ router.put('/:id/status', async (req, res) => {
   try {
     await connection.beginTransaction();
     
-    const [appRows] = await connection.query('SELECT * FROM leave_applications WHERE id = ?', [id]);
+    const [appRows] = await connection.query(`
+      SELECT a.*, e.branch_id 
+      FROM leave_applications a 
+      JOIN employees e ON a.employee_id = e.id 
+      WHERE a.id = ?
+    `, [id]);
+    
     if (appRows.length === 0) {
       await connection.rollback();
       return res.status(404).json({ error: 'Application not found' });
     }
     const app = appRows[0];
+
+    const branchScope = getBranchScope(req);
+    if (branchScope && app.branch_id !== branchScope) {
+      await connection.rollback();
+      return res.status(403).json({ error: 'Forbidden: You cannot modify leave applications outside your assigned branch.' });
+    }
 
     if (app.status !== 'rejected' && status === 'rejected') {
       const [daysRows] = await connection.query('SELECT COUNT(*) AS count FROM leave_application_dates WHERE leave_application_id = ?', [id]);

@@ -13,6 +13,7 @@ import applicationsRouter from './routes/applications.js';
 import settingsRouter from './routes/settings.js';
 import leaveTypesRouter from './routes/leaveTypes.js';
 import leaveProfilesRouter from './routes/leaveProfiles.js';
+import authRouter from './routes/auth.js';
 
 dotenv.config();
 
@@ -30,6 +31,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Mount routes
+app.use('/api/auth', authRouter);
 app.use('/api/branches', branchesRouter);
 app.use('/api/departments', departmentsRouter);
 app.use('/api/roles', rolesRouter);

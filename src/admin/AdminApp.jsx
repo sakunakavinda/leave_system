@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import './admin.css'
 import { AdminDashboard, ManageEmployees, ManageBranches, ManageManagers, ManageDepartments, ManageRoles, ManageLeaveTypes, ManageLeaveProfiles, AccountSettings, SystemSettings, LeaveOverview } from './AdminPages.jsx'
-import { api } from '../api.js'
+import { api, tokenStorage } from '../api.js'
 import { applyTheme } from './theme.js'
 
 const NAV = [
@@ -170,7 +170,7 @@ const PAGE_META = {
 
 export default function AdminApp() {
   const navigate = useNavigate()
-  const [currentUser, setCurrentUser]   = useState(null)
+  const [currentUser, setCurrentUser]   = useState(() => tokenStorage.getUser())
   const [loginForm, setLoginForm]       = useState({ username: '', password: '' })
   const [loginError, setLoginError]     = useState('')
   const [showProfileModal, setShowProfileModal] = useState(false)
@@ -200,6 +200,23 @@ export default function AdminApp() {
   const [settings, setSettings]         = useState({})
   const [loading, setLoading]           = useState(true)
 
+  // Verify session on mount
+  useEffect(() => {
+    if (tokenStorage.getToken()) {
+      api.getCurrentUser()
+        .then(res => {
+          if (res?.user) {
+            setCurrentUser(res.user);
+            tokenStorage.setUser(res.user);
+          }
+        })
+        .catch(() => {
+          tokenStorage.clear();
+          setCurrentUser(null);
+        });
+    }
+  }, []);
+
   // Fetch initial data
   useEffect(() => {
     const loadData = async () => {
@@ -208,7 +225,7 @@ export default function AdminApp() {
           api.getApplications(),
           api.getBranches(),
           api.getManagers(),
-          api.getEmployees(),
+          api.getEmployees({ includeSecretCode: true }),
           api.getDepartments(),
           api.getRoles(),
           api.getRules(),
@@ -482,6 +499,7 @@ export default function AdminApp() {
             if(window.confirm('Are you sure you want to logout?')) { 
               setIsLoggingOut(true);
               setTimeout(() => {
+                api.logout();
                 setCurrentUser(null); 
                 setLoginForm({ username: '', password: '' });
                 setIsLoggingOut(false);
