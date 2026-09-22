@@ -3678,3 +3678,44 @@ export function ManageLeaveTypes({ leaveTypes, setLeaveTypes }) {
     </div>
   );
 }
+
+/* ─────────────────────────────────────────────────────
+   ManageLeaveProfiles
+───────────────────────────────────────────────────── */
+export function ManageLeaveProfiles() {
+  return (
+    <div className="admin-content">
+      <div className="data-table-wrap" style={{ padding: '56px 24px', textAlign: 'center', background: 'var(--bg-card)', borderRadius: 'var(--border-radius)' }}>
+        <div style={{
+          width: '64px',
+          height: '64px',
+          borderRadius: '16px',
+          background: 'rgba(var(--accent-rgb, 124, 58, 237), 0.12)',
+          color: 'var(--accent)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          margin: '0 auto 20px',
+          border: '1px solid rgba(var(--accent-rgb, 124, 58, 237), 0.25)'
+        }}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '30px', height: '30px' }}>
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+          </svg>
+        </div>
+        <h3 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>
+          Manage Leave Profiles
+        </h3>
+        <p style={{ color: 'var(--text-muted)', maxWidth: '460px', margin: '0 auto 24px', fontSize: '14px', lineHeight: 1.6 }}>
+          Leave Profiles configuration section is set up and ready. Leave profile definitions, entitlement packages, and tier policies can be added here.
+        </p>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '6px 16px', borderRadius: '99px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--bg-card-border)', fontSize: '12px', color: 'var(--text-muted)' }}>
+          <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: 'var(--accent)', display: 'inline-block' }}></span>
+          Awaiting Profile Configuration Details
+        </div>
+      </div>
+    </div>
+  );
+}

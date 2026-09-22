@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import './admin.css'
-import { AdminDashboard, ManageEmployees, ManageBranches, ManageManagers, ManageDepartments, ManageRoles, ManageLeaveTypes, AccountSettings, SystemSettings, LeaveOverview } from './AdminPages.jsx'
+import { AdminDashboard, ManageEmployees, ManageBranches, ManageManagers, ManageDepartments, ManageRoles, ManageLeaveTypes, ManageLeaveProfiles, AccountSettings, SystemSettings, LeaveOverview } from './AdminPages.jsx'
 import { api } from '../api.js'
 import { applyTheme } from './theme.js'
 
@@ -97,16 +97,49 @@ const NAV = [
     ),
   },
   {
-    id: 'leave_types',
+    id: 'leave_configuration',
     group: 'Management',
-    label: 'Manage Leave Types',
-    desc: 'Custom leave type definitions',
+    label: 'Leave Configuration',
+    desc: 'Leave types & profiles',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
-        <line x1="7" y1="7" x2="7.01" y2="7"/>
+        <line x1="4" y1="21" x2="4" y2="14"></line>
+        <line x1="4" y1="10" x2="4" y2="3"></line>
+        <line x1="12" y1="21" x2="12" y2="12"></line>
+        <line x1="12" y1="8" x2="12" y2="3"></line>
+        <line x1="20" y1="21" x2="20" y2="16"></line>
+        <line x1="20" y1="12" x2="20" y2="3"></line>
+        <line x1="1" y1="14" x2="7" y2="14"></line>
+        <line x1="9" y1="8" x2="15" y2="8"></line>
+        <line x1="17" y1="16" x2="23" y2="16"></line>
       </svg>
     ),
+    children: [
+      {
+        id: 'leave_types',
+        label: 'Manage Leave Types',
+        desc: 'Custom leave type definitions',
+        icon: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
+            <line x1="7" y1="7" x2="7.01" y2="7"/>
+          </svg>
+        ),
+      },
+      {
+        id: 'leave_profiles',
+        label: 'Manage Leave Profiles',
+        desc: 'Leave profile policies & settings',
+        icon: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+          </svg>
+        ),
+      },
+    ],
   },
   {
     id: 'settings',
@@ -129,7 +162,9 @@ const PAGE_META = {
   branches:   { title: 'Manage Branches',   subtitle: 'Configure and track office branches'  },
   departments: { title: 'Manage Departments', subtitle: 'Configure and organize departments'  },
   roles:      { title: 'Manage Roles',      subtitle: 'Define and manage role designations'   },
+  leave_configuration: { title: 'Leave Configuration', subtitle: 'Manage leave types and profiles' },
   leave_types: { title: 'Manage Leave Types', subtitle: 'Create and configure custom leave types' },
+  leave_profiles: { title: 'Manage Leave Profiles', subtitle: 'Configure employee leave profiles' },
   settings:   { title: 'System Settings',   subtitle: 'Configure global system settings'      },
 }
 
@@ -145,6 +180,14 @@ export default function AdminApp() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
   const [activePage, setActivePage]     = useState('dashboard')
+  const [expandedMenus, setExpandedMenus] = useState({ leave_configuration: true })
+
+  const toggleMenu = (menuId) => {
+    setExpandedMenus(prev => ({
+      ...prev,
+      [menuId]: !prev[menuId]
+    }))
+  }
   const [applications, setApplications] = useState([])
   const [branches, setBranches]         = useState([])
   const [managers, setManagers]         = useState([])
@@ -356,20 +399,75 @@ export default function AdminApp() {
             return (
               <div key={group} style={{ marginBottom: '16px' }}>
                 <div className="sidebar-nav-label">{group}</div>
-                {groupItems.map(item => (
-                  <button
-                    key={item.id}
-                    id={`nav-${item.id}`}
-                    className={`nav-item ${activePage === item.id ? 'active' : ''}`}
-                    onClick={() => { setActivePage(item.id); setIsMobileMenuOpen(false); }}
-                  >
-                    {item.icon}
-                    {item.label}
-                    {item.id === 'applications' && pendingCount > 0 && (
-                      <span className="nav-badge">{pendingCount}</span>
-                    )}
-                  </button>
-                ))}
+                {groupItems.map(item => {
+                  if (item.children && item.children.length > 0) {
+                    const isChildActive = item.children.some(c => c.id === activePage);
+                    const isExpanded = expandedMenus[item.id] ?? isChildActive;
+                    return (
+                      <div key={item.id} className="nav-group-wrapper" style={{ marginBottom: '2px' }}>
+                        <button
+                          id={`nav-${item.id}`}
+                          className={`nav-item ${isChildActive ? 'parent-active' : ''}`}
+                          onClick={() => {
+                            toggleMenu(item.id);
+                            if (!isExpanded && !isChildActive) {
+                              setActivePage(item.children[0].id);
+                              setIsMobileMenuOpen(false);
+                            }
+                          }}
+                        >
+                          {item.icon}
+                          <span style={{ flex: 1, textAlign: 'left' }}>{item.label}</span>
+                          <svg
+                            className={`nav-chevron ${isExpanded ? 'open' : ''}`}
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            style={{ width: '14px', height: '14px', flexShrink: 0 }}
+                          >
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                          </svg>
+                        </button>
+                        {isExpanded && (
+                          <div className="nav-sub-menu">
+                            {item.children.map(child => (
+                              <button
+                                key={child.id}
+                                id={`nav-${child.id}`}
+                                className={`nav-item nav-sub-item ${activePage === child.id ? 'active' : ''}`}
+                                onClick={() => {
+                                  setActivePage(child.id);
+                                  setIsMobileMenuOpen(false);
+                                }}
+                              >
+                                {child.icon}
+                                <span>{child.label}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <button
+                      key={item.id}
+                      id={`nav-${item.id}`}
+                      className={`nav-item ${activePage === item.id ? 'active' : ''}`}
+                      onClick={() => { setActivePage(item.id); setIsMobileMenuOpen(false); }}
+                    >
+                      {item.icon}
+                      {item.label}
+                      {item.id === 'applications' && pendingCount > 0 && (
+                        <span className="nav-badge">{pendingCount}</span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             );
           })}
@@ -501,8 +599,11 @@ export default function AdminApp() {
         {activePage === 'roles' && (
           <ManageRoles departments={departments} roles={roles} setRoles={setRoles} />
         )}
-        {activePage === 'leave_types' && (
+        {(activePage === 'leave_types' || activePage === 'leave_configuration') && (
           <ManageLeaveTypes leaveTypes={leaveTypes} setLeaveTypes={setLeaveTypes} />
+        )}
+        {activePage === 'leave_profiles' && (
+          <ManageLeaveProfiles />
         )}
         {activePage === 'settings' && (
           <SystemSettings />
