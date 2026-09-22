@@ -196,6 +196,7 @@ export default function AdminApp() {
   const [roles, setRoles]               = useState([])
   const [rules, setRules]               = useState([])
   const [leaveTypes, setLeaveTypes]     = useState([])
+  const [leaveProfiles, setLeaveProfiles] = useState([])
   const [settings, setSettings]         = useState({})
   const [loading, setLoading]           = useState(true)
 
@@ -203,7 +204,7 @@ export default function AdminApp() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [apps, brs, mgrs, emps, depts, rls, rls_rules, l_types] = await Promise.all([
+        const [apps, brs, mgrs, emps, depts, rls, rls_rules, l_types, l_profiles] = await Promise.all([
           api.getApplications(),
           api.getBranches(),
           api.getManagers(),
@@ -211,7 +212,8 @@ export default function AdminApp() {
           api.getDepartments(),
           api.getRoles(),
           api.getRules(),
-          api.getLeaveTypes().catch(() => [])
+          api.getLeaveTypes().catch(() => []),
+          api.getLeaveProfiles().catch(() => [])
         ]);
         const stgs = await api.getSettings();
         setApplications(apps);
@@ -222,6 +224,7 @@ export default function AdminApp() {
         setRoles(rls);
         setRules(rls_rules);
         setLeaveTypes(l_types);
+        setLeaveProfiles(l_profiles);
         setSettings(stgs);
         if (stgs.theme_color) {
           applyTheme(stgs.theme_color, 'primary');
@@ -603,7 +606,11 @@ export default function AdminApp() {
           <ManageLeaveTypes leaveTypes={leaveTypes} setLeaveTypes={setLeaveTypes} />
         )}
         {activePage === 'leave_profiles' && (
-          <ManageLeaveProfiles />
+          <ManageLeaveProfiles 
+            leaveProfiles={leaveProfiles}
+            setLeaveProfiles={setLeaveProfiles}
+            leaveTypes={leaveTypes}
+          />
         )}
         {activePage === 'settings' && (
           <SystemSettings />

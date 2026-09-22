@@ -3682,40 +3682,593 @@ export function ManageLeaveTypes({ leaveTypes, setLeaveTypes }) {
 /* ─────────────────────────────────────────────────────
    ManageLeaveProfiles
 ───────────────────────────────────────────────────── */
-export function ManageLeaveProfiles() {
+export function ManageLeaveProfiles({ leaveProfiles = [], setLeaveProfiles = () => {}, leaveTypes = [] }) {
+  const [modal, setModal] = useState(null); // null | 'add' | profile object
+  const [search, setSearch] = useState('');
+  const [form, setForm] = useState({
+    name: '',
+    code: '',
+    description: '',
+    status: 'active',
+    entitlements: {},
+  });
+  const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const showToast = (msg, type = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  // Use real leave types from database
+  const effectiveLeaveTypes = Array.isArray(leaveTypes) ? leaveTypes : [];
+
+  const openAdd = () => {
+    const initialEntitlements = {};
+    effectiveLeaveTypes.forEach(lt => {
+      initialEntitlements[lt.code] = 0;
+    });
+
+    setForm({
+      name: '',
+      code: '',
+      description: '',
+      status: 'active',
+      entitlements: initialEntitlements,
+    });
+    setError('');
+    setModal('add');
+  };
+
+  const openEdit = (profile) => {
+    const currentEntitlements = {};
+    effectiveLeaveTypes.forEach(lt => {
+      const savedVal = profile.entitlements?.[lt.code] ?? profile.entitlements?.[lt.id];
+      currentEntitlements[lt.code] = savedVal !== undefined ? Number(savedVal) : 0;
+    });
+
+    setForm({
+      id: profile.id,
+      name: profile.name,
+      code: profile.code,
+      description: profile.description || '',
+      status: profile.status || 'active',
+      entitlements: currentEntitlements,
+    });
+    setError('');
+    setModal(profile);
+  };
+
+  const closeModal = () => {
+    setModal(null);
+    setError('');
+  };
+
+  const handleNameChange = (val) => {
+    setForm(prev => {
+      const updated = { ...prev, name: val };
+      const autoCode = val.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+      if (modal === 'add' && (!prev.code || prev.code === prev.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, ''))) {
+        updated.code = autoCode;
+      }
+      return updated;
+    });
+  };
+
+  const handleDaysChange = (code, rawVal) => {
+    const num = Math.max(0, parseInt(rawVal, 10) || 0);
+    setForm(prev => ({
+      ...prev,
+      entitlements: {
+        ...prev.entitlements,
+        [code]: num
+      }
+    }));
+  };
+
+  const stepDays = (code, delta) => {
+    setForm(prev => {
+      const current = Number(prev.entitlements[code]) || 0;
+      const next = Math.max(0, current + delta);
+      return {
+        ...prev,
+        entitlements: {
+          ...prev.entitlements,
+          [code]: next
+        }
+      };
+    });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.name.trim()) {
+      setError('Profile name is required');
+      return;
+    }
+    const finalCode = form.code.trim() || form.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    if (!finalCode) {
+      setError('A valid profile code is required');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError('');
+
+    const payload = {
+      name: form.name.trim(),
+      code: finalCode,
+      description: form.description.trim(),
+      status: form.status,
+      entitlements: form.entitlements,
+    };
+
+    try {
+      if (modal === 'add') {
+        const created = await api.addLeaveProfile(payload);
+        setLeaveProfiles(prev => [...prev, created]);
+        showToast('Leave profile created successfully');
+      } else {
+        const updated = await api.updateLeaveProfile(modal.id, payload);
+        setLeaveProfiles(prev => prev.map(p => p.id === modal.id ? updated : p));
+        showToast('Leave profile updated successfully');
+      }
+      closeModal();
+    } catch (err) {
+      setError(err.message || 'Action failed');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (id, name) => {
+    if (!window.confirm(`Are you sure you want to delete profile "${name}"?`)) return;
+    try {
+      await api.deleteLeaveProfile(id);
+      setLeaveProfiles(prev => prev.filter(p => p.id !== id));
+      showToast('Leave profile deleted successfully', 'danger');
+    } catch (err) {
+      alert(err.message || 'Failed to delete leave profile');
+    }
+  };
+
+  const filtered = leaveProfiles.filter(p => {
+    const q = search.toLowerCase();
+    return !q || p.name.toLowerCase().includes(q) || (p.code || '').toLowerCase().includes(q) || (p.description || '').toLowerCase().includes(q);
+  });
+
+  const totalConfiguredDays = Object.values(form.entitlements || {}).reduce((s, d) => s + (Number(d) || 0), 0);
+
   return (
     <div className="admin-content">
-      <div className="data-table-wrap" style={{ padding: '56px 24px', textAlign: 'center', background: 'var(--bg-card)', borderRadius: 'var(--border-radius)' }}>
-        <div style={{
-          width: '64px',
-          height: '64px',
-          borderRadius: '16px',
-          background: 'rgba(var(--accent-rgb, 124, 58, 237), 0.12)',
-          color: 'var(--accent)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          margin: '0 auto 20px',
-          border: '1px solid rgba(var(--accent-rgb, 124, 58, 237), 0.25)'
-        }}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '30px', height: '30px' }}>
-            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-            <circle cx="9" cy="7" r="4" />
-            <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-          </svg>
+      {/* Stats bar */}
+      <div className="profile-stats-grid">
+        <div className="profile-stat-card">
+          <div style={{
+            width: '42px',
+            height: '42px',
+            borderRadius: '10px',
+            background: 'color-mix(in srgb, var(--accent) 15%, transparent)',
+            color: 'var(--accent-light)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0
+          }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '20px', height: '20px' }}>
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+          </div>
+          <div>
+            <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)' }}>{leaveProfiles.length}</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Total Leave Profiles</div>
+          </div>
         </div>
-        <h3 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>
-          Manage Leave Profiles
-        </h3>
-        <p style={{ color: 'var(--text-muted)', maxWidth: '460px', margin: '0 auto 24px', fontSize: '14px', lineHeight: 1.6 }}>
-          Leave Profiles configuration section is set up and ready. Leave profile definitions, entitlement packages, and tier policies can be added here.
-        </p>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '6px 16px', borderRadius: '99px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--bg-card-border)', fontSize: '12px', color: 'var(--text-muted)' }}>
-          <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: 'var(--accent)', display: 'inline-block' }}></span>
-          Awaiting Profile Configuration Details
+
+        <div className="profile-stat-card">
+          <div style={{
+            width: '42px',
+            height: '42px',
+            borderRadius: '10px',
+            background: 'rgba(16, 185, 129, 0.15)',
+            color: '#10b981',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0
+          }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '20px', height: '20px' }}>
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+              <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>
+          </div>
+          <div>
+            <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)' }}>
+              {leaveProfiles.filter(p => p.status === 'active').length}
+            </div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Active Profiles</div>
+          </div>
+        </div>
+
+        <div className="profile-stat-card">
+          <div style={{
+            width: '42px',
+            height: '42px',
+            borderRadius: '10px',
+            background: 'rgba(59, 130, 246, 0.15)',
+            color: '#3b82f6',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0
+          }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '20px', height: '20px' }}>
+              <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
+              <line x1="7" y1="7" x2="7.01" y2="7"/>
+            </svg>
+          </div>
+          <div>
+            <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)' }}>
+              {effectiveLeaveTypes.length}
+            </div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Available Leave Types</div>
+          </div>
         </div>
       </div>
+
+      {/* Top Controls */}
+      <div className="controls-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
+        <div className="admin-search-box" style={{ flex: 1, maxWidth: '400px' }}>
+          <svg className="s-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input
+            placeholder="Search profiles by name or code…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+        <button className="btn-primary" onClick={openAdd} style={{ gap: '6px', whiteSpace: 'nowrap' }}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '18px', height: '18px' }}>
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          Create Leave Profile
+        </button>
+      </div>
+
+      {/* Table */}
+      <div className="data-table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Profile Name & Code</th>
+              <th>Description</th>
+              <th>Configured Leave Entitlements</th>
+              <th>Total Days</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.length === 0 ? (
+              <tr>
+                <td colSpan={6} style={{ textAlign: 'center', padding: '48px', color: 'var(--text-muted)' }}>
+                  {search ? 'No leave profiles matching search' : 'No leave profiles created yet. Click "Create Leave Profile" to get started.'}
+                </td>
+              </tr>
+            ) : filtered.map(p => {
+              const totalDays = Object.values(p.entitlements || {}).reduce((s, v) => s + (Number(v) || 0), 0);
+              const unconfiguredCount = effectiveLeaveTypes.filter(lt => {
+                return p.entitlements?.[lt.code] === undefined && p.entitlements?.[lt.id] === undefined;
+              }).length;
+
+              return (
+                <tr key={p.id}>
+                  <td>
+                    <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '3px' }}>
+                      {p.name}
+                    </div>
+                    <code style={{ background: 'rgba(255,255,255,0.06)', padding: '2px 8px', borderRadius: '4px', fontSize: '11px' }}>
+                      {p.code}
+                    </code>
+                  </td>
+                  <td style={{ color: 'var(--text-secondary)', fontSize: '13px', maxWidth: '240px' }}>
+                    {p.description || '—'}
+                  </td>
+                  <td>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+                      {effectiveLeaveTypes.map(lt => {
+                        const days = p.entitlements?.[lt.code] ?? p.entitlements?.[lt.id];
+                        if (days === undefined) return null;
+                        return (
+                          <span key={lt.id || lt.code} className="profile-entitlement-chip">
+                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: lt.color || '#7c3aed' }}></span>
+                            <span>{lt.name}:</span>
+                            <strong style={{ color: 'var(--text-primary)' }}>{days}d</strong>
+                          </span>
+                        );
+                      })}
+                      {unconfiguredCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => openEdit(p)}
+                          style={{
+                            border: '1px dashed color-mix(in srgb, var(--accent) 50%, transparent)',
+                            background: 'color-mix(in srgb, var(--accent) 8%, transparent)',
+                            color: 'var(--accent-light)',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                          title="New leave types were added to the system. Click to configure their days for this profile."
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '12px', height: '12px' }}>
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="8" x2="12" y2="12"></line>
+                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                          </svg>
+                          +{unconfiguredCount} new {unconfiguredCount === 1 ? 'type' : 'types'} to set
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                  <td>
+                    <span style={{ fontWeight: 700, fontSize: '13px', color: 'var(--accent-light)' }}>
+                      {totalDays} days/yr
+                    </span>
+                  </td>
+                  <td>
+                    <span className={`badge badge-${p.status === 'active' ? 'approved' : 'rejected'}`}>
+                      {p.status || 'active'}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="action-btns">
+                      <button className="btn-edit" onClick={() => openEdit(p)} title="Edit Profile & Leave Days">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                        </svg>
+                        Edit
+                      </button>
+                      <button className="btn-danger" onClick={() => handleDelete(p.id, p.name)} title="Delete Profile">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+                        </svg>
+                        Remove
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Create / Edit Modal */}
+      {modal !== null && (
+        <div className="modal-backdrop" onClick={closeModal}>
+          <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: '640px' }}>
+            <div className="modal-header">
+              <div>
+                <h3 style={{ margin: 0 }}>{modal === 'add' ? 'Create Leave Profile' : 'Edit Leave Profile'}</h3>
+                <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--text-muted)' }}>
+                  {modal === 'add' 
+                    ? 'Define a leave package and configure allocated days for each leave type'
+                    : 'Modify profile details and adjust days allocated for existing or newly added leave types'}
+                </p>
+              </div>
+              <button className="modal-close" onClick={closeModal}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit}>
+              <div className="modal-body" style={{ maxHeight: 'calc(85vh - 140px)', overflowY: 'auto' }}>
+                {error && (
+                  <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'rgba(239,68,68,0.1)', color: '#ef4444', fontSize: '13px', marginBottom: '16px', border: '1px solid rgba(239,68,68,0.2)' }}>
+                    {error}
+                  </div>
+                )}
+
+                <div className="field-row">
+                  <div className="field" style={{ flex: 1 }}>
+                    <label>Profile Name *</label>
+                    <input
+                      placeholder="e.g. Full-Time Staff, Executive, Probation"
+                      value={form.name}
+                      onChange={e => handleNameChange(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="field" style={{ flex: 1 }}>
+                    <label>Profile Code *</label>
+                    <input
+                      placeholder="e.g. full_time_staff"
+                      value={form.code}
+                      onChange={e => setForm(p => ({ ...p, code: e.target.value }))}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="field-row">
+                  <div className="field" style={{ flex: 2 }}>
+                    <label>Description</label>
+                    <input
+                      placeholder="Brief notes or applicability guidelines"
+                      value={form.description}
+                      onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
+                    />
+                  </div>
+                  <div className="field" style={{ flex: 1 }}>
+                    <label>Status</label>
+                    <select
+                      className="admin-filter-select"
+                      style={{ width: '100%' }}
+                      value={form.status}
+                      onChange={e => setForm(p => ({ ...p, status: e.target.value }))}
+                    >
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Leave Days Configuration Section */}
+                <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--bg-card-border)' }}>
+                  <div style={{ marginBottom: '14px' }}>
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                      Leave Days per Leave Type
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                      Configure the annual allowed days for each available leave type below. If new leave types were added to the system, they appear here ready to configure.
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {effectiveLeaveTypes.length === 0 ? (
+                      <div style={{
+                        padding: '24px 16px',
+                        textAlign: 'center',
+                        background: 'rgba(255, 255, 255, 0.02)',
+                        borderRadius: '8px',
+                        border: '1px dashed var(--bg-card-border)',
+                        color: 'var(--text-muted)',
+                        fontSize: '13px'
+                      }}>
+                        <p style={{ margin: '0 0 6px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                          No Leave Types Found in Database
+                        </p>
+                        <span>
+                          Please add leave types first under <strong>Leave Configuration &gt; Manage Leave Types</strong>. Once added, they will appear here automatically.
+                        </span>
+                      </div>
+                    ) : (
+                      effectiveLeaveTypes.map(lt => {
+                        const isNewType = modal !== 'add' && modal?.entitlements && modal.entitlements[lt.code] === undefined && modal.entitlements[lt.id] === undefined;
+                        const currentDays = form.entitlements[lt.code] ?? 0;
+
+                        return (
+                          <div key={lt.id || lt.code} className={`profile-leave-card ${isNewType ? 'is-new-type' : ''}`}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <span style={{ width: '12px', height: '12px', borderRadius: '50%', background: lt.color || '#7c3aed', flexShrink: 0 }}></span>
+                            <div>
+                              <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                {lt.name}
+                                {isNewType && (
+                                  <span className="profile-new-badge" title="This leave type was added to the system after this profile was created">
+                                    New Leave Type
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                                Code: <code>{lt.code}</code> {lt.description ? `• ${lt.description}` : ''}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <button
+                              type="button"
+                              onClick={() => stepDays(lt.code, -1)}
+                              style={{
+                                width: '28px',
+                                height: '28px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                borderRadius: '6px',
+                                border: '1px solid var(--bg-card-border)',
+                                background: 'rgba(255,255,255,0.05)',
+                                color: 'var(--text-primary)',
+                                cursor: 'pointer',
+                                fontWeight: 700,
+                                fontSize: '14px'
+                              }}
+                            >
+                              -
+                            </button>
+                            <input
+                              type="number"
+                              min="0"
+                              max="365"
+                              value={currentDays}
+                              onChange={e => handleDaysChange(lt.code, e.target.value)}
+                              style={{
+                                width: '64px',
+                                textAlign: 'center',
+                                padding: '6px 8px',
+                                borderRadius: '6px',
+                                background: 'rgba(255,255,255,0.06)',
+                                border: '1px solid var(--bg-card-border)',
+                                color: 'var(--text-primary)',
+                                fontWeight: 600
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => stepDays(lt.code, 1)}
+                              style={{
+                                width: '28px',
+                                height: '28px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                borderRadius: '6px',
+                                border: '1px solid var(--bg-card-border)',
+                                background: 'rgba(255,255,255,0.05)',
+                                color: 'var(--text-primary)',
+                                cursor: 'pointer',
+                                fontWeight: 700,
+                                fontSize: '14px'
+                              }}
+                            >
+                              +
+                            </button>
+                            <span style={{ fontSize: '12px', color: 'var(--text-muted)', width: '32px' }}>days</span>
+                          </div>
+                        </div>
+                      );
+                    }))}
+                  </div>
+
+                  {/* Total Entitlement Preview */}
+                  <div className="leave-total-preview" style={{ marginTop: '16px' }}>
+                    <span>Total Annual Leave Entitlement</span>
+                    <span className="leave-total-value">{totalConfiguredDays} days / year</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="modal-footer" style={{ padding: '16px 24px', borderTop: '1px solid var(--bg-card-border)', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                <button type="button" className="btn-secondary" onClick={closeModal}>Cancel</button>
+                <button type="submit" className="btn-primary" disabled={isSubmitting}>
+                  {isSubmitting ? 'Saving...' : modal === 'add' ? 'Create Leave Profile' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {toast && (
+        <div className={`admin-toast admin-toast-${toast.type} show`}>
+          {toast.msg}
+        </div>
+      )}
     </div>
   );
 }

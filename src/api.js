@@ -70,4 +70,10 @@ export const api = {
   addLeaveType: (data) => fetchApi('/leave-types', { method: 'POST', body: JSON.stringify(data) }),
   updateLeaveType: (id, data) => fetchApi(`/leave-types/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteLeaveType: (id) => fetchApi(`/leave-types/${id}`, { method: 'DELETE' }),
+
+  // Leave Profiles
+  getLeaveProfiles: () => fetchApi('/leave-profiles'),
+  addLeaveProfile: (data) => fetchApi('/leave-profiles', { method: 'POST', body: JSON.stringify(data) }),
+  updateLeaveProfile: (id, data) => fetchApi(`/leave-profiles/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteLeaveProfile: (id) => fetchApi(`/leave-profiles/${id}`, { method: 'DELETE' }),
 };
