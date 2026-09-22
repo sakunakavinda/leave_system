@@ -14,6 +14,11 @@ import settingsRouter from './routes/settings.js';
 import leaveTypesRouter from './routes/leaveTypes.js';
 import leaveProfilesRouter from './routes/leaveProfiles.js';
 import authRouter from './routes/auth.js';
+import holidaysRouter from './routes/holidays.js';
+import shiftsRouter from './routes/shifts.js';
+import rostersRouter from './routes/rosters.js';
+import contingenciesRouter from './routes/contingencies.js';
+import payrollRouter from './routes/payroll.js';
 
 dotenv.config();
 
@@ -42,6 +47,11 @@ app.use('/api/applications', applicationsRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/leave-types', leaveTypesRouter);
 app.use('/api/leave-profiles', leaveProfilesRouter);
+app.use('/api/holidays', holidaysRouter);
+app.use('/api/shifts', shiftsRouter);
+app.use('/api/rosters', rostersRouter);
+app.use('/api/contingencies', contingenciesRouter);
+app.use('/api/payroll', payrollRouter);
 
 // Serve static frontend files in production
 app.use(express.static(path.join(__dirname, '../dist')));

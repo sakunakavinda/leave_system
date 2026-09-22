@@ -1,6 +1,8 @@
 import express from 'express';
 import pool from '../db.js';
 import { optionalAuth, getBranchScope } from '../middleware/auth.js';
+import { calculateLeaveDeduction } from '../services/calendarService.js';
+import { recordLeaveDeduction, recordLeaveRefund } from '../services/ledgerService.js';
 
 const router = express.Router();
 
@@ -83,8 +85,47 @@ router.post('/', async (req, res) => {
       branch_id = empRows[0].branch_id;
     }
 
-    // Balance & Quota Check
-    const requestedDays = leaveDates ? leaveDates.length : 0;
+    // Dynamic Policy Checks (Configurable notice days & max consecutive days)
+    const [ltRows] = await connection.query(
+      'SELECT name, notice_days_required, max_consecutive_days FROM leave_types WHERE code = ?',
+      [leave_type]
+    );
+    if (ltRows.length > 0) {
+      const ltPolicy = ltRows[0];
+      const noticeDays = parseInt(ltPolicy.notice_days_required) || 0;
+      const maxConsec = parseInt(ltPolicy.max_consecutive_days) || 0;
+
+      if (noticeDays > 0) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const minDate = new Date(today);
+        minDate.setDate(minDate.getDate() + noticeDays);
+
+        for (const dateStr of (leaveDates || [])) {
+          if (!dateStr) continue;
+          const [y, m, day] = dateStr.split('-').map(Number);
+          const lDate = new Date(y, m - 1, day);
+          lDate.setHours(0, 0, 0, 0);
+          if (lDate < minDate) {
+            await connection.rollback();
+            return res.status(400).json({
+              error: `${ltPolicy.name} requires at least ${noticeDays} day(s) advance notice according to company policy.`
+            });
+          }
+        }
+      }
+
+      if (maxConsec > 0 && leaveDates && leaveDates.length > maxConsec) {
+        await connection.rollback();
+        return res.status(400).json({
+          error: `${ltPolicy.name} cannot exceed ${maxConsec} consecutive days per request according to company policy.`
+        });
+      }
+    }
+
+    // Balance & Quota Check with Holiday Exclusions and Roster awareness
+    const deductionCalc = await calculateLeaveDeduction(branch_id, leaveDates || [], employee_id);
+    const requestedDays = deductionCalc.netWorkingDaysDeducted;
     if (requestedDays > 0) {
       const [rulesRows] = await connection.query('SELECT * FROM leave_rules WHERE role_id = ? AND branch_id = ?', [role_id, branch_id]);
       if (rulesRows.length === 0) {
@@ -215,6 +256,12 @@ router.post('/', async (req, res) => {
           console.error(`Failed to update ${colName} column`, e);
         }
       }
+      // Record transaction in immutable ledger
+      try {
+        await recordLeaveDeduction(employee_id, leave_type, requestedDays, appId, 'Leave Application Submitted');
+      } catch (ledgErr) {
+        console.error('Ledger deduction record error:', ledgErr);
+      }
     }
 
     await connection.commit();
@@ -256,17 +303,22 @@ router.put('/:id/status', optionalAuth, async (req, res) => {
     }
 
     if (app.status !== 'rejected' && status === 'rejected') {
-      const [daysRows] = await connection.query('SELECT COUNT(*) AS count FROM leave_application_dates WHERE leave_application_id = ?', [id]);
-      const requestedDays = parseInt(daysRows[0].count);
+      const [daysRows] = await connection.query('SELECT DATE_FORMAT(leave_date, "%Y-%m-%d") AS date_str FROM leave_application_dates WHERE leave_application_id = ?', [id]);
+      const dateList = daysRows.map(d => d.date_str);
+      const deductionCalc = await calculateLeaveDeduction(app.branch_id, dateList, app.employee_id);
+      const requestedDays = deductionCalc.netWorkingDaysDeducted;
       const currentYear = new Date(app.applied_date).getFullYear();
       const colName = `${app.leave_type}_taken`;
       try {
         await connection.query(`UPDATE leave_balances SET ${colName} = GREATEST(0, COALESCE(${colName}, 0) - ?) WHERE employee_id = ? AND year = ?`, [requestedDays, app.employee_id, currentYear]);
+        await recordLeaveRefund(app.employee_id, app.leave_type, requestedDays, id, 'Leave Application Rejected');
       } catch (err) {}
     } 
     else if (app.status === 'rejected' && status !== 'rejected') {
-      const [daysRows] = await connection.query('SELECT COUNT(*) AS count FROM leave_application_dates WHERE leave_application_id = ?', [id]);
-      const requestedDays = parseInt(daysRows[0].count);
+      const [daysRows] = await connection.query('SELECT DATE_FORMAT(leave_date, "%Y-%m-%d") AS date_str FROM leave_application_dates WHERE leave_application_id = ?', [id]);
+      const dateList = daysRows.map(d => d.date_str);
+      const deductionCalc = await calculateLeaveDeduction(app.branch_id, dateList, app.employee_id);
+      const requestedDays = deductionCalc.netWorkingDaysDeducted;
       const currentYear = new Date(app.applied_date).getFullYear();
 
       await connection.query(`
@@ -277,6 +329,7 @@ router.put('/:id/status', optionalAuth, async (req, res) => {
       const colName = `${app.leave_type}_taken`;
       try {
         await connection.query(`UPDATE leave_balances SET ${colName} = COALESCE(${colName}, 0) + ? WHERE employee_id = ? AND year = ?`, [requestedDays, app.employee_id, currentYear]);
+        await recordLeaveDeduction(app.employee_id, app.leave_type, requestedDays, id, 'Leave Application Re-approved');
       } catch (err) {}
     }
 
@@ -459,6 +512,131 @@ router.get('/overview/:secretCode', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error', details: err.message });
+  }
+});
+
+/**
+ * GET /api/applications/capacity-meter
+ * Real-time workforce capacity gauge per branch and role
+ */
+router.get('/capacity-meter', optionalAuth, async (req, res) => {
+  const branchScope = getBranchScope(req) || req.query.branch_id;
+  const targetDate = req.query.date || new Date().toISOString().split('T')[0];
+
+  try {
+    // 1. Fetch active employees in scope
+    let empSql = `
+      SELECT e.id, e.name, e.branch_id, e.role_id, r.title AS role_name, b.name AS branch_name
+      FROM employees e
+      LEFT JOIN roles r ON e.role_id = r.id
+      LEFT JOIN branches b ON e.branch_id = b.id
+      WHERE e.status = 'active'
+    `;
+    const empParams = [];
+    if (branchScope && branchScope !== 'all') {
+      empSql += ' AND e.branch_id = ?';
+      empParams.push(branchScope);
+    }
+    const [employees] = await pool.query(empSql, empParams);
+    const totalStaff = employees.length;
+
+    // 2. Fetch staff on leave on targetDate
+    let leaveSql = `
+      SELECT 
+        a.id AS application_id,
+        a.leave_type,
+        a.status AS leave_status,
+        e.id AS employee_id,
+        e.name AS employee_name,
+        e.role_id,
+        r.title AS role_name,
+        b.name AS branch_name,
+        sub.name AS substitute_name
+      FROM leave_application_dates d
+      JOIN leave_applications a ON d.leave_application_id = a.id
+      JOIN employees e ON a.employee_id = e.id
+      LEFT JOIN roles r ON e.role_id = r.id
+      LEFT JOIN branches b ON e.branch_id = b.id
+      LEFT JOIN employees sub ON a.substitute_employee_id = sub.id
+      WHERE d.leave_date = ? AND a.status IN ('approved', 'pending')
+    `;
+    const leaveParams = [targetDate];
+    if (branchScope && branchScope !== 'all') {
+      leaveSql += ' AND e.branch_id = ?';
+      leaveParams.push(branchScope);
+    }
+    const [onLeaveRows] = await pool.query(leaveSql, leaveParams);
+
+    // Dedup onLeave by employee_id
+    const leaveMap = new Map();
+    onLeaveRows.forEach(r => {
+      if (!leaveMap.has(r.employee_id)) {
+        leaveMap.set(r.employee_id, r);
+      }
+    });
+    const onLeaveList = Array.from(leaveMap.values());
+    const onLeaveCount = onLeaveList.length;
+    const onDutyCount = Math.max(0, totalStaff - onLeaveCount);
+
+    const capacityPercentage = totalStaff > 0 ? Math.round((onDutyCount / totalStaff) * 100) : 100;
+    
+    let status = 'healthy';
+    let statusLabel = 'Optimal Operational Staffing';
+    if (capacityPercentage < 50) {
+      status = 'critical';
+      statusLabel = 'Critical Staffing Shortage';
+    } else if (capacityPercentage < 75) {
+      status = 'warning';
+      statusLabel = 'Moderate Staffing Buffer';
+    }
+
+    // Role breakdown
+    const roleStats = {};
+    employees.forEach(emp => {
+      const rId = emp.role_id || 'unassigned';
+      const rName = emp.role_name || 'Unassigned Role';
+      if (!roleStats[rId]) {
+        roleStats[rId] = { role_id: rId, role_name: rName, total: 0, onLeave: 0, onDuty: 0 };
+      }
+      roleStats[rId].total++;
+    });
+
+    onLeaveList.forEach(lv => {
+      const rId = lv.role_id || 'unassigned';
+      if (roleStats[rId]) {
+        roleStats[rId].onLeave++;
+      }
+    });
+
+    const roleBreakdown = Object.values(roleStats).map(r => {
+      const onDuty = Math.max(0, r.total - r.onLeave);
+      const pct = r.total > 0 ? Math.round((onDuty / r.total) * 100) : 100;
+      let rStatus = 'healthy';
+      if (pct < 50) rStatus = 'critical';
+      else if (pct < 75) rStatus = 'warning';
+      return {
+        ...r,
+        onDuty,
+        capacityPercentage: pct,
+        status: rStatus
+      };
+    });
+
+    res.json({
+      date: targetDate,
+      branchScope: branchScope || 'all',
+      totalStaff,
+      onDutyCount,
+      onLeaveCount,
+      capacityPercentage,
+      status,
+      statusLabel,
+      roleBreakdown,
+      onLeaveList
+    });
+  } catch (err) {
+    console.error('Capacity meter error:', err);
+    res.status(500).json({ error: 'Failed to calculate workforce capacity' });
   }
 });
 

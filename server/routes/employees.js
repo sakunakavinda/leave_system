@@ -113,4 +113,145 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/employees/available-substitutes
+ * Evaluates candidate substitutes with Fatigue Protection Guard (< 11 hours rest interval)
+ */
+router.post('/available-substitutes', async (req, res) => {
+  const { applicant_id, branch_id, role_id, leave_dates } = req.body;
+
+  if (!branch_id || !role_id) {
+    return res.status(400).json({ error: 'branch_id and role_id are required' });
+  }
+
+  const cleanDates = (leave_dates || []).map(d => typeof d === 'string' ? d.split('T')[0] : '').filter(Boolean);
+
+  try {
+    // 1. Fetch potential peer candidates in same branch and role (excluding applicant)
+    let sql = 'SELECT id, name, branch_id, role_id FROM employees WHERE branch_id = ? AND role_id = ? AND status = "active"';
+    const params = [branch_id, role_id];
+
+    if (applicant_id) {
+      sql += ' AND id != ?';
+      params.push(applicant_id);
+    }
+
+    const [candidates] = await pool.query(sql, params);
+
+    if (candidates.length === 0) {
+      return res.json([]);
+    }
+
+    const candidateIds = candidates.map(c => c.id);
+
+    // 2. Check candidates who already have leave overlapping on requested dates
+    let leaveOverlaps = new Set();
+    let substituteOverlaps = new Set();
+
+    if (cleanDates.length > 0) {
+      const [leaveRows] = await pool.query(
+        `SELECT a.employee_id 
+         FROM leave_applications a
+         JOIN leave_application_dates d ON a.id = d.leave_application_id
+         WHERE a.status IN ('pending', 'approved') 
+           AND d.leave_date IN (?) 
+           AND a.employee_id IN (?)`,
+        [cleanDates, candidateIds]
+      );
+      leaveRows.forEach(r => leaveOverlaps.add(r.employee_id));
+
+      const [subRows] = await pool.query(
+        `SELECT a.substitute_employee_id 
+         FROM leave_applications a
+         JOIN leave_application_dates d ON a.id = d.leave_application_id
+         WHERE a.status IN ('pending', 'approved') 
+           AND d.leave_date IN (?) 
+           AND a.substitute_employee_id IN (?)`,
+        [cleanDates, candidateIds]
+      );
+      subRows.forEach(r => substituteOverlaps.add(r.substitute_employee_id));
+    }
+
+    // 3. Check Fatigue Protection Guard (< 11 hours rest interval)
+    // For each clean date, check candidate's scheduled shift on day-1, day, and day+1
+    const fatigueNotices = new Map();
+
+    if (cleanDates.length > 0) {
+      // Find candidate shifts on adjacent dates
+      const [rosterRows] = await pool.query(
+        `SELECT er.employee_id, DATE_FORMAT(er.roster_date, '%Y-%m-%d') AS roster_date, 
+                sm.name AS shift_name, sm.start_time, sm.end_time, sm.crosses_midnight
+         FROM employee_rosters er
+         JOIN shift_masters sm ON er.shift_id = sm.id
+         WHERE er.employee_id IN (?)`,
+        [candidateIds]
+      );
+
+      for (const cand of candidates) {
+        const candShifts = rosterRows.filter(r => r.employee_id === cand.id);
+
+        for (const dateStr of cleanDates) {
+          const [y, m, d] = dateStr.split('-').map(Number);
+          const prevDate = new Date(Date.UTC(y, m - 1, d - 1)).toISOString().split('T')[0];
+          const nextDate = new Date(Date.UTC(y, m - 1, d + 1)).toISOString().split('T')[0];
+
+          // Check if candidate is scheduled on overnight shift the night before
+          const prevShift = candShifts.find(s => s.roster_date === prevDate);
+          if (prevShift && prevShift.crosses_midnight) {
+            fatigueNotices.set(
+              cand.id, 
+              `⚠️ Fatigue Risk: Finishes ${prevShift.shift_name} in the morning (${prevShift.end_time?.substring(0, 5)}) with insufficient rest (< 11h).`
+            );
+            break;
+          }
+
+          // Check if candidate is scheduled on a night shift on the coverage date itself
+          const sameDayShift = candShifts.find(s => s.roster_date === dateStr);
+          if (sameDayShift && sameDayShift.crosses_midnight) {
+            fatigueNotices.set(
+              cand.id, 
+              `⚠️ Fatigue Risk: Already scheduled for ${sameDayShift.shift_name} on this date. Double shift would breach 11h rest guard.`
+            );
+            break;
+          }
+        }
+      }
+    }
+
+    // Format response
+    const results = candidates.map(c => {
+      const onLeave = leaveOverlaps.has(c.id);
+      const isSub = substituteOverlaps.has(c.id);
+      const fatigueNotice = fatigueNotices.get(c.id) || null;
+
+      let isAvailable = true;
+      let reason = null;
+
+      if (onLeave) {
+        isAvailable = false;
+        reason = 'Already on leave during requested dates';
+      } else if (isSub) {
+        isAvailable = false;
+        reason = 'Already serving as substitute for another colleague';
+      }
+
+      return {
+        id: c.id,
+        name: c.name,
+        branch_id: c.branch_id,
+        role_id: c.role_id,
+        isAvailable,
+        unavailableReason: reason,
+        hasFatigueWarning: Boolean(fatigueNotice),
+        fatigueNotice
+      };
+    });
+
+    res.json(results);
+  } catch (err) {
+    console.error('Error fetching available substitutes:', err);
+    res.status(500).json({ error: 'Failed to calculate available substitutes' });
+  }
+});
+
 export default router;

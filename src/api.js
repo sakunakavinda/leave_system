@@ -63,6 +63,10 @@ export const api = {
     return data.user || data;
   },
   getCurrentUser: () => fetchApi('/auth/me'),
+  verifyEmployeeCode: (secretCode) => fetchApi('/auth/employee-verify', {
+    method: 'POST',
+    body: JSON.stringify({ secretCode })
+  }),
   logout: () => {
     tokenStorage.clear();
     return fetchApi('/auth/logout', { method: 'POST' }).catch(() => {});
@@ -137,4 +141,112 @@ export const api = {
   addLeaveProfile: (data) => fetchApi('/leave-profiles', { method: 'POST', body: JSON.stringify(data) }),
   updateLeaveProfile: (id, data) => fetchApi(`/leave-profiles/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteLeaveProfile: (id) => fetchApi(`/leave-profiles/${id}`, { method: 'DELETE' }),
+
+  // Holidays & Schedules
+  getHolidays: (params = {}) => {
+    const query = new URLSearchParams();
+    if (params.branch_id) query.set('branch_id', params.branch_id);
+    if (params.year) query.set('year', params.year);
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    return fetchApi(`/holidays${qs}`);
+  },
+  addHoliday: (data) => fetchApi('/holidays', { method: 'POST', body: JSON.stringify(data) }),
+  updateHoliday: (id, data) => fetchApi(`/holidays/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteHoliday: (id) => fetchApi(`/holidays/${id}`, { method: 'DELETE' }),
+  calculateDeduction: (branch_id, leaveDates, employee_id = null) => fetchApi('/holidays/calculate-deduction', {
+    method: 'POST',
+    body: JSON.stringify({ branch_id, leaveDates, employee_id })
+  }),
+  getBranchSchedule: (branch_id) => fetchApi(`/holidays/schedules/${branch_id}`),
+  updateBranchSchedule: (branch_id, data) => fetchApi(`/holidays/schedules/${branch_id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data)
+  }),
+
+  // Shift Masters
+  getShifts: (params = {}) => {
+    const query = new URLSearchParams();
+    if (params.branch_id) query.set('branch_id', params.branch_id);
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    return fetchApi(`/shifts${qs}`);
+  },
+  addShift: (data) => fetchApi('/shifts', { method: 'POST', body: JSON.stringify(data) }),
+  updateShift: (id, data) => fetchApi(`/shifts/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteShift: (id) => fetchApi(`/shifts/${id}`, { method: 'DELETE' }),
+
+  // Employee Rosters
+  getRosters: (params = {}) => {
+    const query = new URLSearchParams();
+    if (params.branch_id) query.set('branch_id', params.branch_id);
+    if (params.employee_id) query.set('employee_id', params.employee_id);
+    if (params.start_date) query.set('start_date', params.start_date);
+    if (params.end_date) query.set('end_date', params.end_date);
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    return fetchApi(`/rosters${qs}`);
+  },
+  saveRoster: (data) => fetchApi('/rosters', { method: 'POST', body: JSON.stringify(data) }),
+  bulkSaveRoster: (entries) => fetchApi('/rosters/bulk', { method: 'POST', body: JSON.stringify({ entries }) }),
+  deleteRoster: (id) => fetchApi(`/rosters/${id}`, { method: 'DELETE' }),
+
+  // Fatigue & Substitution
+  getAvailableSubstitutes: (data) => fetchApi('/employees/available-substitutes', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  }),
+
+  // Team Capacity Meter
+  getTeamCapacity: (params = {}) => {
+    const query = new URLSearchParams();
+    if (params.branch_id) query.set('branch_id', params.branch_id);
+    if (params.date) query.set('date', params.date);
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    return fetchApi(`/applications/capacity-meter${qs}`);
+  },
+
+  // Operational Contingencies
+  getContingencies: (params = {}) => {
+    const query = new URLSearchParams();
+    if (params.branch_id) query.set('branch_id', params.branch_id);
+    if (params.status) query.set('status', params.status);
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    return fetchApi(`/contingencies${qs}`);
+  },
+  addContingency: (data) => fetchApi('/contingencies', { method: 'POST', body: JSON.stringify(data) }),
+  updateContingency: (id, data) => fetchApi(`/contingencies/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteContingency: (id) => fetchApi(`/contingencies/${id}`, { method: 'DELETE' }),
+  applyRetroactiveShield: (id) => fetchApi(`/contingencies/${id}/apply-retroactive-shield`, { method: 'POST' }),
+
+  // Payroll & LOP
+  getPayrollSummary: (params = {}) => {
+    const query = new URLSearchParams();
+    if (params.branch_id) query.set('branch_id', params.branch_id);
+    if (params.month) query.set('month', params.month);
+    if (params.year) query.set('year', params.year);
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    return fetchApi(`/payroll/summary${qs}`);
+  },
+  downloadPayrollCsv: async (params = {}) => {
+    const query = new URLSearchParams();
+    if (params.branch_id) query.set('branch_id', params.branch_id);
+    if (params.month) query.set('month', params.month);
+    if (params.year) query.set('year', params.year);
+    const token = tokenStorage.getToken();
+    const res = await fetch(`${BASE_URL}/payroll/export-csv?${query.toString()}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Export failed' }));
+      throw new Error(err.error || 'Failed to export CSV');
+    }
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Payroll_LOP_M${params.month || 'ALL'}_${params.year || new Date().getFullYear()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  },
 };
+

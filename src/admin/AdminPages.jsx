@@ -1,6 +1,8 @@
 import { useState, useMemo, useEffect } from 'react'
 import { api } from '../api.js'
 import { APP_THEMES, applyTheme } from './theme.js'
+import { TeamCapacityMeter } from './TeamCapacityMeter.jsx'
+import { ActiveContingencyAlertBanner } from './ContingencyShieldManager.jsx'
 import './admin.css'
 
 /* ── Shared mock data ─────────────────────────────── */
@@ -319,6 +321,12 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
 
   return (
     <div className="admin-content">
+      {/* Active Operational Contingency Alert Banner */}
+      <ActiveContingencyAlertBanner branchId={branchFilter} />
+
+      {/* Live Team Capacity Meter */}
+      <TeamCapacityMeter branches={branches} activeBranch={branchFilter} />
+
       {/* Approved Leaves Calendar */}
       <div className="calendar-card">
         <div className="calendar-header" onClick={() => setIsCalendarExpanded(!isCalendarExpanded)} style={{ cursor: 'pointer' }}>
@@ -2156,7 +2164,15 @@ export function ManageBranches({ branches, setBranches, employees, managers, set
   const [search, setSearch]   = useState('')
   const [modal, setModal]     = useState(null)
   const [toast, setToast]     = useState(null)
-  const EMPTY_BR = { name:'', location:'', manager_id:'', status:'active' }
+  const EMPTY_BR = { 
+    name:'', 
+    location:'', 
+    manager_id:'', 
+    status:'active', 
+    operating_model:'corporate_5day', 
+    working_days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], 
+    weekly_hours: 40.0 
+  }
   const [form, setForm]       = useState(EMPTY_BR)
 
   const getBranchManager = (branchId) => managers?.find(m => m.branch_id === branchId)
@@ -2165,7 +2181,13 @@ export function ManageBranches({ branches, setBranches, employees, managers, set
   const openAdd  = ()    => { setForm(EMPTY_BR); setModal('add') }
   const openEdit = (br)  => { 
     const mgr = getBranchManager(br.id)
-    setForm({ ...br, manager_id: mgr ? mgr.id : '' })
+    setForm({ 
+      ...br, 
+      manager_id: mgr ? mgr.id : '',
+      operating_model: br.operating_model || 'corporate_5day',
+      working_days: br.working_days || ['Monday','Tuesday','Wednesday','Thursday','Friday'],
+      weekly_hours: br.weekly_hours ?? 40.0
+    })
     setModal(br) 
   }
   const closeModal = ()  => setModal(null)
@@ -2325,6 +2347,42 @@ export function ManageBranches({ branches, setBranches, employees, managers, set
                   {(managers || []).map(m => <option key={m.id} value={m.id}>{m.username}</option>)}
                 </select>
               </div>
+
+              <div className="field-row">
+                <div className="field">
+                  <label>Operating Schedule Model</label>
+                  <select 
+                    value={form.operating_model || 'corporate_5day'} 
+                    onChange={e => {
+                      const val = e.target.value;
+                      let days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+                      let hrs = 40.0;
+                      if (val === 'retail_6day') {
+                        days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                        hrs = 48.0;
+                      } else if (val === 'factory_24_7') {
+                        days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+                        hrs = 56.0;
+                      }
+                      setForm(p => ({ ...p, operating_model: val, working_days: days, weekly_hours: hrs }));
+                    }}
+                  >
+                    <option value="corporate_5day">Corporate 5-Day (Mon–Fri, 40 hrs)</option>
+                    <option value="retail_6day">Retail 6-Day (Mon–Sat, 48 hrs)</option>
+                    <option value="factory_24_7">Manufacturing 24/7 Continuous (7 Days)</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label>Weekly Working Hours</label>
+                  <input 
+                    type="number" 
+                    step="0.5" 
+                    value={form.weekly_hours ?? 40.0} 
+                    onChange={e => setForm(p => ({ ...p, weekly_hours: parseFloat(e.target.value) || 40.0 }))} 
+                  />
+                </div>
+              </div>
+
               <div className="field">
                 <label>Status</label>
                 <select value={form.status} onChange={e => setForm(p=>({...p, status: e.target.value}))}>
@@ -3412,6 +3470,11 @@ export function ManageLeaveTypes({ leaveTypes, setLeaveTypes }) {
     color: '#7c3aed',
     description: '',
     status: 'active',
+    notice_days_required: 0,
+    max_consecutive_days: 0,
+    doc_required_after_days: 0,
+    carry_forward_max_days: 0,
+    min_service_days_required: 0,
   });
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -3423,13 +3486,31 @@ export function ManageLeaveTypes({ leaveTypes, setLeaveTypes }) {
   };
 
   const openAdd = () => {
-    setForm({ name: '', code: '', color: '#7c3aed', description: '', status: 'active' });
+    setForm({ 
+      name: '', 
+      code: '', 
+      color: '#7c3aed', 
+      description: '', 
+      status: 'active',
+      notice_days_required: 0,
+      max_consecutive_days: 0,
+      doc_required_after_days: 0,
+      carry_forward_max_days: 0,
+      min_service_days_required: 0,
+    });
     setError('');
     setModal('add');
   };
 
   const openEdit = (lt) => {
-    setForm({ ...lt });
+    setForm({ 
+      ...lt,
+      notice_days_required: lt.notice_days_required ?? 0,
+      max_consecutive_days: lt.max_consecutive_days ?? 0,
+      doc_required_after_days: lt.doc_required_after_days ?? 0,
+      carry_forward_max_days: lt.carry_forward_max_days ?? 0,
+      min_service_days_required: lt.min_service_days_required ?? 0,
+    });
     setError('');
     setModal(lt);
   };
@@ -3509,6 +3590,7 @@ export function ManageLeaveTypes({ leaveTypes, setLeaveTypes }) {
               <th>Leave Type</th>
               <th>Code</th>
               <th>Color Tag</th>
+              <th>Policy Rules</th>
               <th>Description</th>
               <th>Status</th>
               <th>Actions</th>
@@ -3516,7 +3598,7 @@ export function ManageLeaveTypes({ leaveTypes, setLeaveTypes }) {
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={6} style={{ textAlign: 'center', padding: '48px', color: 'var(--text-muted)' }}>No leave types found</td></tr>
+              <tr><td colSpan={7} style={{ textAlign: 'center', padding: '48px', color: 'var(--text-muted)' }}>No leave types found</td></tr>
             ) : filtered.map(lt => (
               <tr key={lt.id}>
                 <td>
@@ -3530,6 +3612,28 @@ export function ManageLeaveTypes({ leaveTypes, setLeaveTypes }) {
                   <span style={{ background: lt.color || '#7c3aed', color: '#fff', fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '12px' }}>
                     {lt.color || '#7c3aed'}
                   </span>
+                </td>
+                <td>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '11px' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>
+                      📅 Notice: <strong style={{ color: (lt.notice_days_required > 0) ? '#60a5fa' : 'var(--text-muted)' }}>{lt.notice_days_required > 0 ? `${lt.notice_days_required}d advance` : '0d (Immediate)'}</strong>
+                    </span>
+                    {lt.max_consecutive_days > 0 && (
+                      <span style={{ color: 'var(--text-secondary)' }}>
+                        ⏱️ Max: <strong style={{ color: '#fbbf24' }}>{lt.max_consecutive_days} consecutive days</strong>
+                      </span>
+                    )}
+                    {lt.doc_required_after_days > 0 && (
+                      <span style={{ color: 'var(--text-secondary)' }}>
+                        📄 Doc: <strong style={{ color: '#34d399' }}>After {lt.doc_required_after_days} days</strong>
+                      </span>
+                    )}
+                    {lt.carry_forward_max_days > 0 && (
+                      <span style={{ color: 'var(--text-secondary)' }}>
+                        🔄 Carry: <strong style={{ color: '#c084fc' }}>Max {lt.carry_forward_max_days}d</strong>
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td style={{ color: 'var(--text-secondary)', fontSize: '13px', maxWidth: '250px' }}>{lt.description || '—'}</td>
                 <td>
@@ -3626,6 +3730,76 @@ export function ManageLeaveTypes({ leaveTypes, setLeaveTypes }) {
                       onChange={e => setForm(p => ({ ...p, color: e.target.value }))}
                       style={{ flex: 1 }}
                     />
+                  </div>
+                </div>
+
+                {/* ── Policy Rules & Thresholds ── */}
+                <div style={{ padding: '12px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid var(--bg-card-border)' }}>
+                  <div style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>⚙️</span>
+                    <span>Company Policy Rules & Thresholds</span>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <div className="form-group">
+                      <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                        Advance Notice (Days)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        className="admin-filter-select"
+                        style={{ width: '100%' }}
+                        value={form.notice_days_required}
+                        onChange={e => setForm(p => ({ ...p, notice_days_required: e.target.value }))}
+                      />
+                      <small style={{ fontSize: '11px', color: 'var(--text-muted)' }}>0 = Immediate (e.g. Sick)</small>
+                    </div>
+
+                    <div className="form-group">
+                      <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                        Max Consecutive Days
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        className="admin-filter-select"
+                        style={{ width: '100%' }}
+                        value={form.max_consecutive_days}
+                        onChange={e => setForm(p => ({ ...p, max_consecutive_days: e.target.value }))}
+                      />
+                      <small style={{ fontSize: '11px', color: 'var(--text-muted)' }}>0 = No upper limit</small>
+                    </div>
+
+                    <div className="form-group">
+                      <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                        Doc Required After (Days)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        className="admin-filter-select"
+                        style={{ width: '100%' }}
+                        value={form.doc_required_after_days}
+                        onChange={e => setForm(p => ({ ...p, doc_required_after_days: e.target.value }))}
+                      />
+                      <small style={{ fontSize: '11px', color: 'var(--text-muted)' }}>e.g. Medical certificate</small>
+                    </div>
+
+                    <div className="form-group">
+                      <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                        Carry Forward Limit (Days)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        className="admin-filter-select"
+                        style={{ width: '100%' }}
+                        value={form.carry_forward_max_days}
+                        onChange={e => setForm(p => ({ ...p, carry_forward_max_days: e.target.value }))}
+                      />
+                      <small style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Roll over to next year</small>
+                    </div>
                   </div>
                 </div>
 
@@ -4257,6 +4431,375 @@ export function ManageLeaveProfiles({ leaveProfiles = [], setLeaveProfiles = () 
                 <button type="button" className="btn-secondary" onClick={closeModal}>Cancel</button>
                 <button type="submit" className="btn-primary" disabled={isSubmitting}>
                   {isSubmitting ? 'Saving...' : modal === 'add' ? 'Create Leave Profile' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {toast && (
+        <div className={`admin-toast admin-toast-${toast.type} show`}>
+          {toast.msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =============================================================================
+// ManageBranchHolidays: Regional & Statutory Holiday Calendar Management
+// =============================================================================
+export function ManageBranchHolidays({ branches = [] }) {
+  const [holidays, setHolidays] = useState([]);
+  const [selectedBranch, setSelectedBranch] = useState('all');
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [modal, setModal] = useState(null); // 'add' | holiday object
+  const [toast, setToast] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const EMPTY_FORM = {
+    branch_id: branches[0]?.id || '',
+    holiday_date: '',
+    name: '',
+    holiday_type: 'public'
+  };
+  const [form, setForm] = useState(EMPTY_FORM);
+
+  const showToast = (msg, type = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const loadHolidays = async () => {
+    try {
+      setLoading(true);
+      const params = selectedBranch !== 'all' ? { branch_id: selectedBranch } : {};
+      const data = await api.getHolidays(params);
+      setHolidays(Array.isArray(data) ? data : []);
+      setLoading(false);
+    } catch (err) {
+      console.error('Failed to load holidays:', err);
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadHolidays();
+  }, [selectedBranch]);
+
+  const openAdd = () => {
+    setForm({
+      ...EMPTY_FORM,
+      branch_id: selectedBranch !== 'all' ? selectedBranch : branches[0]?.id || ''
+    });
+    setModal('add');
+  };
+
+  const openEdit = (h) => {
+    setForm({
+      id: h.id,
+      branch_id: h.branch_id,
+      holiday_date: h.holiday_date,
+      name: h.name,
+      holiday_type: h.holiday_type || 'public'
+    });
+    setModal(h);
+  };
+
+  const closeModal = () => {
+    setModal(null);
+  };
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    if (!form.name.trim() || !form.holiday_date || !form.branch_id) {
+      alert('Please fill in all required fields (Branch, Date, Name)');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      if (modal === 'add') {
+        const created = await api.addHoliday(form);
+        const branchName = branches.find(b => b.id === form.branch_id)?.name || '';
+        setHolidays(prev => [...prev, { ...created, branch_name: branchName }]);
+        showToast('Branch holiday added successfully');
+      } else {
+        const updated = await api.updateHoliday(modal.id, form);
+        const branchName = branches.find(b => b.id === form.branch_id)?.name || '';
+        setHolidays(prev => prev.map(h => h.id === modal.id ? { ...updated, branch_name: branchName } : h));
+        showToast('Holiday updated successfully');
+      }
+      setIsSubmitting(false);
+      closeModal();
+    } catch (err) {
+      setIsSubmitting(false);
+      alert('Error: ' + err.message);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Are you sure you want to remove this holiday?')) return;
+    try {
+      await api.deleteHoliday(id);
+      setHolidays(prev => prev.filter(h => h.id !== id));
+      showToast('Holiday removed', 'danger');
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
+  };
+
+  const filteredHolidays = holidays.filter(h => {
+    const q = search.toLowerCase();
+    return !q || h.name.toLowerCase().includes(q) || h.holiday_date.includes(q) || (h.branch_name || '').toLowerCase().includes(q);
+  });
+
+  const publicCount = holidays.filter(h => h.holiday_type === 'public').length;
+  const mercantileCount = holidays.filter(h => h.holiday_type === 'mercantile').length;
+  const bankCount = holidays.filter(h => h.holiday_type === 'bank').length;
+
+  return (
+    <div className="admin-page">
+      <div className="page-header">
+        <div>
+          <h2>Branch Public & Mercantile Holidays</h2>
+          <p>Configure regional and statutory holidays per branch to automatically exclude them from employee leave deductions.</p>
+        </div>
+        <div className="page-actions" style={{ display: 'flex', gap: '12px' }}>
+          <select 
+            value={selectedBranch} 
+            onChange={e => setSelectedBranch(e.target.value)}
+            style={{
+              padding: '8px 14px',
+              borderRadius: '8px',
+              background: 'var(--bg-card)',
+              color: 'var(--text-primary)',
+              border: '1px solid var(--bg-card-border)',
+              fontSize: '13px'
+            }}
+          >
+            <option value="all">All Branches</option>
+            {branches.map(b => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </select>
+          <button className="btn-primary" onClick={openAdd}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            Add Holiday
+          </button>
+        </div>
+      </div>
+
+      {/* Stats row */}
+      <div className="profile-stats-grid" style={{ marginBottom: '24px' }}>
+        <div className="profile-stat-card">
+          <div style={{
+            width: '42px', height: '42px', borderRadius: '10px',
+            background: 'color-mix(in srgb, var(--accent) 15%, transparent)',
+            color: 'var(--accent-light)', display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '20px', height: '20px' }}>
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line>
+              <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+          </div>
+          <div>
+            <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)' }}>{holidays.length}</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Total Branch Holidays</div>
+          </div>
+        </div>
+
+        <div className="profile-stat-card">
+          <div style={{
+            width: '42px', height: '42px', borderRadius: '10px',
+            background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b',
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '20px', height: '20px' }}>
+              <circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line>
+              <line x1="12" y1="21" x2="12" y2="23"></line>
+            </svg>
+          </div>
+          <div>
+            <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)' }}>{publicCount}</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Public Holidays</div>
+          </div>
+        </div>
+
+        <div className="profile-stat-card">
+          <div style={{
+            width: '42px', height: '42px', borderRadius: '10px',
+            background: 'rgba(168, 85, 247, 0.15)', color: '#a855f7',
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '20px', height: '20px' }}>
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+            </svg>
+          </div>
+          <div>
+            <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)' }}>{mercantileCount}</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Mercantile Holidays</div>
+          </div>
+        </div>
+
+        <div className="profile-stat-card">
+          <div style={{
+            width: '42px', height: '42px', borderRadius: '10px',
+            background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6',
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '20px', height: '20px' }}>
+              <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+              <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+            </svg>
+          </div>
+          <div>
+            <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)' }}>{bankCount}</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Bank Holidays</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="table-card">
+        <div className="table-header">
+          <div className="table-search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input 
+              placeholder="Search holidays by name or date..." 
+              value={search} 
+              onChange={e => setSearch(e.target.value)} 
+            />
+          </div>
+        </div>
+
+        <table className="admin-table">
+          <thead>
+            <tr>
+              <th>Branch</th>
+              <th>Holiday Date</th>
+              <th>Holiday Name</th>
+              <th>Type</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={5} style={{ textAlign: 'center', padding: '48px', color: 'var(--text-muted)' }}>Loading holidays...</td></tr>
+            ) : filteredHolidays.length === 0 ? (
+              <tr><td colSpan={5} style={{ textAlign: 'center', padding: '48px', color: 'var(--text-muted)' }}>No branch holidays found. Click "Add Holiday" to register official off-days.</td></tr>
+            ) : filteredHolidays.map(h => (
+              <tr key={h.id}>
+                <td>
+                  <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{h.branch_name || 'All'}</span>
+                </td>
+                <td>
+                  <span style={{ fontFamily: 'monospace', color: 'var(--accent-light)', fontWeight: 600 }}>
+                    {h.holiday_date}
+                  </span>
+                </td>
+                <td>
+                  <span style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{h.name}</span>
+                </td>
+                <td>
+                  <span className={`badge badge-${h.holiday_type || 'public'}`} style={{ textTransform: 'capitalize' }}>
+                    {h.holiday_type || 'Public'}
+                  </span>
+                </td>
+                <td>
+                  <div className="action-btns">
+                    <button className="btn-edit" onClick={() => openEdit(h)}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                      </svg>
+                      Edit
+                    </button>
+                    <button className="btn-danger" onClick={() => handleDelete(h.id)}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+                      </svg>
+                      Remove
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Modal */}
+      {modal !== null && (
+        <div className="modal-backdrop" onClick={closeModal}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>{modal === 'add' ? 'Add Branch Holiday' : 'Edit Branch Holiday'}</h3>
+              <button className="modal-close" onClick={closeModal}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            <form onSubmit={handleSave}>
+              <div className="modal-body">
+                <div className="field">
+                  <label>Branch *</label>
+                  <select 
+                    value={form.branch_id} 
+                    onChange={e => setForm(p => ({ ...p, branch_id: e.target.value }))}
+                    required
+                  >
+                    {branches.map(b => (
+                      <option key={b.id} value={b.id}>{b.name} ({b.location || 'Local'})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="field-row">
+                  <div className="field">
+                    <label>Holiday Date *</label>
+                    <input 
+                      type="date" 
+                      value={form.holiday_date} 
+                      onChange={e => setForm(p => ({ ...p, holiday_date: e.target.value }))} 
+                      required 
+                    />
+                  </div>
+                  <div className="field">
+                    <label>Holiday Type *</label>
+                    <select 
+                      value={form.holiday_type} 
+                      onChange={e => setForm(p => ({ ...p, holiday_type: e.target.value }))}
+                    >
+                      <option value="public">National / Public Holiday</option>
+                      <option value="mercantile">Mercantile / Commercial</option>
+                      <option value="bank">Bank Holiday Only</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="field">
+                  <label>Holiday Name *</label>
+                  <input 
+                    placeholder="e.g. Duruthu Full Moon Poya Day" 
+                    value={form.name} 
+                    onChange={e => setForm(p => ({ ...p, name: e.target.value }))} 
+                    required 
+                  />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn-secondary" onClick={closeModal}>Cancel</button>
+                <button type="submit" className="btn-primary" disabled={isSubmitting}>
+                  {isSubmitting ? 'Saving...' : modal === 'add' ? 'Add Holiday' : 'Save Changes'}
                 </button>
               </div>
             </form>

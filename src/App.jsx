@@ -75,6 +75,70 @@ function App() {
 
   // Substitution agreement modal state
   const [agreeModal, setAgreeModal] = useState(null) // { submission, secretCode, error }
+  const [verifiedApplicant, setVerifiedApplicant] = useState(null)
+  const [verifyingCode, setVerifyingCode] = useState(false)
+  const [codeError, setCodeError] = useState('')
+  const [deductionPreview, setDeductionPreview] = useState(null)
+  const [calculatingDeduction, setCalculatingDeduction] = useState(false)
+  const [candidateSubstitutes, setCandidateSubstitutes] = useState([])
+  const [loadingCandidates, setLoadingCandidates] = useState(false)
+
+  // Verify secret code dynamically
+  useEffect(() => {
+    const code = formData.secretCode?.trim();
+    if (!code || code.length < 3) {
+      setVerifiedApplicant(null);
+      setCodeError('');
+      return;
+    }
+    let isMounted = true;
+    const timer = setTimeout(async () => {
+      try {
+        setVerifyingCode(true);
+        setCodeError('');
+        const res = await api.verifyEmployeeCode(code);
+        if (isMounted) {
+          setVerifiedApplicant(res.employee);
+        }
+      } catch (err) {
+        if (isMounted) {
+          setVerifiedApplicant(null);
+          setCodeError(err.message || 'Invalid secret code');
+        }
+      } finally {
+        if (isMounted) setVerifyingCode(false);
+      }
+    }, 350);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [formData.secretCode]);
+
+  // Live calculation preview of leave deduction based on branch holidays & schedules
+  useEffect(() => {
+    const validDates = formData.leaveDates.filter(d => d);
+    if (!verifiedApplicant || validDates.length === 0) {
+      setDeductionPreview(null);
+      return;
+    }
+
+    let isMounted = true;
+    setCalculatingDeduction(true);
+    api.calculateDeduction(verifiedApplicant.branch_id, validDates, verifiedApplicant.id)
+      .then(res => {
+        if (isMounted) setDeductionPreview(res);
+      })
+      .catch(() => {
+        if (isMounted) setDeductionPreview(null);
+      })
+      .finally(() => {
+        if (isMounted) setCalculatingDeduction(false);
+      });
+
+    return () => { isMounted = false; };
+  }, [verifiedApplicant, formData.leaveDates]);
 
   useEffect(() => {
     const validDates = formData.leaveDates.filter(d => d);
@@ -135,21 +199,35 @@ function App() {
       return
     }
 
-    // Validate that all leave dates are at least 3 days from today
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    
-    const minDate = new Date(today)
-    minDate.setDate(minDate.getDate() + 3)
+    // Dynamic Leave Type Policy Validations
+    const selectedLt = leaveTypes?.find(lt => lt.code === formData.leave_type) || {};
+    const noticeDays = selectedLt.notice_days_required !== undefined ? parseInt(selectedLt.notice_days_required) : (formData.leave_type === 'annual' ? 3 : 0);
+    const maxConsec = parseInt(selectedLt.max_consecutive_days) || 0;
 
-    for (let dateStr of formData.leaveDates) {
-      if (!dateStr) continue
-      const leaveDate = new Date(dateStr)
-      leaveDate.setHours(0, 0, 0, 0)
-      if (leaveDate < minDate) {
-        setError('Leaves must be applied at least 3 days in advance.')
-        return
+    // Advance notice validation
+    if (noticeDays > 0) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const minDate = new Date(today);
+      minDate.setDate(minDate.getDate() + noticeDays);
+
+      for (let dateStr of formData.leaveDates) {
+        if (!dateStr) continue;
+        const [y, m, d] = dateStr.split('-').map(Number);
+        const leaveDate = new Date(y, m - 1, d);
+        leaveDate.setHours(0, 0, 0, 0);
+        if (leaveDate < minDate) {
+          setError(`${selectedLt.name || formData.leave_type} requires at least ${noticeDays} day(s) advance notice according to company policy.`);
+          return;
+        }
       }
+    }
+
+    // Max consecutive days validation
+    const validDatesList = formData.leaveDates.filter(Boolean);
+    if (maxConsec > 0 && validDatesList.length > maxConsec) {
+      setError(`${selectedLt.name || formData.leave_type} allows a maximum of ${maxConsec} consecutive day(s) per application according to company policy.`);
+      return;
     }
 
     setError('')
@@ -207,29 +285,56 @@ function App() {
     }
   }
 
-  const applicant = employees.find(e => e.secretCode === formData.secretCode);
-  const availableSubstitutes = applicant 
-    ? employees.filter(e => {
-        if (e.branch_id !== applicant.branch_id || e.role_id !== applicant.role_id || e.id === applicant.id || e.status !== 'active') {
-          return false;
-        }
-        // Check if this employee has any pending/approved leaves overlapping with the selected leave dates
-        const hasLeaveOverlap = submissions.some(sub => 
-          sub.employee_id === e.id && 
-          ['pending', 'approved'].includes(sub.status) &&
-          sub.leaveDates.some(d => formData.leaveDates.includes(d))
-        );
+  const applicant = verifiedApplicant || employees.find(e => e.secretCode === formData.secretCode);
 
-        // Check if this employee is ALREADY a substitute for someone else overlapping with the selected leave dates
-        const hasSubOverlap = submissions.some(sub => 
-          sub.substitute_employee_id === e.id && 
-          ['pending', 'approved'].includes(sub.status) &&
-          sub.leaveDates.some(d => formData.leaveDates.includes(d))
-        );
-
-        return !hasLeaveOverlap && !hasSubOverlap;
+  // Evaluate candidate substitutes with Fatigue Protection Guard (< 11 hours rest interval)
+  useEffect(() => {
+    if (!applicant || !applicant.branch_id || !applicant.role_id) {
+      setCandidateSubstitutes([]);
+      return;
+    }
+    const cleanDates = formData.leaveDates.filter(Boolean);
+    let isMounted = true;
+    setLoadingCandidates(true);
+    api.getAvailableSubstitutes({
+      applicant_id: applicant.id,
+      branch_id: applicant.branch_id,
+      role_id: applicant.role_id,
+      leave_dates: cleanDates
+    })
+      .then(res => {
+        if (isMounted) setCandidateSubstitutes(res);
       })
-    : [];
+      .catch(() => {
+        if (isMounted) setCandidateSubstitutes([]);
+      })
+      .finally(() => {
+        if (isMounted) setLoadingCandidates(false);
+      });
+
+    return () => { isMounted = false; };
+  }, [applicant?.id, applicant?.branch_id, applicant?.role_id, formData.leaveDates]);
+
+  const availableSubstitutes = candidateSubstitutes.length > 0 
+    ? candidateSubstitutes 
+    : (applicant 
+      ? employees.filter(e => {
+          if (e.branch_id !== applicant.branch_id || e.role_id !== applicant.role_id || e.id === applicant.id || e.status !== 'active') {
+            return false;
+          }
+          const hasLeaveOverlap = submissions.some(sub => 
+            sub.employee_id === e.id && 
+            ['pending', 'approved'].includes(sub.status) &&
+            sub.leaveDates.some(d => formData.leaveDates.includes(d))
+          );
+          const hasSubOverlap = submissions.some(sub => 
+            sub.substitute_employee_id === e.id && 
+            ['pending', 'approved'].includes(sub.status) &&
+            sub.leaveDates.some(d => formData.leaveDates.includes(d))
+          );
+          return !hasLeaveOverlap && !hasSubOverlap;
+        }).map(e => ({ ...e, isAvailable: true }))
+      : []);
 
   const pendingSubstitutions = applicant ? submissions.filter(s => !s.substituteConfirmed && s.substitute_employee_id === applicant.id) : []
 
@@ -346,7 +451,7 @@ function App() {
               <label htmlFor="secretCode">
                 Employee Secret Code <span className="required">*</span>
               </label>
-              <input
+                <input
                 type="password"
                 id="secretCode"
                 name="secretCode"
@@ -355,6 +460,22 @@ function App() {
                 onChange={handleChange}
                 required
               />
+              {verifyingCode && (
+                <div style={{ marginTop: '5px', fontSize: '12px', color: 'var(--text-secondary, #94a3b8)' }}>
+                  Verifying code...
+                </div>
+              )}
+              {applicant && !verifyingCode && (
+                <div style={{ marginTop: '6px', fontSize: '12.5px', color: '#10b981', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 500 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                  <span>Verified: <strong>{applicant.name}</strong> • {branches.find(b => b.id === applicant.branch_id)?.name || 'Branch'}</span>
+                </div>
+              )}
+              {codeError && !verifyingCode && (
+                <div style={{ marginTop: '5px', fontSize: '12px', color: '#ef4444' }}>
+                  {codeError}
+                </div>
+              )}
             </div>
             {/* Leave Type */}
             <div className="form-group full-width">
@@ -380,6 +501,21 @@ function App() {
                   </>
                 )}
               </select>
+              {(() => {
+                const currentLt = leaveTypes?.find(lt => lt.code === formData.leave_type);
+                if (!currentLt) return null;
+                return (
+                  <div style={{ marginTop: '7px', fontSize: '12px', color: 'var(--text-secondary, #94a3b8)', display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
+                    <span>📅 Notice: <strong style={{ color: (currentLt.notice_days_required > 0) ? '#38bdf8' : '#34d399' }}>{currentLt.notice_days_required > 0 ? `${currentLt.notice_days_required} days advance` : 'Immediate (0 days)'}</strong></span>
+                    {currentLt.max_consecutive_days > 0 && (
+                      <span>⏱️ Max consecutive: <strong style={{ color: '#fbbf24' }}>{currentLt.max_consecutive_days} days</strong></span>
+                    )}
+                    {currentLt.doc_required_after_days > 0 && (
+                      <span>📄 Proof doc required: <strong style={{ color: '#a78bfa' }}>After {currentLt.doc_required_after_days} days</strong></span>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             {error && (
@@ -437,6 +573,36 @@ function App() {
                   Add another date
                 </button>
               </div>
+
+              {/* Live Holiday & Working Day Deduction Preview */}
+              {deductionPreview && (
+                <div style={{
+                  marginTop: '12px',
+                  padding: '12px 14px',
+                  borderRadius: '8px',
+                  background: deductionPreview.breakdown.some(b => !b.isWorkingDay) ? 'rgba(16, 185, 129, 0.08)' : 'rgba(59, 130, 246, 0.08)',
+                  border: `1px solid ${deductionPreview.breakdown.some(b => !b.isWorkingDay) ? 'rgba(16, 185, 129, 0.28)' : 'rgba(59, 130, 246, 0.25)'}`,
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary, #fff)' }}>
+                      Deduction: <span style={{ color: '#10b981', fontSize: '14.5px' }}>{deductionPreview.netWorkingDaysDeducted} working day{deductionPreview.netWorkingDaysDeducted === 1 ? '' : 's'}</span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary, #94a3b8)' }}>
+                      ({deductionPreview.calendarDaysTotal} calendar day{deductionPreview.calendarDaysTotal === 1 ? '' : 's'} selected)
+                    </div>
+                  </div>
+                  {deductionPreview.breakdown.filter(b => !b.isWorkingDay).length > 0 && (
+                    <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                      {deductionPreview.breakdown.filter(b => !b.isWorkingDay).map((item, idx) => (
+                        <div key={idx} style={{ fontSize: '12px', color: '#10b981', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span>🏖️</span>
+                          <span><strong>{item.date}</strong>: {item.reason} — <strong style={{ color: '#34d399' }}>0 days deducted!</strong></span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="form-group">
@@ -469,6 +635,8 @@ function App() {
               >
                 {!applicant ? (
                   <option value="">Please enter your valid secret code first…</option>
+                ) : loadingCandidates ? (
+                  <option value="">Evaluating candidate peers & fatigue guards…</option>
                 ) : (
                   <>
                     <option value="">Select a substitute…</option>
@@ -476,12 +644,44 @@ function App() {
                       <option value="" disabled>No available substitutes in your role and branch</option>
                     ) : (
                       availableSubstitutes.map(e => (
-                        <option key={e.id} value={e.id}>{e.name}</option>
+                        <option 
+                          key={e.id} 
+                          value={e.id} 
+                          disabled={e.isAvailable === false}
+                        >
+                          {e.name} {e.hasFatigueWarning ? '⚠️ (Fatigue Guard Alert)' : ''} {e.isAvailable === false ? `(${e.unavailableReason || 'Unavailable'})` : ''}
+                        </option>
                       ))
                     )}
                   </>
                 )}
               </select>
+
+              {/* Fatigue Protection Guard Alert */}
+              {(() => {
+                const selectedCandidate = availableSubstitutes.find(s => s.id === formData.substitute_employee_id);
+                if (!selectedCandidate || !selectedCandidate.hasFatigueWarning) return null;
+                return (
+                  <div style={{
+                    marginTop: '8px',
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    background: 'rgba(245, 158, 11, 0.1)',
+                    border: '1px solid rgba(245, 158, 11, 0.35)',
+                    color: '#fbbf24',
+                    fontSize: '12.5px',
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '10px'
+                  }}>
+                    <span style={{ fontSize: '16px' }}>⚠️</span>
+                    <div>
+                      <strong style={{ color: '#fef08a' }}>Fatigue Protection Guard Alert:</strong>
+                      <div style={{ marginTop: '2px', color: '#fde68a' }}>{selectedCandidate.fatigueNotice}</div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Submit */}

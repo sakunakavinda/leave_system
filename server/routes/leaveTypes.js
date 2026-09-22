@@ -26,7 +26,18 @@ router.get('/', async (req, res) => {
 
 // POST create a new leave type
 router.post('/', async (req, res) => {
-  const { name, code: customCode, color, description, status } = req.body;
+  const { 
+    name, 
+    code: customCode, 
+    color, 
+    description, 
+    status,
+    notice_days_required = 0,
+    max_consecutive_days = 0,
+    doc_required_after_days = 0,
+    carry_forward_max_days = 0,
+    min_service_days_required = 0
+  } = req.body;
   
   if (!name || name.trim() === '') {
     return res.status(400).json({ error: 'Leave type name is required' });
@@ -40,62 +51,67 @@ router.post('/', async (req, res) => {
   const leaveColor = color || '#7c3aed';
   const id = crypto.randomUUID();
 
-  const connection = await pool.getConnection();
-
   try {
-    await connection.beginTransaction();
-
     // Check duplicate code or name
-    const [existing] = await connection.query(
+    const [existing] = await pool.query(
       'SELECT id FROM leave_types WHERE code = ? OR name = ?',
       [code, name]
     );
 
     if (existing.length > 0) {
-      await connection.rollback();
       return res.status(400).json({ error: 'A leave type with this name or code already exists.' });
     }
 
-    // Insert leave type
-    await connection.query(
-      `INSERT INTO leave_types (id, name, code, color, description, status) 
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [id, name.trim(), code, leaveColor, description || '', status || 'active']
+    // Insert leave type with customizable policy parameters
+    await pool.query(
+      `INSERT INTO leave_types 
+       (id, name, code, color, description, status, notice_days_required, max_consecutive_days, doc_required_after_days, carry_forward_max_days, min_service_days_required) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id, 
+        name.trim(), 
+        code, 
+        leaveColor, 
+        description || '', 
+        status || 'active',
+        parseInt(notice_days_required) || 0,
+        parseInt(max_consecutive_days) || 0,
+        parseInt(doc_required_after_days) || 0,
+        parseInt(carry_forward_max_days) || 0,
+        parseInt(min_service_days_required) || 0
+      ]
     );
 
-    // Dynamically add columns to leave_rules and leave_balances tables if they don't exist
-    const ruleCol = `${code}_leave`;
-    const balanceCol = `${code}_taken`;
-
+    // Keep backward-compatible columns in legacy tables if needed
     try {
-      await connection.query(`ALTER TABLE leave_rules ADD COLUMN ${ruleCol} INT DEFAULT 0`);
-    } catch (colErr) {
-      // Column might already exist, ignore duplicate column error
-    }
-
+      await pool.query(`ALTER TABLE leave_rules ADD COLUMN ${code}_leave INT DEFAULT 0`);
+    } catch (e) {}
     try {
-      await connection.query(`ALTER TABLE leave_balances ADD COLUMN ${balanceCol} INT DEFAULT 0`);
-    } catch (colErr) {
-      // Column might already exist, ignore duplicate column error
-    }
-
-    await connection.commit();
+      await pool.query(`ALTER TABLE leave_balances ADD COLUMN ${code}_taken INT DEFAULT 0`);
+    } catch (e) {}
 
     const [created] = await pool.query('SELECT * FROM leave_types WHERE id = ?', [id]);
     res.status(201).json(created[0]);
   } catch (err) {
-    await connection.rollback();
     console.error(err);
     res.status(500).json({ error: 'Failed to create leave type', details: err.message });
-  } finally {
-    connection.release();
   }
 });
 
 // PUT update leave type
 router.put('/:id', async (req, res) => {
   const { id } = req.params;
-  const { name, color, description, status } = req.body;
+  const { 
+    name, 
+    color, 
+    description, 
+    status,
+    notice_days_required,
+    max_consecutive_days,
+    doc_required_after_days,
+    carry_forward_max_days,
+    min_service_days_required
+  } = req.body;
 
   try {
     const [existing] = await pool.query('SELECT * FROM leave_types WHERE id = ?', [id]);
@@ -108,12 +124,30 @@ router.put('/:id', async (req, res) => {
     const updatedColor = color || current.color;
     const updatedDesc = description !== undefined ? description : current.description;
     const updatedStatus = status || current.status;
+    const updatedNotice = notice_days_required !== undefined ? parseInt(notice_days_required) : current.notice_days_required;
+    const updatedMaxConsec = max_consecutive_days !== undefined ? parseInt(max_consecutive_days) : current.max_consecutive_days;
+    const updatedDocDays = doc_required_after_days !== undefined ? parseInt(doc_required_after_days) : current.doc_required_after_days;
+    const updatedCarryFwd = carry_forward_max_days !== undefined ? parseInt(carry_forward_max_days) : current.carry_forward_max_days;
+    const updatedMinService = min_service_days_required !== undefined ? parseInt(min_service_days_required) : current.min_service_days_required;
 
     await pool.query(
       `UPDATE leave_types 
-       SET name = ?, color = ?, description = ?, status = ? 
+       SET name = ?, color = ?, description = ?, status = ?,
+           notice_days_required = ?, max_consecutive_days = ?, doc_required_after_days = ?,
+           carry_forward_max_days = ?, min_service_days_required = ?
        WHERE id = ?`,
-      [updatedName, updatedColor, updatedDesc, updatedStatus, id]
+      [
+        updatedName, 
+        updatedColor, 
+        updatedDesc, 
+        updatedStatus,
+        updatedNotice,
+        updatedMaxConsec,
+        updatedDocDays,
+        updatedCarryFwd,
+        updatedMinService,
+        id
+      ]
     );
 
     const [updated] = await pool.query('SELECT * FROM leave_types WHERE id = ?', [id]);
