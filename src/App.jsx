@@ -230,6 +230,29 @@ function App() {
       return;
     }
 
+    // Minimum service tenure / probation check
+    const minServiceDays = parseInt(selectedLt.min_service_days_required) || 0;
+    if (minServiceDays > 0 && applicant.joined_date) {
+      const [jy, jm, jd] = applicant.joined_date.split('T')[0].split('-').map(Number);
+      const joinedDate = new Date(jy, jm - 1, jd);
+      joinedDate.setHours(0, 0, 0, 0);
+
+      const sortedDates = [...validDatesList].sort();
+      if (sortedDates.length > 0) {
+        const [ly, lm, ld] = sortedDates[0].split('-').map(Number);
+        const firstLeaveDate = new Date(ly, lm - 1, ld);
+        firstLeaveDate.setHours(0, 0, 0, 0);
+
+        const diffDays = Math.floor((firstLeaveDate - joinedDate) / (1000 * 60 * 60 * 24));
+        if (diffDays < minServiceDays) {
+          setError(
+            `${selectedLt.name || formData.leave_type} requires at least ${minServiceDays} days of service / probation completion. You have served ${Math.max(0, diffDays)} day(s) since joining on ${applicant.joined_date.split('T')[0]}.`
+          );
+          return;
+        }
+      }
+    }
+
     setError('')
 
     try {
@@ -509,6 +532,9 @@ function App() {
                     <span>📅 Notice: <strong style={{ color: (currentLt.notice_days_required > 0) ? '#38bdf8' : '#34d399' }}>{currentLt.notice_days_required > 0 ? `${currentLt.notice_days_required} days advance` : 'Immediate (0 days)'}</strong></span>
                     {currentLt.max_consecutive_days > 0 && (
                       <span>⏱️ Max consecutive: <strong style={{ color: '#fbbf24' }}>{currentLt.max_consecutive_days} days</strong></span>
+                    )}
+                    {currentLt.min_service_days_required > 0 && (
+                      <span>⏳ Min service: <strong style={{ color: '#f59e0b' }}>{currentLt.min_service_days_required} days probation/tenure</strong></span>
                     )}
                     {currentLt.doc_required_after_days > 0 && (
                       <span>📄 Proof doc required: <strong style={{ color: '#a78bfa' }}>After {currentLt.doc_required_after_days} days</strong></span>

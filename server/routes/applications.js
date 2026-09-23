@@ -121,6 +121,27 @@ router.post('/', async (req, res) => {
           error: `${ltPolicy.name} cannot exceed ${maxConsec} consecutive days per request according to company policy.`
         });
       }
+
+      // Minimum Service Days Check (Probation / Service length)
+      const minServiceDays = parseInt(ltPolicy.min_service_days_required) || 0;
+      if (minServiceDays > 0) {
+        const [empRows] = await connection.query('SELECT joined_date FROM employees WHERE id = ?', [employee_id]);
+        if (empRows.length > 0 && empRows[0].joined_date) {
+          const joinedDate = new Date(empRows[0].joined_date);
+          joinedDate.setHours(0, 0, 0, 0);
+          const firstLeaveStr = (leaveDates || [])[0];
+          const firstLeaveDate = firstLeaveStr ? new Date(firstLeaveStr) : new Date();
+          firstLeaveDate.setHours(0, 0, 0, 0);
+          const serviceDiffDays = Math.floor((firstLeaveDate - joinedDate) / (1000 * 60 * 60 * 24));
+          if (serviceDiffDays < minServiceDays) {
+            await connection.rollback();
+            const joinedFmt = new Date(empRows[0].joined_date).toISOString().split('T')[0];
+            return res.status(400).json({
+              error: `Minimum Service Requirement Not Met: ${ltPolicy.name} requires at least ${minServiceDays} days of service (probation). You have completed ${serviceDiffDays < 0 ? 0 : serviceDiffDays} days since joining on ${joinedFmt}.`
+            });
+          }
+        }
+      }
     }
 
     // Balance & Quota Check with Holiday Exclusions and Roster awareness

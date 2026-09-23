@@ -1118,7 +1118,13 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
   const [modal, setModal]               = useState(null) // null | 'add' | employee object
   const [toast, setToast]               = useState(null)
   const [secretCodePopup, setSecretCodePopup] = useState(null)
-  const EMPTY_EMP = { name:'', role_id: roles?.[0]?.id || '', branch_id: branches?.[0]?.id || '', status:'active' }
+  const EMPTY_EMP = { 
+    name:'', 
+    role_id: roles?.[0]?.id || '', 
+    branch_id: branches?.[0]?.id || '', 
+    status:'active',
+    joined_date: new Date().toISOString().split('T')[0]
+  }
   const [form, setForm]                 = useState(EMPTY_EMP)
 
   // Leave rules state
@@ -1154,7 +1160,13 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
   const showToast = (msg, type='success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000) }
 
   const openAdd  = ()    => { setForm(EMPTY_EMP); setModal('add') }
-  const openEdit = (emp) => { setForm({ ...emp }); setModal(emp) }
+  const openEdit = (emp) => { 
+    setForm({ 
+      ...emp, 
+      joined_date: emp.joined_date ? emp.joined_date.split('T')[0] : (emp.created_at ? emp.created_at.split('T')[0] : new Date().toISOString().split('T')[0]) 
+    }); 
+    setModal(emp);
+  }
   const closeModal = ()  => setModal(null)
 
   const handleSave = async () => {
@@ -1388,11 +1400,11 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
           <div className="data-table-wrap">
             <table className="data-table">
               <thead>
-                <tr><th>ID</th><th>Name</th><th>Secret Code</th><th>Post</th><th>Branch</th><th>Status</th><th>Actions</th></tr>
+                <tr><th>ID</th><th>Name</th><th>Secret Code</th><th>Post</th><th>Branch</th><th>Joined Date</th><th>Status</th><th>Actions</th></tr>
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
-                  <tr><td colSpan={7} style={{ textAlign:'center', padding:'48px', color:'var(--text-muted)' }}>No employees found</td></tr>
+                  <tr><td colSpan={8} style={{ textAlign:'center', padding:'48px', color:'var(--text-muted)' }}>No employees found</td></tr>
                 ) : filtered.map((emp, i) => (
                   <tr key={emp.id} style={{ animationDelay: `${i * 0.04}s` }}>
                     <td><span style={{ fontFamily:'monospace', fontSize:'12px', color:'var(--text-muted)' }}>{emp.id}</span></td>
@@ -1435,6 +1447,11 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
                     </td>
                     <td>{getRole(emp.role_id)?.title || 'Unknown Role'}</td>
                     <td>{getBranch(emp.branch_id)?.name || 'Unknown Branch'}</td>
+                    <td>
+                      <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>
+                        {emp.joined_date ? emp.joined_date.split('T')[0] : (emp.created_at ? emp.created_at.split('T')[0] : '—')}
+                      </span>
+                    </td>
                     <td>
                       <span className={`badge badge-${emp.status}`}>{emp.status === 'active' ? 'Active' : 'Inactive'}</span>
                     </td>
@@ -1764,6 +1781,17 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
                 </div>
               </div>
               <div className="field-row">
+                <div className="field">
+                  <label>Joined / Hire Date *</label>
+                  <input 
+                    type="date" 
+                    value={form.joined_date || ''} 
+                    onChange={e => setForm(p=>({...p, joined_date: e.target.value}))} 
+                  />
+                  <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '2px' }}>
+                    Used for probation &amp; minimum service eligibility
+                  </small>
+                </div>
                 <div className="field">
                   <label>Status</label>
                   <select value={form.status} onChange={e => setForm(p=>({...p, status: e.target.value}))}>

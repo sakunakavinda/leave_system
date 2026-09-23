@@ -102,7 +102,7 @@ router.get('/me', requireAuth, async (req, res) => {
 
     if (req.user.type === 'employee') {
       const [rows] = await pool.query(
-        'SELECT id, name, role_id, branch_id, status FROM employees WHERE id = ?',
+        "SELECT id, name, role_id, branch_id, status, DATE_FORMAT(joined_date, '%Y-%m-%d') AS joined_date FROM employees WHERE id = ?",
         [req.user.id]
       );
       if (rows.length === 0 || rows[0].status !== 'active') {
@@ -130,7 +130,7 @@ router.post('/employee-verify', async (req, res) => {
 
   try {
     const [rows] = await pool.query(
-      'SELECT id, name, role_id, branch_id, status FROM employees WHERE secret_code = ? AND status = ?',
+      "SELECT id, name, role_id, branch_id, status, DATE_FORMAT(joined_date, '%Y-%m-%d') AS joined_date FROM employees WHERE secret_code = ? AND status = ?",
       [secretCode.trim(), 'active']
     );
 
@@ -144,6 +144,7 @@ router.post('/employee-verify', async (req, res) => {
       name: emp.name,
       role_id: emp.role_id,
       branch_id: emp.branch_id,
+      joined_date: emp.joined_date,
       role: 'employee',
       type: 'employee'
     };
