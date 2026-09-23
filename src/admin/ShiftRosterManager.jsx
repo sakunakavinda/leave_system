@@ -789,16 +789,19 @@ export function ManageShiftRosters({ branches = [], employees = [] }) {
   const [isSubmittingAutoFill, setIsSubmittingAutoFill] = useState(false);
 
   const openAutoFillModal = (emp) => {
-    if (shifts.length === 0) {
-      alert('Please create at least one shift in Shift Masters first.');
+    const availableShifts = shifts.filter(s => !s.branch_id || s.branch_id === emp.branch_id);
+    if (availableShifts.length === 0) {
+      const bName = branches.find(b => b.id === emp.branch_id)?.name || 'their branch';
+      alert(`No shifts available for ${emp.name}'s branch (${bName}). Please create a shift in Shift Masters for this branch or for All Branches.`);
       return;
     }
-    const defaultShift = shifts.find(s => s.code === 'GEN') || shifts[0];
+    const defaultShift = availableShifts.find(s => s.code === 'GEN') || availableShifts[0];
     setAutoFillShiftId(defaultShift ? defaultShift.id : '');
     setOverwriteExisting(true);
     setAutoFillModal({
       employeeId: emp.id,
       employeeName: emp.name,
+      branchId: emp.branch_id,
       branchName: branches.find(b => b.id === emp.branch_id)?.name || 'Branch'
     });
   };
@@ -1137,39 +1140,43 @@ export function ManageShiftRosters({ branches = [], employees = [] }) {
               Assign Shift: <strong>{activeCell.dateStr}</strong>
             </div>
 
-            {shifts.map(s => (
-              <button 
-                key={s.id}
-                onClick={() => handleAssignShift(s.id, false)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#fff',
-                  padding: '6px 8px',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  fontSize: '12px'
-                }}
-                onMouseEnter={e => e.currentTarget.style.background = '#1e293b'}
-                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-              >
-                <span style={{
-                  background: s.color_code || '#3b82f6',
-                  color: '#fff',
-                  fontSize: '10px',
-                  fontWeight: 700,
-                  padding: '2px 6px',
-                  borderRadius: '3px'
-                }}>
-                  {s.code}
-                </span>
-                <span>{s.name}</span>
-              </button>
-            ))}
+            {(() => {
+              const cellEmp = employees.find(emp => emp.id === activeCell.employeeId);
+              const cellShifts = shifts.filter(s => !s.branch_id || (cellEmp && s.branch_id === cellEmp.branch_id));
+              return cellShifts.map(s => (
+                <button 
+                  key={s.id}
+                  onClick={() => handleAssignShift(s.id, false)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#fff',
+                    padding: '6px 8px',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    fontSize: '12px'
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#1e293b'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  <span style={{
+                    background: s.color_code || '#3b82f6',
+                    color: '#fff',
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    padding: '2px 6px',
+                    borderRadius: '3px'
+                  }}>
+                    {s.code}
+                  </span>
+                  <span>{s.name}</span>
+                </button>
+              ));
+            })()}
 
             <button 
               onClick={() => handleAssignShift(null, true)}
@@ -1265,24 +1272,36 @@ export function ManageShiftRosters({ branches = [], employees = [] }) {
                 </div>
 
                 {/* Choose Shift */}
-                <div className="form-group">
-                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary, #cbd5e1)', marginBottom: '8px' }}>
-                    Choose Shift to Auto-Fill <span style={{ color: '#f87171' }}>*</span>
-                  </label>
-                  <select
-                    className="admin-filter-select"
-                    style={{ width: '100%', padding: '10px 12px', fontSize: '13px' }}
-                    value={autoFillShiftId}
-                    onChange={e => setAutoFillShiftId(e.target.value)}
-                    required
-                  >
-                    {shifts.map(s => (
-                      <option key={s.id} value={s.id}>
-                        {s.name} ({s.code}) — {s.start_time} to {s.end_time} ({s.duration_hours || 8} hrs)
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {(() => {
+                  const branchShifts = shifts.filter(s => !s.branch_id || s.branch_id === autoFillModal.branchId);
+                  return (
+                    <div className="form-group">
+                      <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary, #cbd5e1)', marginBottom: '8px' }}>
+                        Choose Shift to Auto-Fill <span style={{ color: '#f87171' }}>*</span>
+                        <span style={{ fontSize: '11px', fontWeight: 'normal', color: 'var(--text-secondary, #94a3b8)', marginLeft: '8px' }}>
+                          (Available to {autoFillModal.branchName} & All Branches)
+                        </span>
+                      </label>
+                      <select
+                        className="admin-filter-select"
+                        style={{ width: '100%', padding: '10px 12px', fontSize: '13px' }}
+                        value={autoFillShiftId}
+                        onChange={e => setAutoFillShiftId(e.target.value)}
+                        required
+                      >
+                        {branchShifts.length === 0 ? (
+                          <option value="" disabled>No shifts configured for this branch</option>
+                        ) : (
+                          branchShifts.map(s => (
+                            <option key={s.id} value={s.id}>
+                              {s.name} ({s.code}) — {s.start_time} to {s.end_time} ({s.duration_hours || 8} hrs){!s.branch_id ? ' • Global' : ''}
+                            </option>
+                          ))
+                        )}
+                      </select>
+                    </div>
+                  );
+                })()}
 
                 {/* Selected Shift Preview Card */}
                 {(() => {
@@ -1359,7 +1378,7 @@ export function ManageShiftRosters({ branches = [], employees = [] }) {
                 <button 
                   type="submit" 
                   className="btn-primary" 
-                  disabled={isSubmittingAutoFill || shifts.length === 0}
+                  disabled={isSubmittingAutoFill || shifts.filter(s => !s.branch_id || s.branch_id === autoFillModal.branchId).length === 0}
                   style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
                 >
                   <span>⚡</span>
