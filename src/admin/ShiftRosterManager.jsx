@@ -13,6 +13,9 @@ export function ManageShiftMasters({ branches = [] }) {
   const [modal, setModal] = useState(null); // null | 'add' | shift object
   const [toast, setToast] = useState(null);
 
+  const [search, setSearch] = useState('');
+  const [viewMode, setViewMode] = useState('table'); // 'table' | 'cards'
+
   const EMPTY_SHIFT = {
     code: '',
     name: '',
@@ -25,8 +28,8 @@ export function ManageShiftMasters({ branches = [] }) {
   };
   const [form, setForm] = useState(EMPTY_SHIFT);
 
-  const showToast = (msg) => {
-    setToast(msg);
+  const showToast = (msg, isError = false) => {
+    setToast({ msg, isError });
     setTimeout(() => setToast(null), 3000);
   };
 
@@ -37,7 +40,7 @@ export function ManageShiftMasters({ branches = [] }) {
       setShifts(data);
     } catch (err) {
       console.error('Failed to load shifts', err);
-      showToast('Error loading shifts');
+      showToast('Error loading shifts', true);
     } finally {
       setLoading(false);
     }
@@ -56,13 +59,40 @@ export function ManageShiftMasters({ branches = [] }) {
     setForm({
       ...shift,
       branch_id: shift.branch_id || '',
-      crosses_midnight: Boolean(shift.crosses_midnight)
+      crosses_midnight: Boolean(shift.crosses_midnight),
+      duration_hours: parseFloat(shift.duration_hours) || 8.0
     });
     setModal(shift);
   };
 
+  // Auto-calculate duration hours when times change
+  const handleTimeChange = (field, val) => {
+    const updated = { ...form, [field]: val };
+    const st = field === 'start_time' ? val : form.start_time;
+    const et = field === 'end_time' ? val : form.end_time;
+    const cm = field === 'crosses_midnight' ? val : form.crosses_midnight;
+    
+    if (st && et) {
+      const [sh, sm] = st.split(':').map(Number);
+      const [eh, em] = et.split(':').map(Number);
+      let sMins = sh * 60 + sm;
+      let eMins = eh * 60 + em;
+      if (cm || eMins < sMins) {
+        eMins += 24 * 60;
+      }
+      const diff = parseFloat(((eMins - sMins) / 60).toFixed(1));
+      if (diff > 0) updated.duration_hours = diff;
+    }
+    setForm(updated);
+  };
+
   const handleSave = async (e) => {
     e.preventDefault();
+    if (!form.code.trim() || !form.name.trim()) {
+      showToast('Shift Code and Shift Name are required', true);
+      return;
+    }
+
     try {
       const payload = {
         ...form,
@@ -74,7 +104,7 @@ export function ManageShiftMasters({ branches = [] }) {
       if (modal === 'add') {
         const created = await api.addShift(payload);
         setShifts(prev => [...prev, created]);
-        showToast('Shift created successfully');
+        showToast('Shift template created successfully');
       } else {
         const updated = await api.updateShift(modal.id, payload);
         setShifts(prev => prev.map(s => s.id === modal.id ? updated : s));
@@ -82,7 +112,7 @@ export function ManageShiftMasters({ branches = [] }) {
       }
       setModal(null);
     } catch (err) {
-      alert(err.message || 'Failed to save shift');
+      showToast(err.message || 'Failed to save shift', true);
     }
   };
 
@@ -91,98 +121,392 @@ export function ManageShiftMasters({ branches = [] }) {
     try {
       await api.deleteShift(shift.id);
       setShifts(prev => prev.filter(s => s.id !== shift.id));
-      showToast('Shift deleted');
+      showToast('Shift template deleted');
     } catch (err) {
-      alert(err.message || 'Failed to delete shift');
+      showToast(err.message || 'Failed to delete shift', true);
     }
   };
 
-  return (
-    <div className="admin-page-container">
-      {toast && <div className="admin-toast">{toast}</div>}
+  const filteredShifts = shifts.filter(s => {
+    const q = search.toLowerCase();
+    const bName = branches.find(b => b.id === s.branch_id)?.name || 'Global';
+    return !q || 
+      s.name?.toLowerCase().includes(q) || 
+      s.code?.toLowerCase().includes(q) || 
+      bName.toLowerCase().includes(q);
+  });
 
-      <div className="admin-page-header">
-        <div>
-          <h2>Shift Masters</h2>
-          <p className="admin-page-sub">Define work schedules, overnight night shifts, and duration hours.</p>
+  return (
+    <div className="admin-content" style={{ padding: '24px 28px' }}>
+      {/* Toast Notification */}
+      {toast && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          right: '20px',
+          zIndex: 9999,
+          background: toast.isError ? '#dc2626' : '#059669',
+          color: '#fff',
+          padding: '10px 18px',
+          borderRadius: '8px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          fontWeight: 600,
+          fontSize: '13px'
+        }}>
+          <span>{toast.isError ? '⚠️' : '✓'}</span>
+          <span>{toast.msg}</span>
         </div>
-        <div style={{ display: 'flex', gap: '10px' }}>
+      )}
+
+      {/* Controls Bar: Responsive Toolbar */}
+      <div className="controls-bar" style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '12px',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: '20px'
+      }}>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', flex: 1, minWidth: '240px' }}>
+          {/* Search Box */}
+          <div className="admin-search-box" style={{ minWidth: '200px', flex: 1 }}>
+            <svg className="s-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input 
+              placeholder="Search shifts by code or name…" 
+              value={search} 
+              onChange={e => setSearch(e.target.value)} 
+            />
+          </div>
+
+          {/* Branch Filter */}
           <select 
-            className="filter-select"
             value={branchFilter}
             onChange={(e) => setBranchFilter(e.target.value)}
+            style={{
+              padding: '8px 12px',
+              borderRadius: '8px',
+              border: '1px solid var(--bg-card-border, #cbd5e1)',
+              background: 'var(--bg-card, #fff)',
+              color: 'var(--text-primary, #0f172a)',
+              fontSize: '13px',
+              fontWeight: 500,
+              cursor: 'pointer'
+            }}
           >
-            <option value="all">All Branches (Global & Local)</option>
+            <option value="all">🏢 All Branches (Global & Local)</option>
             {branches.map(b => (
               <option key={b.id} value={b.id}>{b.name}</option>
             ))}
           </select>
-          <button className="primary-btn" onClick={openAdd}>
-            + Add New Shift
-          </button>
+
+          {/* View Toggle */}
+          <div style={{ display: 'flex', background: 'var(--bg-card, #f1f5f9)', borderRadius: '8px', padding: '2px', border: '1px solid var(--bg-card-border, #e2e8f0)' }}>
+            <button
+              type="button"
+              onClick={() => setViewMode('table')}
+              title="Table View"
+              style={{
+                background: viewMode === 'table' ? 'var(--accent, #3b82f6)' : 'transparent',
+                color: viewMode === 'table' ? '#fff' : 'var(--text-muted, #64748b)',
+                border: 'none',
+                borderRadius: '6px',
+                padding: '6px 10px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontSize: '12px',
+                fontWeight: 600
+              }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 14, height: 14 }}>
+                <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/>
+              </svg>
+              Table
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('cards')}
+              title="Cards View"
+              style={{
+                background: viewMode === 'cards' ? 'var(--accent, #3b82f6)' : 'transparent',
+                color: viewMode === 'cards' ? '#fff' : 'var(--text-muted, #64748b)',
+                border: 'none',
+                borderRadius: '6px',
+                padding: '6px 10px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontSize: '12px',
+                fontWeight: 600
+              }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 14, height: 14 }}>
+                <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+              </svg>
+              Cards
+            </button>
+          </div>
         </div>
+
+        {/* Action Button */}
+        <button 
+          className="btn-primary" 
+          onClick={openAdd}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            whiteSpace: 'nowrap',
+            padding: '9px 16px',
+            fontWeight: 600
+          }}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 16, height: 16 }}>
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          Add Shift Template
+        </button>
       </div>
 
+      {/* Content Rendering */}
       {loading ? (
-        <div className="admin-loading">Loading shifts...</div>
-      ) : shifts.length === 0 ? (
-        <div className="admin-empty-state">
-          <p>No shift definitions found. Click "+ Add New Shift" to create your first shift.</p>
+        <div style={{ textAlign: 'center', padding: '48px', color: 'var(--text-muted, #64748b)' }}>
+          <p>Loading shift definitions...</p>
+        </div>
+      ) : filteredShifts.length === 0 ? (
+        <div style={{
+          textAlign: 'center',
+          padding: '48px 24px',
+          background: 'var(--bg-card, #f8fafc)',
+          borderRadius: '12px',
+          border: '1px dashed var(--bg-card-border, #cbd5e1)'
+        }}>
+          <span style={{ fontSize: '36px' }}>⏱️</span>
+          <h3 style={{ margin: '12px 0 6px 0', color: 'var(--text-primary, #1e293b)' }}>No Shift Definitions Found</h3>
+          <p style={{ margin: 0, color: 'var(--text-muted, #64748b)', fontSize: '13px' }}>
+            {search ? 'No shifts match your search term.' : 'Click "+ Add Shift Template" to configure work shifts.'}
+          </p>
+          <button 
+            className="btn-secondary" 
+            onClick={openAdd} 
+            style={{ marginTop: '16px', padding: '8px 16px', fontSize: '13px' }}
+          >
+            + Create First Shift
+          </button>
+        </div>
+      ) : viewMode === 'table' ? (
+        /* ── Compact Table View ── */
+        <div className="data-table-wrap" style={{ borderRadius: '10px', overflowX: 'auto' }}>
+          <table className="data-table" style={{ width: '100%', fontSize: '13px' }}>
+            <thead>
+              <tr>
+                <th style={{ width: '90px' }}>Code</th>
+                <th>Shift Name</th>
+                <th>Working Hours</th>
+                <th>Duration</th>
+                <th>Overnight / Midnight</th>
+                <th>Branch Scope</th>
+                <th>Deduction Unit</th>
+                <th style={{ textAlign: 'right', width: '130px' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredShifts.map((shift) => {
+                const branchName = shift.branch_id 
+                  ? branches.find(b => b.id === shift.branch_id)?.name || 'Specific Branch'
+                  : 'All Branches (Global)';
+                const isOvernight = Boolean(shift.crosses_midnight);
+
+                return (
+                  <tr key={shift.id}>
+                    <td>
+                      <span style={{
+                        background: shift.color_code || '#3b82f6',
+                        color: '#fff',
+                        fontWeight: 700,
+                        fontSize: '11.5px',
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        display: 'inline-block',
+                        letterSpacing: '0.5px'
+                      }}>
+                        {shift.code}
+                      </span>
+                    </td>
+                    <td>
+                      <div style={{ fontWeight: 600, color: 'var(--text-primary, #0f172a)' }}>
+                        {shift.name}
+                      </div>
+                    </td>
+                    <td>
+                      <span style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--text-secondary, #334155)' }}>
+                        {shift.start_time?.substring(0, 5)} – {shift.end_time?.substring(0, 5)}
+                      </span>
+                    </td>
+                    <td>
+                      <span style={{
+                        background: 'rgba(59, 130, 246, 0.1)',
+                        color: '#2563eb',
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        fontSize: '12px'
+                      }}>
+                        {shift.duration_hours} hrs
+                      </span>
+                    </td>
+                    <td>
+                      {isOvernight ? (
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          background: 'rgba(139, 92, 246, 0.12)',
+                          color: '#7c3aed',
+                          padding: '2px 8px',
+                          borderRadius: '12px',
+                          fontSize: '11px',
+                          fontWeight: 600
+                        }}>
+                          🌙 Crosses Midnight
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted, #94a3b8)', fontSize: '12px' }}>
+                          Standard Daytime
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      <span style={{ fontSize: '12.5px', color: 'var(--text-secondary, #475569)' }}>
+                        {shift.branch_id ? `🏢 ${branchName}` : '🌐 Global (All Branches)'}
+                      </span>
+                    </td>
+                    <td>
+                      <span style={{ fontSize: '12px', color: 'var(--text-muted, #64748b)' }}>
+                        1.0 Shift Unit
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <div className="action-btns" style={{ justifyContent: 'flex-end', gap: '6px' }}>
+                        <button 
+                          className="btn-edit" 
+                          onClick={() => openEdit(shift)}
+                          title="Edit Shift"
+                          style={{ padding: '4px 8px', fontSize: '12px' }}
+                        >
+                          Edit
+                        </button>
+                        <button 
+                          className="btn-danger" 
+                          onClick={() => handleDelete(shift)}
+                          title="Delete Shift"
+                          style={{ padding: '4px 8px', fontSize: '12px' }}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px', marginTop: '20px' }}>
-          {shifts.map(shift => {
+        /* ── Compact Cards Grid View ── */
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+          gap: '14px'
+        }}>
+          {filteredShifts.map(shift => {
             const branchName = shift.branch_id 
               ? branches.find(b => b.id === shift.branch_id)?.name || 'Specific Branch'
-              : 'All Branches (Global Default)';
+              : 'All Branches (Global)';
+            const isOvernight = Boolean(shift.crosses_midnight);
 
             return (
               <div 
                 key={shift.id} 
                 style={{
-                  background: 'var(--card-bg, #1e293b)',
-                  border: '1px solid var(--border-color, #334155)',
-                  borderRadius: '12px',
-                  padding: '18px',
+                  background: 'var(--bg-card, #fff)',
+                  border: '1px solid var(--bg-card-border, #e2e8f0)',
+                  borderRadius: '10px',
+                  padding: '14px 16px',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '12px',
-                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                  gap: '10px',
+                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
+                  transition: 'transform 0.2s ease, box-shadow 0.2s ease'
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span style={{
                       background: shift.color_code || '#3b82f6',
                       color: '#fff',
                       fontWeight: 700,
-                      fontSize: '13px',
-                      padding: '4px 10px',
-                      borderRadius: '6px'
+                      fontSize: '11px',
+                      padding: '3px 8px',
+                      borderRadius: '5px'
                     }}>
                       {shift.code}
                     </span>
-                    <strong style={{ fontSize: '15px', color: 'var(--text-primary, #fff)' }}>{shift.name}</strong>
+                    <strong style={{ fontSize: '14px', color: 'var(--text-primary, #0f172a)' }}>
+                      {shift.name}
+                    </strong>
                   </div>
-                  {Boolean(shift.crosses_midnight) && (
-                    <span style={{ fontSize: '11px', background: 'rgba(139, 92, 246, 0.2)', color: '#c084fc', padding: '3px 8px', borderRadius: '12px', border: '1px solid rgba(139, 92, 246, 0.4)' }}>
+                  {isOvernight && (
+                    <span style={{ fontSize: '10px', background: 'rgba(139, 92, 246, 0.15)', color: '#7c3aed', padding: '2px 6px', borderRadius: '10px', fontWeight: 600 }}>
                       🌙 Overnight
                     </span>
                   )}
                 </div>
 
-                <div style={{ fontSize: '13px', color: 'var(--text-secondary, #94a3b8)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <div><strong>Hours:</strong> {shift.start_time?.substring(0, 5)} - {shift.end_time?.substring(0, 5)} ({shift.duration_hours} hrs)</div>
-                  <div><strong>Scope:</strong> {branchName}</div>
-                  <div><strong>Leave Deduction:</strong> 1.00 Shift Unit</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary, #64748b)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Hours:</span>
+                    <strong style={{ color: 'var(--text-primary, #1e293b)' }}>
+                      {shift.start_time?.substring(0, 5)} – {shift.end_time?.substring(0, 5)}
+                    </strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Duration:</span>
+                    <strong style={{ color: '#2563eb' }}>{shift.duration_hours} hrs</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Scope:</span>
+                    <span style={{ color: 'var(--text-primary, #334155)', fontWeight: 500 }}>{branchName}</span>
+                  </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '8px', marginTop: 'auto', paddingTop: '10px', borderTop: '1px solid var(--border-color, #334155)' }}>
-                  <button className="action-btn-small" onClick={() => openEdit(shift)} style={{ flex: 1 }}>
+                <div style={{
+                  display: 'flex',
+                  gap: '8px',
+                  marginTop: 'auto',
+                  paddingTop: '8px',
+                  borderTop: '1px solid var(--bg-card-border, #f1f5f9)'
+                }}>
+                  <button 
+                    className="btn-edit" 
+                    onClick={() => openEdit(shift)} 
+                    style={{ flex: 1, padding: '5px 8px', fontSize: '12px', justifyContent: 'center' }}
+                  >
                     Edit
                   </button>
-                  <button className="action-btn-small danger" onClick={() => handleDelete(shift)}>
-                    Delete
+                  <button 
+                    className="btn-danger" 
+                    onClick={() => handleDelete(shift)} 
+                    style={{ padding: '5px 8px', fontSize: '12px' }}
+                  >
+                    Remove
                   </button>
                 </div>
               </div>
@@ -191,117 +515,145 @@ export function ManageShiftMasters({ branches = [] }) {
         </div>
       )}
 
-      {/* Modal Dialog */}
+      {/* Responsive Modal Dialog */}
       {modal && (
-        <div className="admin-modal-backdrop" onClick={() => setModal(null)}>
-          <div className="admin-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '480px' }}>
-            <h3>{modal === 'add' ? 'Create Shift Master' : 'Edit Shift Master'}</h3>
+        <div className="modal-backdrop" onClick={() => setModal(null)}>
+          <div 
+            className="modal-box" 
+            onClick={e => e.stopPropagation()} 
+            style={{ maxWidth: '500px', width: '95vw', maxHeight: '90vh', overflowY: 'auto' }}
+          >
+            <div className="modal-header">
+              <h3>{modal === 'add' ? 'Create Shift Template' : 'Edit Shift Template'}</h3>
+              <button className="modal-close" onClick={() => setModal(null)}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+
             <form onSubmit={handleSave}>
-              <div className="form-group">
-                <label>Shift Code <span className="required">*</span></label>
-                <input 
-                  type="text" 
-                  value={form.code} 
-                  onChange={e => setForm({ ...form, code: e.target.value.toUpperCase() })} 
-                  placeholder="e.g. NGT" 
-                  required 
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Shift Name <span className="required">*</span></label>
-                <input 
-                  type="text" 
-                  value={form.name} 
-                  onChange={e => setForm({ ...form, name: e.target.value })} 
-                  placeholder="e.g. Night Production Shift" 
-                  required 
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Branch Assignment</label>
-                <select 
-                  value={form.branch_id} 
-                  onChange={e => setForm({ ...form, branch_id: e.target.value })}
-                >
-                  <option value="">All Branches (Global Shift)</option>
-                  {branches.map(b => (
-                    <option key={b.id} value={b.id}>{b.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div className="form-group">
-                  <label>Start Time <span className="required">*</span></label>
-                  <input 
-                    type="time" 
-                    value={form.start_time} 
-                    onChange={e => setForm({ ...form, start_time: e.target.value })} 
-                    required 
-                  />
+              <div className="modal-body" style={{ padding: '18px 24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '12px' }}>
+                  <div className="field">
+                    <label>Shift Code *</label>
+                    <input 
+                      type="text" 
+                      value={form.code} 
+                      onChange={e => setForm({ ...form, code: e.target.value.toUpperCase() })} 
+                      placeholder="e.g. NGT" 
+                      maxLength={6}
+                      required 
+                      style={{ textTransform: 'uppercase', fontWeight: 700 }}
+                    />
+                  </div>
+                  <div className="field">
+                    <label>Shift Name *</label>
+                    <input 
+                      type="text" 
+                      value={form.name} 
+                      onChange={e => setForm({ ...form, name: e.target.value })} 
+                      placeholder="e.g. Overnight Night Shift" 
+                      required 
+                    />
+                  </div>
                 </div>
-                <div className="form-group">
-                  <label>End Time <span className="required">*</span></label>
-                  <input 
-                    type="time" 
-                    value={form.end_time} 
-                    onChange={e => setForm({ ...form, end_time: e.target.value })} 
-                    required 
-                  />
-                </div>
-              </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div className="form-group">
-                  <label>Duration Hours</label>
-                  <input 
-                    type="number" 
-                    step="0.5" 
-                    value={form.duration_hours} 
-                    onChange={e => setForm({ ...form, duration_hours: e.target.value })} 
-                    required 
-                  />
+                <div className="field">
+                  <label>Branch Assignment</label>
+                  <select 
+                    value={form.branch_id} 
+                    onChange={e => setForm({ ...form, branch_id: e.target.value })}
+                  >
+                    <option value="">🌐 All Branches (Global Shift Template)</option>
+                    {branches.map(b => (
+                      <option key={b.id} value={b.id}>🏢 {b.name}</option>
+                    ))}
+                  </select>
                 </div>
-                <div className="form-group">
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px' }}>
+                  <div className="field">
+                    <label>Start Time *</label>
+                    <input 
+                      type="time" 
+                      value={form.start_time} 
+                      onChange={e => handleTimeChange('start_time', e.target.value)} 
+                      required 
+                    />
+                  </div>
+                  <div className="field">
+                    <label>End Time *</label>
+                    <input 
+                      type="time" 
+                      value={form.end_time} 
+                      onChange={e => handleTimeChange('end_time', e.target.value)} 
+                      required 
+                    />
+                  </div>
+                  <div className="field">
+                    <label>Duration (hrs)</label>
+                    <input 
+                      type="number" 
+                      step="0.5" 
+                      min="1"
+                      max="24"
+                      value={form.duration_hours} 
+                      onChange={e => setForm({ ...form, duration_hours: parseFloat(e.target.value) || 8.0 })} 
+                      required 
+                    />
+                  </div>
+                </div>
+
+                <div className="field">
                   <label>Color Badge</label>
-                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '6px' }}>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginTop: '4px' }}>
                     {PRESET_COLORS.map(c => (
                       <div 
                         key={c}
                         onClick={() => setForm({ ...form, color_code: c })}
                         style={{
-                          width: '24px',
-                          height: '24px',
+                          width: '26px',
+                          height: '26px',
                           borderRadius: '50%',
                           background: c,
                           cursor: 'pointer',
-                          border: form.color_code === c ? '2px solid #fff' : 'none'
+                          boxShadow: form.color_code === c ? '0 0 0 3px rgba(59, 130, 246, 0.4)' : 'none',
+                          border: form.color_code === c ? '2px solid #fff' : '1px solid rgba(0,0,0,0.1)',
+                          transition: 'transform 0.15s ease'
                         }}
                       />
                     ))}
                   </div>
                 </div>
+
+                <div style={{
+                  background: 'var(--bg-card, #f8fafc)',
+                  border: '1px solid var(--bg-card-border, #e2e8f0)',
+                  borderRadius: '8px',
+                  padding: '12px'
+                }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', margin: 0 }}>
+                    <input 
+                      type="checkbox" 
+                      checked={form.crosses_midnight} 
+                      onChange={e => handleTimeChange('crosses_midnight', e.target.checked)} 
+                    />
+                    <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary, #0f172a)' }}>
+                      🌙 Crosses Midnight (Overnight Shift)
+                    </span>
+                  </label>
+                  <small style={{ color: 'var(--text-muted, #64748b)', display: 'block', marginTop: '4px', fontSize: '11.5px', lineHeight: 1.4 }}>
+                    Leave applications covering this shift deduct strictly <strong>1.0 shift unit</strong>, avoiding double-counting across the midnight transition.
+                  </small>
+                </div>
               </div>
 
-              <div className="form-group" style={{ marginTop: '10px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                  <input 
-                    type="checkbox" 
-                    checked={form.crosses_midnight} 
-                    onChange={e => setForm({ ...form, crosses_midnight: e.target.checked })} 
-                  />
-                  <span><strong>Crosses Midnight (Overnight Shift)</strong></span>
-                </label>
-                <small style={{ color: 'var(--text-secondary, #94a3b8)', display: 'block', marginTop: '4px' }}>
-                  Leave applications spanning an overnight shift deduct strictly 1 shift unit, never double counting days.
-                </small>
-              </div>
-
-              <div className="modal-actions" style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                <button type="button" className="action-btn-small" onClick={() => setModal(null)}>Cancel</button>
-                <button type="submit" className="primary-btn">Save Shift</button>
+              <div className="modal-footer" style={{ padding: '14px 24px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button type="button" className="btn-secondary" onClick={() => setModal(null)}>Cancel</button>
+                <button type="submit" className="btn-primary">
+                  {modal === 'add' ? 'Create Shift' : 'Save Changes'}
+                </button>
               </div>
             </form>
           </div>
@@ -481,32 +833,68 @@ export function ManageShiftRosters({ branches = [], employees = [] }) {
   ];
 
   return (
-    <div className="admin-page-container">
-      {toast && <div className="admin-toast">{toast}</div>}
-
-      <div className="admin-page-header">
-        <div>
-          <h2>Shift Rostering Matrix</h2>
-          <p className="admin-page-sub">Monthly shift scheduling with cross-midnight tracking and RDO management.</p>
+    <div className="admin-content" style={{ padding: '24px 28px' }}>
+      {toast && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          right: '20px',
+          zIndex: 9999,
+          background: '#059669',
+          color: '#fff',
+          padding: '10px 18px',
+          borderRadius: '8px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          fontWeight: 600,
+          fontSize: '13px'
+        }}>
+          {toast}
         </div>
+      )}
 
-        {/* Toolbar Controls */}
+      {/* Responsive Controls Toolbar */}
+      <div className="controls-bar" style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '12px',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: '20px'
+      }}>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
           <select 
-            className="filter-select"
             value={selectedBranch}
             onChange={e => setSelectedBranch(e.target.value)}
+            style={{
+              padding: '8px 12px',
+              borderRadius: '8px',
+              border: '1px solid var(--bg-card-border, #cbd5e1)',
+              background: 'var(--bg-card, #fff)',
+              color: 'var(--text-primary, #0f172a)',
+              fontSize: '13px',
+              fontWeight: 500,
+              cursor: 'pointer'
+            }}
           >
-            <option value="all">All Branches</option>
+            <option value="all">🏢 All Branches</option>
             {branches.map(b => (
               <option key={b.id} value={b.id}>{b.name}</option>
             ))}
           </select>
 
           <select 
-            className="filter-select"
             value={selectedMonth}
             onChange={e => setSelectedMonth(Number(e.target.value))}
+            style={{
+              padding: '8px 12px',
+              borderRadius: '8px',
+              border: '1px solid var(--bg-card-border, #cbd5e1)',
+              background: 'var(--bg-card, #fff)',
+              color: 'var(--text-primary, #0f172a)',
+              fontSize: '13px',
+              fontWeight: 500,
+              cursor: 'pointer'
+            }}
           >
             {MONTH_NAMES.map((name, idx) => (
               <option key={idx + 1} value={idx + 1}>{name}</option>
@@ -514,19 +902,41 @@ export function ManageShiftRosters({ branches = [], employees = [] }) {
           </select>
 
           <select 
-            className="filter-select"
             value={selectedYear}
             onChange={e => setSelectedYear(Number(e.target.value))}
+            style={{
+              padding: '8px 12px',
+              borderRadius: '8px',
+              border: '1px solid var(--bg-card-border, #cbd5e1)',
+              background: 'var(--bg-card, #fff)',
+              color: 'var(--text-primary, #0f172a)',
+              fontSize: '13px',
+              fontWeight: 500,
+              cursor: 'pointer'
+            }}
           >
             {[2025, 2026, 2027].map(yr => (
               <option key={yr} value={yr}>{yr}</option>
             ))}
           </select>
-
-          <button className="primary-btn" onClick={handleAutoFillDefaultShift}>
-            ⚡ Auto-Fill Month (Weekdays Shift / Weekends RDO)
-          </button>
         </div>
+
+        <button 
+          className="btn-primary" 
+          onClick={handleAutoFillDefaultShift}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            whiteSpace: 'nowrap',
+            padding: '9px 16px',
+            fontWeight: 600,
+            fontSize: '13px'
+          }}
+        >
+          <span>⚡</span>
+          <span>Auto-Fill Month (Weekdays Shift / Weekends RDO)</span>
+        </button>
       </div>
 
       {loading ? (

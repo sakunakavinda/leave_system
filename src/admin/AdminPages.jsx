@@ -3692,6 +3692,11 @@ export function ManageLeaveTypes({ leaveTypes, setLeaveTypes }) {
                         🔄 Carry: <strong style={{ color: '#c084fc' }}>Max {lt.carry_forward_max_days}d</strong>
                       </span>
                     )}
+                    {lt.min_service_days_required > 0 && (
+                      <span style={{ color: 'var(--text-secondary)' }}>
+                        ⏳ Min Service: <strong style={{ color: '#f59e0b' }}>{lt.min_service_days_required}d</strong>
+                      </span>
+                    )}
                   </div>
                 </td>
                 <td style={{ color: 'var(--text-secondary)', fontSize: '13px', maxWidth: '250px' }}>{lt.description || '—'}</td>
@@ -3858,6 +3863,21 @@ export function ManageLeaveTypes({ leaveTypes, setLeaveTypes }) {
                         onChange={e => setForm(p => ({ ...p, carry_forward_max_days: e.target.value }))}
                       />
                       <small style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Roll over to next year</small>
+                    </div>
+
+                    <div className="form-group">
+                      <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                        Min Service Required (Days)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        className="admin-filter-select"
+                        style={{ width: '100%' }}
+                        value={form.min_service_days_required}
+                        onChange={e => setForm(p => ({ ...p, min_service_days_required: e.target.value }))}
+                      />
+                      <small style={{ fontSize: '11px', color: 'var(--text-muted)' }}>0 = Eligible Day 1 (e.g. 180d probation)</small>
                     </div>
                   </div>
                 </div>
