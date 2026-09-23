@@ -17,11 +17,31 @@ import crypto from 'crypto';
 
 router.post('/', async (req, res) => {
   const { title, department_id, description, status } = req.body;
-  const id = crypto.randomUUID();
+  if (!title || !title.trim()) {
+    return res.status(400).json({ error: 'Role title is required' });
+  }
+
   try {
+    // Check if departments records are empty
+    const [[deptCount]] = await pool.query('SELECT COUNT(*) as count FROM departments');
+    if (deptCount.count === 0) {
+      return res.status(400).json({ error: 'Cannot add role: No departments configured. Please add at least one department first.' });
+    }
+
+    if (!department_id) {
+      return res.status(400).json({ error: 'Department is required' });
+    }
+
+    // Verify department exists
+    const [deptRows] = await pool.query('SELECT id FROM departments WHERE id = ?', [department_id]);
+    if (deptRows.length === 0) {
+      return res.status(400).json({ error: 'Invalid department: The selected department does not exist' });
+    }
+
+    const id = crypto.randomUUID();
     const [result] = await pool.query(
       'INSERT INTO roles (id, title, department_id, description, status) VALUES (?, ?, ?, ?, ?)',
-      [id, title, department_id, description, status || 'active']
+      [id, title.trim(), department_id, description, status || 'active']
     );
     const [roleRows] = await pool.query('SELECT * FROM roles WHERE id = ?', [id]);
     const newRole = roleRows[0];

@@ -47,6 +47,42 @@ router.post('/', async (req, res) => {
   const effectiveJoinedDate = joined_date || new Date().toISOString().split('T')[0];
 
   try {
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: 'Employee name is required' });
+    }
+
+    // Check if branches records are empty
+    const [[branchCount]] = await pool.query('SELECT COUNT(*) as count FROM branches');
+    if (branchCount.count === 0) {
+      return res.status(400).json({ error: 'Cannot add employee: No branches configured. Please add at least one branch first.' });
+    }
+
+    // Check if roles records are empty
+    const [[roleCount]] = await pool.query('SELECT COUNT(*) as count FROM roles');
+    if (roleCount.count === 0) {
+      return res.status(400).json({ error: 'Cannot add employee: No roles configured. Please add at least one role first.' });
+    }
+
+    if (!branch_id) {
+      return res.status(400).json({ error: 'Branch is required' });
+    }
+
+    if (!role_id) {
+      return res.status(400).json({ error: 'Role is required' });
+    }
+
+    // Verify branch exists
+    const [branchRows] = await pool.query('SELECT id FROM branches WHERE id = ?', [branch_id]);
+    if (branchRows.length === 0) {
+      return res.status(400).json({ error: 'Invalid branch: The selected branch does not exist' });
+    }
+
+    // Verify role exists
+    const [roleRows] = await pool.query('SELECT id FROM roles WHERE id = ?', [role_id]);
+    if (roleRows.length === 0) {
+      return res.status(400).json({ error: 'Invalid role: The selected role does not exist' });
+    }
+
     await pool.query(
       'INSERT INTO employees (id, name, secret_code, role_id, branch_id, status, joined_date) VALUES (?, ?, ?, ?, ?, ?, ?)',
       [id, name.trim(), rawCode, role_id, branch_id, status || 'active', effectiveJoinedDate]

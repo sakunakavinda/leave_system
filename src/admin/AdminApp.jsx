@@ -874,6 +874,7 @@ export default function AdminApp() {
             canCreateEdit={hasPermission('employees.create_edit')}
             canAdjustBalance={hasPermission('employees.adjust_balance')}
             canDelete={hasPermission('employees.delete')}
+            onNavigatePage={setActivePage}
           />
         )}
         {(activePage === 'manage_users' || activePage === 'managers' || activePage === 'user_configuration') && (
@@ -898,7 +899,7 @@ export default function AdminApp() {
           <ManageDepartments departments={departments} setDepartments={setDepartments} />
         )}
         {activePage === 'roles' && (
-          <ManageRoles departments={departments} roles={roles} setRoles={setRoles} />
+          <ManageRoles departments={departments} roles={roles} setRoles={setRoles} onNavigatePage={setActivePage} />
         )}
         {(activePage === 'leave_types' || activePage === 'leave_configuration') && (
           <ManageLeaveTypes leaveTypes={leaveTypes} setLeaveTypes={setLeaveTypes} />

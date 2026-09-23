@@ -41,7 +41,7 @@ router.get('/', async (req, res) => {
 
 // POST a new branch
 router.post('/', async (req, res) => {
-  const { name, location, status, manager_id, operating_model, working_days, weekly_hours } = req.body;
+  const { name, location, status, operating_model, working_days, weekly_hours } = req.body;
   const branchId = crypto.randomUUID();
   const scheduleId = crypto.randomUUID();
 
@@ -57,10 +57,6 @@ router.post('/', async (req, res) => {
       INSERT INTO branch_schedules (id, branch_id, operating_model, working_days, weekly_hours)
       VALUES (?, ?, ?, ?, ?)
     `, [scheduleId, branchId, operating_model || 'corporate_5day', workingDaysJson, weekly_hours || 40.00]);
-
-    if (manager_id) {
-      await pool.query('UPDATE managers SET branch_id = ? WHERE id = ?', [branchId, manager_id]);
-    }
     
     // Auto-generate default leave rules for all existing roles
     const [rolesRows] = await pool.query('SELECT id FROM roles');
@@ -97,7 +93,7 @@ router.post('/', async (req, res) => {
 // PUT update a branch
 router.put('/:id', async (req, res) => {
   const { id } = req.params;
-  const { name, location, status, manager_id, operating_model, working_days, weekly_hours } = req.body;
+  const { name, location, status, operating_model, working_days, weekly_hours } = req.body;
 
   try {
     const [result] = await pool.query(
@@ -119,14 +115,6 @@ router.put('/:id', async (req, res) => {
           working_days = VALUES(working_days),
           weekly_hours = VALUES(weekly_hours)
       `, [scheduleId, id, operating_model || 'corporate_5day', workingDaysJson, weekly_hours || 40.00]);
-    }
-    
-    // Unlink old managers for this branch
-    await pool.query('UPDATE managers SET branch_id = NULL WHERE branch_id = ?', [id]);
-    
-    // Link new manager
-    if (manager_id) {
-      await pool.query('UPDATE managers SET branch_id = ? WHERE id = ?', [id, manager_id]);
     }
     
     const [branchRows] = await pool.query(`

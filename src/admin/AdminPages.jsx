@@ -2020,10 +2020,21 @@ export function ManageEmployees({
   currentUser = null,
   canCreateEdit = true,
   canAdjustBalance = true,
-  canDelete = true
+  canDelete = true,
+  onNavigatePage = null
 }) {
   const isBranchScoped = currentUser && !isSuper && currentUser.branch_id;
   const initialBranchFilter = isBranchScoped ? currentUser.branch_id : 'all';
+
+  const hasBranches = Boolean(branches && branches.length > 0);
+  const hasRoles = Boolean(roles && roles.length > 0);
+  const canAddEmployee = hasBranches && hasRoles;
+
+  const missingPrerequisitesText = !hasBranches && !hasRoles
+    ? 'Both Branches and Roles records are empty. You must create at least one Branch and one Role before adding employees.'
+    : (!hasBranches
+      ? 'Branch records are empty. You must configure at least one Branch before adding employees.'
+      : 'Role records are empty. You must configure at least one Role before adding employees.');
 
   const [activeSubTab, setActiveSubTab] = useState('directory')
   const [search, setSearch]             = useState('')
@@ -2068,7 +2079,18 @@ export function ManageEmployees({
 
   const showToast = (msg, type='success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000) }
 
-  const openAdd  = ()    => { setForm(EMPTY_EMP); setModal('add') }
+  const openAdd  = ()    => { 
+    if (!canAddEmployee) {
+      showToast(missingPrerequisitesText, 'danger');
+      return;
+    }
+    setForm({
+      ...EMPTY_EMP,
+      role_id: roles?.[0]?.id || '',
+      branch_id: isBranchScoped ? currentUser.branch_id : (branches?.[0]?.id || '')
+    }); 
+    setModal('add') 
+  }
   const openEdit = (emp) => { 
     setForm({ 
       ...emp, 
@@ -2079,7 +2101,28 @@ export function ManageEmployees({
   const closeModal = ()  => setModal(null)
 
   const handleSave = async () => {
-    if (!form.name.trim()) return
+    if (!form.name.trim()) {
+      showToast('Employee name is required', 'danger');
+      return;
+    }
+    if (modal === 'add') {
+      if (!hasBranches) {
+        showToast('Cannot add employee: No branches configured', 'danger');
+        return;
+      }
+      if (!hasRoles) {
+        showToast('Cannot add employee: No roles configured', 'danger');
+        return;
+      }
+      if (!form.branch_id) {
+        showToast('Please select a valid branch', 'danger');
+        return;
+      }
+      if (!form.role_id) {
+        showToast('Please select a valid role', 'danger');
+        return;
+      }
+    }
     try {
       if (modal === 'add') {
         const existingCodes = employees.map(e => e.secretCode).filter(Boolean);
@@ -2206,6 +2249,53 @@ export function ManageEmployees({
       {/* ══════ Staff Directory Sub-tab ══════ */}
       {activeSubTab === 'directory' && (
         <>
+          {!canAddEmployee && (
+            <div style={{
+              marginBottom: '16px',
+              padding: '14px 18px',
+              background: 'rgba(239, 68, 68, 0.08)',
+              border: '1px solid rgba(239, 68, 68, 0.25)',
+              borderRadius: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '16px',
+              flexWrap: 'wrap'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontSize: '22px' }}>⚠️</span>
+                <div>
+                  <div style={{ fontWeight: 600, color: 'var(--accent-danger, #ef4444)', fontSize: '0.92rem' }}>
+                    Cannot Add New Employee
+                  </div>
+                  <div style={{ fontSize: '0.84rem', color: 'var(--text-secondary, #94a3b8)', marginTop: '2px' }}>
+                    {missingPrerequisitesText}
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                {!hasBranches && onNavigatePage && (
+                  <button 
+                    className="btn-secondary" 
+                    style={{ padding: '6px 12px', fontSize: '0.8rem', gap: '6px', whiteSpace: 'nowrap' }}
+                    onClick={() => onNavigatePage('branches')}
+                  >
+                    🏢 Manage Branches
+                  </button>
+                )}
+                {!hasRoles && onNavigatePage && (
+                  <button 
+                    className="btn-secondary" 
+                    style={{ padding: '6px 12px', fontSize: '0.8rem', gap: '6px', whiteSpace: 'nowrap' }}
+                    onClick={() => onNavigatePage('roles')}
+                  >
+                    🎭 Manage Roles
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="controls-bar">
             <div className="admin-search-box">
               <svg className="s-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -2237,7 +2327,17 @@ export function ManageEmployees({
               )
             )}
             {canCreateEdit && (
-              <button className="btn-primary" id="add-employee-btn" onClick={openAdd}>
+              <button 
+                className="btn-primary" 
+                id="add-employee-btn" 
+                onClick={openAdd}
+                disabled={!canAddEmployee}
+                title={!canAddEmployee ? missingPrerequisitesText : 'Add new employee'}
+                style={{
+                  opacity: !canAddEmployee ? 0.45 : 1,
+                  cursor: !canAddEmployee ? 'not-allowed' : 'pointer'
+                }}
+              >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
                 </svg>
@@ -2483,6 +2583,23 @@ export function ManageEmployees({
               </button>
             </div>
             <div className="modal-body">
+              {modal === 'add' && !canAddEmployee && (
+                <div style={{
+                  padding: '12px 16px',
+                  background: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  borderRadius: '8px',
+                  color: 'var(--accent-danger, #ef4444)',
+                  fontSize: '0.85rem',
+                  marginBottom: '16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  <span>⚠️</span>
+                  <span>{missingPrerequisitesText}</span>
+                </div>
+              )}
               <div className="field-row">
                 <div className="field">
                   <label>Full Name *</label>
@@ -2534,7 +2651,16 @@ export function ManageEmployees({
             </div>
             <div className="modal-footer">
               <button className="btn-secondary" onClick={closeModal}>Cancel</button>
-              <button className="btn-primary" id="save-employee-btn" onClick={handleSave}>
+              <button 
+                className="btn-primary" 
+                id="save-employee-btn" 
+                onClick={handleSave}
+                disabled={modal === 'add' && !canAddEmployee}
+                style={{
+                  opacity: (modal === 'add' && !canAddEmployee) ? 0.5 : 1,
+                  cursor: (modal === 'add' && !canAddEmployee) ? 'not-allowed' : 'pointer'
+                }}
+              >
                 {modal === 'add' ? 'Add Employee' : 'Save Changes'}
               </button>
             </div>
@@ -2846,7 +2972,6 @@ export function ManageBranches({ branches, setBranches, employees, managers, set
   const EMPTY_BR = { 
     name:'', 
     location:'', 
-    manager_id:'', 
     status:'active', 
     operating_model:'corporate_5day', 
     working_days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], 
@@ -2860,7 +2985,6 @@ export function ManageBranches({ branches, setBranches, employees, managers, set
   const showToast = (msg, type='success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000) }
   const openAdd  = ()    => { setForm(EMPTY_BR); setModal('add') }
   const openEdit = (br)  => { 
-    const mgr = getBranchManager(br.id)
     const rawDays = br.working_days || ['Monday','Tuesday','Wednesday','Thursday','Friday']
     let parsedDays = rawDays
     if (typeof rawDays === 'string') {
@@ -2871,7 +2995,6 @@ export function ManageBranches({ branches, setBranches, employees, managers, set
     const computedDaily = parseFloat((wkHrs / dayCount).toFixed(1))
     setForm({ 
       ...br, 
-      manager_id: mgr ? mgr.id : '',
       operating_model: br.operating_model || 'corporate_5day',
       working_days: parsedDays,
       daily_hours: computedDaily,
@@ -2890,27 +3013,16 @@ export function ManageBranches({ branches, setBranches, employees, managers, set
     const empCount = modal === 'add' ? 0 : getEmployeeCount(modal.id)
     
     try {
-      let savedBranchId = '';
       if (modal === 'add') {
         const payload = { ...form, employees: empCount };
         const newBranch = await api.addBranch(payload);
-        savedBranchId = newBranch.id;
         setBranches(prev => [...prev, newBranch]);
         showToast('Branch added successfully');
       } else {
-        savedBranchId = modal.id;
         const payload = { ...form, employees: empCount };
-        const updatedBranch = await api.updateBranch(savedBranchId, payload);
-        setBranches(prev => prev.map(b => b.id === savedBranchId ? updatedBranch : b));
+        const updatedBranch = await api.updateBranch(modal.id, payload);
+        setBranches(prev => prev.map(b => b.id === modal.id ? updatedBranch : b));
         showToast('Branch updated');
-      }
-
-      if (setManagers) {
-        setManagers(prev => prev.map(m => {
-          if (m.id === form.manager_id) return { ...m, branch_id: savedBranchId }
-          if (m.branch_id === savedBranchId && m.id !== form.manager_id) return { ...m, branch_id: null }
-          return m
-        }))
       }
       closeModal();
     } catch (err) {
@@ -3078,13 +3190,6 @@ export function ManageBranches({ branches, setBranches, employees, managers, set
                   <label>Location</label>
                   <input placeholder="Province / City" value={form.location} onChange={e => setForm(p=>({...p, location: e.target.value}))} />
                 </div>
-              </div>
-              <div className="field">
-                <label>Branch Manager</label>
-                <select value={form.manager_id} onChange={e => setForm(p=>({...p, manager_id: e.target.value}))}>
-                  <option value="">No Manager Assigned</option>
-                  {(managers || []).map(m => <option key={m.id} value={m.id}>{m.username}</option>)}
-                </select>
               </div>
 
               <div className="field-row">
@@ -3846,11 +3951,22 @@ export function ManageManagers({ branches, managers, setManagers, onNavigatePage
                         value={form.branch_id || ''} 
                         onChange={e => setForm(p => ({ ...p, branch_id: e.target.value }))}
                       >
-                        <option value="">Select a branch…</option>
-                        {branches.map(b => (
-                          <option key={b.id} value={b.id}>{b.name} ({b.location || 'Active'})</option>
-                        ))}
+                        {branches.length === 0 ? (
+                          <option value="">No branches configured</option>
+                        ) : (
+                          <>
+                            <option value="">Select a branch…</option>
+                            {branches.map(b => (
+                              <option key={b.id} value={b.id}>{b.name} ({b.location || 'Active'})</option>
+                            ))}
+                          </>
+                        )}
                       </select>
+                    )}
+                    {form.role !== 'admin' && branches.length === 0 && (
+                      <div style={{ fontSize: '11px', color: 'var(--accent-warning, #f59e0b)', marginTop: '4px' }}>
+                        ⚠️ No branches found. Please add a branch first in Branch Configurations.
+                      </div>
                     )}
                   </div>
                 </div>
@@ -4672,21 +4788,45 @@ export function ManageDepartments({ departments, setDepartments }) {
 /* ─────────────────────────────────────────────────────
    ManageRoles
 ───────────────────────────────────────────────────── */
-export function ManageRoles({ departments, roles, setRoles }) {
+export function ManageRoles({ departments, roles, setRoles, onNavigatePage = null }) {
   const [search, setSearch]     = useState('')
   const [deptFilter, setDeptFilter] = useState('all')
   const [modal, setModal]       = useState(null)
   const [toast, setToast]       = useState(null)
-  const EMPTY_ROLE = { title:'', department_id: departments[0]?.id || '', description:'', status:'active' }
+
+  const hasDepartments = Boolean(departments && departments.length > 0);
+  const missingDeptText = 'Department records are empty. You must create at least one Department before adding roles.';
+
+  const EMPTY_ROLE = { title:'', department_id: departments?.[0]?.id || '', description:'', status:'active' }
   const [form, setForm]         = useState(EMPTY_ROLE)
 
   const showToast = (msg, type='success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000) }
-  const openAdd  = ()    => { setForm(EMPTY_ROLE); setModal('add') }
+  const openAdd  = ()    => { 
+    if (!hasDepartments) {
+      showToast(missingDeptText, 'danger');
+      return;
+    }
+    setForm({ ...EMPTY_ROLE, department_id: departments?.[0]?.id || '' }); 
+    setModal('add') 
+  }
   const openEdit = (role)  => { setForm({ ...role }); setModal(role) }
   const closeModal = ()  => setModal(null)
 
   const handleSave = async () => {
-    if (!form.title.trim()) return
+    if (!form.title.trim()) {
+      showToast('Role title is required', 'danger');
+      return;
+    }
+    if (modal === 'add') {
+      if (!hasDepartments) {
+        showToast('Cannot add role: No departments configured', 'danger');
+        return;
+      }
+      if (!form.department_id) {
+        showToast('Please select a department', 'danger');
+        return;
+      }
+    }
     try {
       if (modal === 'add') {
         const newRole = await api.addRole(form);
@@ -4727,6 +4867,42 @@ export function ManageRoles({ departments, roles, setRoles }) {
 
   return (
     <div className="admin-content">
+      {!hasDepartments && (
+        <div style={{
+          marginBottom: '16px',
+          padding: '14px 18px',
+          background: 'rgba(239, 68, 68, 0.08)',
+          border: '1px solid rgba(239, 68, 68, 0.25)',
+          borderRadius: '12px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '16px',
+          flexWrap: 'wrap'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '22px' }}>⚠️</span>
+            <div>
+              <div style={{ fontWeight: 600, color: 'var(--accent-danger, #ef4444)', fontSize: '0.92rem' }}>
+                Cannot Add New Role
+              </div>
+              <div style={{ fontSize: '0.84rem', color: 'var(--text-secondary, #94a3b8)', marginTop: '2px' }}>
+                {missingDeptText}
+              </div>
+            </div>
+          </div>
+          {onNavigatePage && (
+            <button 
+              className="btn-secondary" 
+              style={{ padding: '6px 12px', fontSize: '0.8rem', gap: '6px', whiteSpace: 'nowrap' }}
+              onClick={() => onNavigatePage('departments')}
+            >
+              📁 Manage Departments
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="controls-bar">
         <div className="admin-search-box">
           <svg className="s-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -4738,7 +4914,17 @@ export function ManageRoles({ departments, roles, setRoles }) {
           <option value="all">All Departments</option>
           {departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
         </select>
-        <button className="btn-primary" id="add-role-btn" onClick={openAdd}>
+        <button 
+          className="btn-primary" 
+          id="add-role-btn" 
+          onClick={openAdd}
+          disabled={!hasDepartments}
+          title={!hasDepartments ? missingDeptText : 'Add new role'}
+          style={{
+            opacity: !hasDepartments ? 0.45 : 1,
+            cursor: !hasDepartments ? 'not-allowed' : 'pointer'
+          }}
+        >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
           </svg>
@@ -4806,6 +4992,23 @@ export function ManageRoles({ departments, roles, setRoles }) {
               </button>
             </div>
             <div className="modal-body">
+              {modal === 'add' && !hasDepartments && (
+                <div style={{
+                  padding: '12px 16px',
+                  background: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  borderRadius: '8px',
+                  color: 'var(--accent-danger, #ef4444)',
+                  fontSize: '0.85rem',
+                  marginBottom: '16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  <span>⚠️</span>
+                  <span>{missingDeptText}</span>
+                </div>
+              )}
               <div className="field-row">
                 <div className="field">
                   <label>Role Title *</label>
@@ -4834,7 +5037,16 @@ export function ManageRoles({ departments, roles, setRoles }) {
             </div>
             <div className="modal-footer">
               <button className="btn-secondary" onClick={closeModal}>Cancel</button>
-              <button className="btn-primary" id="save-role-btn" onClick={handleSave}>
+              <button 
+                className="btn-primary" 
+                id="save-role-btn" 
+                onClick={handleSave}
+                disabled={modal === 'add' && !hasDepartments}
+                style={{
+                  opacity: (modal === 'add' && !hasDepartments) ? 0.5 : 1,
+                  cursor: (modal === 'add' && !hasDepartments) ? 'not-allowed' : 'pointer'
+                }}
+              >
                 {modal === 'add' ? 'Add Role' : 'Save Changes'}
               </button>
             </div>
