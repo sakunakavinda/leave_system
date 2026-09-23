@@ -513,9 +513,14 @@ function App() {
                 required
               >
                 {leaveTypes && leaveTypes.length > 0 ? (
-                  leaveTypes.filter(lt => lt.status === 'active').map(lt => (
-                    <option key={lt.id} value={lt.code}>{lt.name}</option>
-                  ))
+                  <>
+                    {leaveTypes.filter(lt => lt.status === 'active').map(lt => (
+                      <option key={lt.id} value={lt.code}>{lt.name}</option>
+                    ))}
+                    {!leaveTypes.some(lt => lt.code === 'unpaid' || lt.code === 'lop') && (
+                      <option value="unpaid">Loss of Pay (Unpaid Leave)</option>
+                    )}
+                  </>
                 ) : (
                   <>
                     <option value="annual">Annual Leave</option>

@@ -13,7 +13,7 @@ router.get('/', optionalAuth, async (req, res) => {
     let sql = `
       SELECT 
         a.id, a.employee_id, a.substitute_employee_id, a.leave_type, 
-        a.applied_date, a.returning_date, a.substitute_confirmed, a.status,
+        a.applied_date, a.returning_date, a.substitute_confirmed, a.status, a.reason,
         a.created_at, a.updated_at,
         e.branch_id,
         (SELECT GROUP_CONCAT(DATE_FORMAT(d.leave_date, '%Y-%m-%d')) 
@@ -42,6 +42,7 @@ router.get('/', optionalAuth, async (req, res) => {
       returningDate: row.returning_date,
       substituteConfirmed: row.substitute_confirmed,
       status: row.status,
+      reason: row.reason,
       leaveDates: row.leave_dates ? row.leave_dates.split(',') : [],
       createdAt: row.created_at,
       updatedAt: row.updated_at
@@ -57,7 +58,7 @@ router.get('/', optionalAuth, async (req, res) => {
 import crypto from 'crypto';
 
 router.post('/', async (req, res) => {
-  const { secretCode, employee_id: reqEmployeeId, isManagerOverride, leave_type, appliedDate, leaveDates, returningDate, substitute_employee_id, status: reqStatus } = req.body;
+  const { secretCode, employee_id: reqEmployeeId, isManagerOverride, leave_type, appliedDate, leaveDates, returningDate, substitute_employee_id, status: reqStatus, reason } = req.body;
   const connection = await pool.getConnection();
   
   try {
@@ -95,7 +96,7 @@ router.post('/', async (req, res) => {
       const noticeDays = parseInt(ltPolicy.notice_days_required) || 0;
       const maxConsec = parseInt(ltPolicy.max_consecutive_days) || 0;
 
-      if (noticeDays > 0) {
+      if (!isManagerOverride && noticeDays > 0) {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const minDate = new Date(today);
@@ -115,7 +116,7 @@ router.post('/', async (req, res) => {
         }
       }
 
-      if (maxConsec > 0 && leaveDates && leaveDates.length > maxConsec) {
+      if (!isManagerOverride && maxConsec > 0 && leaveDates && leaveDates.length > maxConsec) {
         await connection.rollback();
         return res.status(400).json({
           error: `${ltPolicy.name} cannot exceed ${maxConsec} consecutive days per request according to company policy.`
@@ -124,7 +125,7 @@ router.post('/', async (req, res) => {
 
       // Minimum Service Days Check (Probation / Service length)
       const minServiceDays = parseInt(ltPolicy.min_service_days_required) || 0;
-      if (minServiceDays > 0) {
+      if (!isManagerOverride && minServiceDays > 0) {
         const [empRows] = await connection.query('SELECT joined_date FROM employees WHERE id = ?', [employee_id]);
         if (empRows.length > 0 && empRows[0].joined_date) {
           const joinedDate = new Date(empRows[0].joined_date);
@@ -181,52 +182,35 @@ router.post('/', async (req, res) => {
       taken = (balanceRow[balanceCol] !== undefined && balanceRow[balanceCol] !== null) ? Number(balanceRow[balanceCol]) : 0;
       
       const isUnpaidType = leave_type === 'unpaid' || leave_type === 'lop';
-      if (!isUnpaidType || quota > 0) {
+      if (!isManagerOverride && (!isUnpaidType || quota > 0)) {
         if (taken + requestedDays > quota) {
           await connection.rollback();
           return res.status(400).json({ error: `You only have ${quota - taken} ${leave_type} leave days remaining.` });
         }
       }
 
-      // Max Per Day Check
-      for (const date of leaveDates) {
-        const [onLeaveRows] = await connection.query(`
-          SELECT COUNT(DISTINCT a.employee_id) AS count
-          FROM leave_applications a
-          JOIN leave_application_dates d ON a.id = d.leave_application_id
-          JOIN employees e ON a.employee_id = e.id
-          WHERE d.leave_date = ? 
-            AND e.role_id = ? 
-            AND e.branch_id = ?
-            AND a.status IN ('approved', 'pending')
-        `, [date, role_id, branch_id]);
+      // Max Per Day & Substitute Checks (Bypassed if manager override / unannounced absence recording)
+      if (!isManagerOverride) {
+        for (const date of leaveDates) {
+          const [onLeaveRows] = await connection.query(`
+            SELECT COUNT(DISTINCT a.employee_id) AS count
+            FROM leave_applications a
+            JOIN leave_application_dates d ON a.id = d.leave_application_id
+            JOIN employees e ON a.employee_id = e.id
+            WHERE d.leave_date = ? 
+              AND e.role_id = ? 
+              AND e.branch_id = ?
+              AND a.status IN ('approved', 'pending')
+          `, [date, role_id, branch_id]);
 
-        const countOnLeave = parseInt(onLeaveRows[0].count);
-        if (countOnLeave >= rule.max_per_day) {
-          await connection.rollback();
-          return res.status(400).json({ error: `Maximum allowed employees on leave reached for date: ${date}` });
-        }
+          const countOnLeave = parseInt(onLeaveRows[0].count);
+          if (countOnLeave >= rule.max_per_day) {
+            await connection.rollback();
+            return res.status(400).json({ error: `Maximum allowed employees on leave reached for date: ${date}` });
+          }
 
-        // Substitute Check
-        const [subCheckRows] = await connection.query(`
-          SELECT e.name 
-          FROM leave_applications a
-          JOIN leave_application_dates d ON a.id = d.leave_application_id
-          JOIN employees e ON a.employee_id = e.id
-          WHERE a.substitute_employee_id = ?
-            AND d.leave_date = ?
-            AND a.status IN ('pending', 'approved')
-        `, [employee_id, date]);
-
-        if (subCheckRows.length > 0) {
-          await connection.rollback();
-          const requesterName = subCheckRows[0].name;
-          return res.status(400).json({ error: `You cannot take leave on ${date} because you are assigned as a substitute for ${requesterName}.` });
-        }
-
-        // Double Substitute Check
-        if (substitute_employee_id) {
-          const [doubleSubCheck] = await connection.query(`
+          // Substitute Check
+          const [subCheckRows] = await connection.query(`
             SELECT e.name 
             FROM leave_applications a
             JOIN leave_application_dates d ON a.id = d.leave_application_id
@@ -234,14 +218,33 @@ router.post('/', async (req, res) => {
             WHERE a.substitute_employee_id = ?
               AND d.leave_date = ?
               AND a.status IN ('pending', 'approved')
-          `, [substitute_employee_id, date]);
+          `, [employee_id, date]);
 
-          if (doubleSubCheck.length > 0) {
+          if (subCheckRows.length > 0) {
             await connection.rollback();
-            const requesterName = doubleSubCheck[0].name;
-            const [subEmpRows] = await connection.query('SELECT name FROM employees WHERE id = ?', [substitute_employee_id]);
-            const subName = subEmpRows[0]?.name || 'the selected substitute';
-            return res.status(400).json({ error: `${subName} cannot be your substitute on ${date} because they are already substituting for ${requesterName}.` });
+            const requesterName = subCheckRows[0].name;
+            return res.status(400).json({ error: `You cannot take leave on ${date} because you are assigned as a substitute for ${requesterName}.` });
+          }
+
+          // Double Substitute Check
+          if (substitute_employee_id) {
+            const [doubleSubCheck] = await connection.query(`
+              SELECT e.name 
+              FROM leave_applications a
+              JOIN leave_application_dates d ON a.id = d.leave_application_id
+              JOIN employees e ON a.employee_id = e.id
+              WHERE a.substitute_employee_id = ?
+                AND d.leave_date = ?
+                AND a.status IN ('pending', 'approved')
+            `, [substitute_employee_id, date]);
+
+            if (doubleSubCheck.length > 0) {
+              await connection.rollback();
+              const requesterName = doubleSubCheck[0].name;
+              const [subEmpRows] = await connection.query('SELECT name FROM employees WHERE id = ?', [substitute_employee_id]);
+              const subName = subEmpRows[0]?.name || 'the selected substitute';
+              return res.status(400).json({ error: `${subName} cannot be your substitute on ${date} because they are already substituting for ${requesterName}.` });
+            }
           }
         }
       }
@@ -252,9 +255,9 @@ router.post('/', async (req, res) => {
     const finalAppliedDate = appliedDate || new Date().toISOString().split('T')[0];
     const appId = crypto.randomUUID();
     const [appResult] = await connection.query(
-      `INSERT INTO leave_applications (id, employee_id, substitute_employee_id, leave_type, applied_date, returning_date, status, substitute_confirmed) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [appId, employee_id, substitute_employee_id || null, leave_type, finalAppliedDate, returningDate, initialStatus, initialSubConfirmed]
+      `INSERT INTO leave_applications (id, employee_id, substitute_employee_id, leave_type, applied_date, returning_date, status, substitute_confirmed, reason) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [appId, employee_id, substitute_employee_id || null, leave_type, finalAppliedDate, returningDate, initialStatus, initialSubConfirmed, reason || null]
     );
     
     if (leaveDates && leaveDates.length > 0) {
@@ -282,7 +285,7 @@ router.post('/', async (req, res) => {
       }
       // Record transaction in immutable ledger
       try {
-        await recordLeaveDeduction(employee_id, leave_type, requestedDays, appId, 'Leave Application Submitted');
+        await recordLeaveDeduction(employee_id, leave_type, requestedDays, appId, reason || (isManagerOverride ? 'Manager Recorded Leave' : 'Leave Application Submitted'));
       } catch (ledgErr) {
         console.error('Ledger deduction record error:', ledgErr);
       }
@@ -301,7 +304,7 @@ router.post('/', async (req, res) => {
 
 router.put('/:id/status', optionalAuth, async (req, res) => {
   const { id } = req.params;
-  const { status } = req.body;
+  const { status, leave_type: newLeaveType, reason } = req.body;
   const connection = await pool.getConnection();
   
   try {
@@ -326,45 +329,91 @@ router.put('/:id/status', optionalAuth, async (req, res) => {
       return res.status(403).json({ error: 'Forbidden: You cannot modify leave applications outside your assigned branch.' });
     }
 
-    if (app.status !== 'rejected' && status === 'rejected') {
-      const [daysRows] = await connection.query('SELECT DATE_FORMAT(leave_date, "%Y-%m-%d") AS date_str FROM leave_application_dates WHERE leave_application_id = ?', [id]);
-      const dateList = daysRows.map(d => d.date_str);
-      const deductionCalc = await calculateLeaveDeduction(app.branch_id, dateList, app.employee_id);
-      const requestedDays = deductionCalc.netWorkingDaysDeducted;
-      const currentYear = new Date(app.applied_date).getFullYear();
-      const colName = `${app.leave_type}_taken`;
-      try {
-        await connection.query(`UPDATE leave_balances SET ${colName} = GREATEST(0, COALESCE(${colName}, 0) - ?) WHERE employee_id = ? AND year = ?`, [requestedDays, app.employee_id, currentYear]);
-        await recordLeaveRefund(app.employee_id, app.leave_type, requestedDays, id, 'Leave Application Rejected');
-      } catch (err) {}
-    } 
-    else if (app.status === 'rejected' && status !== 'rejected') {
-      const [daysRows] = await connection.query('SELECT DATE_FORMAT(leave_date, "%Y-%m-%d") AS date_str FROM leave_application_dates WHERE leave_application_id = ?', [id]);
-      const dateList = daysRows.map(d => d.date_str);
-      const deductionCalc = await calculateLeaveDeduction(app.branch_id, dateList, app.employee_id);
-      const requestedDays = deductionCalc.netWorkingDaysDeducted;
-      const currentYear = new Date(app.applied_date).getFullYear();
+    const [daysRows] = await connection.query('SELECT DATE_FORMAT(leave_date, "%Y-%m-%d") AS date_str FROM leave_application_dates WHERE leave_application_id = ?', [id]);
+    const dateList = daysRows.map(d => d.date_str);
+    const deductionCalc = await calculateLeaveDeduction(app.branch_id, dateList, app.employee_id);
+    const requestedDays = deductionCalc.netWorkingDaysDeducted;
+    const currentYear = new Date(app.applied_date).getFullYear();
 
-      await connection.query(`
-        INSERT IGNORE INTO leave_balances (id, employee_id, year) 
-        VALUES (?, ?, ?)
-      `, [crypto.randomUUID(), app.employee_id, currentYear]);
+    // Check if leave_type is being converted (e.g. marked as 'unpaid')
+    if (newLeaveType && newLeaveType !== app.leave_type) {
+      if (app.status !== 'rejected') {
+        // Refund previous leave type
+        const oldCol = `${app.leave_type}_taken`;
+        try {
+          await connection.query(`UPDATE leave_balances SET ${oldCol} = GREATEST(0, COALESCE(${oldCol}, 0) - ?) WHERE employee_id = ? AND year = ?`, [requestedDays, app.employee_id, currentYear]);
+          await recordLeaveRefund(app.employee_id, app.leave_type, requestedDays, id, `Converted to ${newLeaveType}: ${reason || 'Manager Action'}`);
+        } catch (e) {}
+      }
 
-      const colName = `${app.leave_type}_taken`;
-      try {
-        await connection.query(`UPDATE leave_balances SET ${colName} = COALESCE(${colName}, 0) + ? WHERE employee_id = ? AND year = ?`, [requestedDays, app.employee_id, currentYear]);
-        await recordLeaveDeduction(app.employee_id, app.leave_type, requestedDays, id, 'Leave Application Re-approved');
-      } catch (err) {}
+      const targetStatus = status || app.status || 'approved';
+      if (targetStatus !== 'rejected') {
+        // Add deduction for the new leave type (e.g. unpaid_taken)
+        const newCol = `${newLeaveType}_taken`;
+        try {
+          await connection.query(`UPDATE leave_balances SET ${newCol} = COALESCE(${newCol}, 0) + ? WHERE employee_id = ? AND year = ?`, [requestedDays, app.employee_id, currentYear]);
+        } catch (colErr) {
+          try {
+            await connection.query(`ALTER TABLE leave_balances ADD COLUMN ${newCol} INT DEFAULT 0`);
+            await connection.query(`UPDATE leave_balances SET ${newCol} = COALESCE(${newCol}, 0) + ? WHERE employee_id = ? AND year = ?`, [requestedDays, app.employee_id, currentYear]);
+          } catch (e) {}
+        }
+        await recordLeaveDeduction(app.employee_id, newLeaveType, requestedDays, id, reason || `Marked as ${newLeaveType} (Unpaid Leave / LOP) by Manager`);
+      }
+
+      await connection.query(
+        'UPDATE leave_applications SET status = ?, leave_type = ?, reason = COALESCE(?, reason) WHERE id = ?',
+        [targetStatus, newLeaveType, reason || null, id]
+      );
+    } else {
+      // Normal status change
+      if (app.status !== 'rejected' && status === 'rejected') {
+        const colName = `${app.leave_type}_taken`;
+        try {
+          await connection.query(`UPDATE leave_balances SET ${colName} = GREATEST(0, COALESCE(${colName}, 0) - ?) WHERE employee_id = ? AND year = ?`, [requestedDays, app.employee_id, currentYear]);
+          await recordLeaveRefund(app.employee_id, app.leave_type, requestedDays, id, reason || 'Leave Application Rejected');
+        } catch (err) {}
+      } 
+      else if (app.status === 'rejected' && status !== 'rejected') {
+        await connection.query(`
+          INSERT IGNORE INTO leave_balances (id, employee_id, year) 
+          VALUES (?, ?, ?)
+        `, [crypto.randomUUID(), app.employee_id, currentYear]);
+
+        const colName = `${app.leave_type}_taken`;
+        try {
+          await connection.query(`UPDATE leave_balances SET ${colName} = COALESCE(${colName}, 0) + ? WHERE employee_id = ? AND year = ?`, [requestedDays, app.employee_id, currentYear]);
+          await recordLeaveDeduction(app.employee_id, app.leave_type, requestedDays, id, reason || 'Leave Application Re-approved');
+        } catch (err) {}
+      }
+
+      await connection.query(
+        'UPDATE leave_applications SET status = ?, reason = COALESCE(?, reason) WHERE id = ?',
+        [status, reason || null, id]
+      );
     }
 
-    await connection.query(
-      'UPDATE leave_applications SET status = ? WHERE id = ?',
-      [status, id]
-    );
+    const [updatedRows] = await connection.query(`
+      SELECT 
+        a.id, a.employee_id, a.substitute_employee_id, a.leave_type, 
+        a.applied_date, a.returning_date, a.substitute_confirmed, a.status, a.reason,
+        a.created_at, a.updated_at,
+        (SELECT GROUP_CONCAT(DATE_FORMAT(d.leave_date, '%Y-%m-%d')) 
+         FROM leave_application_dates d 
+         WHERE d.leave_application_id = a.id) AS leave_dates
+      FROM leave_applications a
+      WHERE a.id = ?
+    `, [id]);
 
-    const [updatedRows] = await connection.query('SELECT * FROM leave_applications WHERE id = ?', [id]);
     await connection.commit();
-    res.json(updatedRows[0]);
+    const updatedRow = updatedRows[0];
+    res.json({
+      ...updatedRow,
+      appliedDate: updatedRow.applied_date,
+      returningDate: updatedRow.returning_date,
+      substituteConfirmed: updatedRow.substitute_confirmed,
+      leaveDates: updatedRow.leave_dates ? updatedRow.leave_dates.split(',') : []
+    });
   } catch (err) {
     await connection.rollback();
     console.error(err);

@@ -428,12 +428,14 @@ export default function AdminApp() {
 
   const pendingCount = allowedApps.filter(a => a.status === 'pending').length
 
-  const handleUpdateStatus = async (id, status) => {
+  const handleUpdateStatus = async (id, status, extra = {}) => {
     try {
-      const updated = await api.updateApplicationStatus(id, status);
-      setApplications(prev => prev.map(a => a.id === id ? { ...a, status: updated.status } : a))
+      const updated = await api.updateApplicationStatus(id, status, extra);
+      setApplications(prev => prev.map(a => a.id === id ? { ...a, ...updated } : a))
+      return updated;
     } catch (err) {
       alert("Failed to update status: " + err.message);
+      throw err;
     }
   }
 

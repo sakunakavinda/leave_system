@@ -782,48 +782,79 @@ export function ManageShiftRosters({ branches = [], employees = [] }) {
     }
   };
 
-  // Bulk Auto-Assign Tools
-  const handleAutoFillDefaultShift = async () => {
+  // Employee-specific Auto-Fill state
+  const [autoFillModal, setAutoFillModal] = useState(null); // null | { employeeId, employeeName, branchName }
+  const [autoFillShiftId, setAutoFillShiftId] = useState('');
+  const [overwriteExisting, setOverwriteExisting] = useState(true);
+  const [isSubmittingAutoFill, setIsSubmittingAutoFill] = useState(false);
+
+  const openAutoFillModal = (emp) => {
     if (shifts.length === 0) {
       alert('Please create at least one shift in Shift Masters first.');
       return;
     }
     const defaultShift = shifts.find(s => s.code === 'GEN') || shifts[0];
-    if (!window.confirm(`Auto-assign weekdays to "${defaultShift.name}" (${defaultShift.code}) for ${filteredEmployees.length} employees?`)) return;
+    setAutoFillShiftId(defaultShift ? defaultShift.id : '');
+    setOverwriteExisting(true);
+    setAutoFillModal({
+      employeeId: emp.id,
+      employeeName: emp.name,
+      branchName: branches.find(b => b.id === emp.branch_id)?.name || 'Branch'
+    });
+  };
 
+  const handleConfirmAutoFill = async (e) => {
+    if (e) e.preventDefault();
+    if (!autoFillModal || !autoFillShiftId) {
+      alert('Please select a shift to auto-fill.');
+      return;
+    }
+    const selectedShift = shifts.find(s => s.id === autoFillShiftId);
+    if (!selectedShift) return;
+
+    setIsSubmittingAutoFill(true);
     try {
       const entries = [];
-      filteredEmployees.forEach(emp => {
-        for (let day = 1; day <= daysInMonth; day++) {
-          const dateObj = new Date(selectedYear, selectedMonth - 1, day);
-          const dayOfWeek = dateObj.getDay(); // 0 is Sunday, 6 is Saturday
-          const dateStr = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-          
-          if (dayOfWeek === 0 || dayOfWeek === 6) {
-            // Weekend RDO
-            entries.push({
-              employee_id: emp.id,
-              roster_date: dateStr,
-              shift_id: null,
-              is_rdo: true
-            });
-          } else {
-            // Weekday standard shift
-            entries.push({
-              employee_id: emp.id,
-              roster_date: dateStr,
-              shift_id: defaultShift.id,
-              is_rdo: false
-            });
-          }
+      const empId = autoFillModal.employeeId;
+
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dateObj = new Date(selectedYear, selectedMonth - 1, day);
+        const dayOfWeek = dateObj.getDay(); // 0 is Sunday, 6 is Saturday
+        const dateStr = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        
+        const existing = rosterMap.get(`${empId}_${dateStr}`);
+        if (existing && !overwriteExisting) {
+          // Keep existing entry if overwrite is unchecked
+          continue;
         }
-      });
+
+        if (dayOfWeek === 0 || dayOfWeek === 6) {
+          // Weekend RDO
+          entries.push({
+            employee_id: empId,
+            roster_date: dateStr,
+            shift_id: null,
+            is_rdo: true
+          });
+        } else {
+          // Weekday chosen shift
+          entries.push({
+            employee_id: empId,
+            roster_date: dateStr,
+            shift_id: selectedShift.id,
+            is_rdo: false
+          });
+        }
+      }
 
       await api.bulkSaveRoster(entries);
-      showToast(`Auto-assigned month schedule for ${filteredEmployees.length} staff!`);
+      showToast(`Auto-assigned ${selectedShift.name} for ${autoFillModal.employeeName} (${MONTH_NAMES[selectedMonth - 1]} ${selectedYear})!`);
+      setAutoFillModal(null);
       loadData();
     } catch (err) {
-      alert(err.message || 'Failed to bulk assign roster');
+      alert(err.message || 'Failed to auto-assign schedule');
+    } finally {
+      setIsSubmittingAutoFill(false);
     }
   };
 
@@ -920,23 +951,6 @@ export function ManageShiftRosters({ branches = [], employees = [] }) {
             ))}
           </select>
         </div>
-
-        <button 
-          className="btn-primary" 
-          onClick={handleAutoFillDefaultShift}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            whiteSpace: 'nowrap',
-            padding: '9px 16px',
-            fontWeight: 600,
-            fontSize: '13px'
-          }}
-        >
-          <span>⚡</span>
-          <span>Auto-Fill Month (Weekdays Shift / Weekends RDO)</span>
-        </button>
       </div>
 
       {loading ? (
@@ -950,7 +964,7 @@ export function ManageShiftRosters({ branches = [], employees = [] }) {
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center', fontSize: '12px' }}>
             <thead>
               <tr style={{ background: 'rgba(255, 255, 255, 0.05)', borderBottom: '1px solid var(--border-color, #334155)' }}>
-                <th style={{ padding: '12px 16px', textAlign: 'left', minWidth: '180px', position: 'sticky', left: 0, background: 'var(--card-bg, #1e293b)', zIndex: 2 }}>
+                <th style={{ padding: '12px 16px', textAlign: 'left', minWidth: '240px', position: 'sticky', left: 0, background: 'var(--card-bg, #1e293b)', zIndex: 2 }}>
                   Employee
                 </th>
                 {daysArray.map(day => {
@@ -990,9 +1004,41 @@ export function ManageShiftRosters({ branches = [], employees = [] }) {
                     borderRight: '1px solid var(--border-color, #334155)',
                     whiteSpace: 'nowrap'
                   }}>
-                    <div style={{ color: 'var(--text-primary, #fff)' }}>{emp.name}</div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-secondary, #94a3b8)', fontWeight: 400 }}>
-                      {branches.find(b => b.id === emp.branch_id)?.name || 'Branch'}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                      <div>
+                        <div style={{ color: 'var(--text-primary, #fff)', fontSize: '13px' }}>{emp.name}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-secondary, #94a3b8)', fontWeight: 400 }}>
+                          {branches.find(b => b.id === emp.branch_id)?.name || 'Branch'}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn-autofill-emp"
+                        id={`btn-autofill-${emp.id}`}
+                        title={`Auto-fill ${MONTH_NAMES[selectedMonth - 1]} schedule for ${emp.name}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openAutoFillModal(emp);
+                        }}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          padding: '5px 10px',
+                          fontSize: '11.5px',
+                          fontWeight: 600,
+                          borderRadius: '6px',
+                          background: 'rgba(99, 102, 241, 0.14)',
+                          color: '#a5b4fc',
+                          border: '1px solid rgba(99, 102, 241, 0.35)',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        <span style={{ fontSize: '12px' }}>⚡</span>
+                        <span>Auto-Fill</span>
+                      </button>
                     </div>
                   </td>
 
@@ -1164,6 +1210,163 @@ export function ManageShiftRosters({ branches = [], employees = [] }) {
             >
               ✕ Clear Shift
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Individual Employee Auto-Fill Month Modal ── */}
+      {autoFillModal && (
+        <div className="modal-backdrop" onClick={() => setAutoFillModal(null)} style={{ zIndex: 9999 }}>
+          <div 
+            className="modal-box" 
+            onClick={e => e.stopPropagation()} 
+            style={{ 
+              maxWidth: '520px', 
+              width: '90%', 
+              background: 'var(--bg-secondary, #131927)', 
+              border: '1px solid rgba(99, 102, 241, 0.3)',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 30px rgba(99, 102, 241, 0.15)',
+              zIndex: 10000,
+              borderRadius: '16px'
+            }}
+          >
+            <div className="modal-header" style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.08)', padding: '18px 24px' }}>
+              <div>
+                <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-primary, #fff)' }}>
+                  <span>⚡</span>
+                  Auto-Fill Month Schedule
+                </h3>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary, #94a3b8)', margin: '4px 0 0' }}>
+                  Assign selected shift for weekdays and RDO for weekends.
+                </p>
+              </div>
+              <button className="modal-close" onClick={() => setAutoFillModal(null)}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmAutoFill}>
+              <div className="modal-body" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {/* Employee & Month Badges */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <div style={{ background: 'rgba(255, 255, 255, 0.04)', border: '1px solid var(--border-color, #334155)', borderRadius: '8px', padding: '10px 12px' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary, #94a3b8)', textTransform: 'uppercase', fontWeight: 600 }}>Employee</div>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: '#fff', marginTop: '2px' }}>{autoFillModal.employeeName}</div>
+                    <div style={{ fontSize: '11px', color: '#94a3b8' }}>{autoFillModal.branchName}</div>
+                  </div>
+
+                  <div style={{ background: 'rgba(255, 255, 255, 0.04)', border: '1px solid var(--border-color, #334155)', borderRadius: '8px', padding: '10px 12px' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary, #94a3b8)', textTransform: 'uppercase', fontWeight: 600 }}>Target Period</div>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: '#38bdf8', marginTop: '2px' }}>
+                      {MONTH_NAMES[selectedMonth - 1]} {selectedYear}
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#94a3b8' }}>{daysInMonth} days in month</div>
+                  </div>
+                </div>
+
+                {/* Choose Shift */}
+                <div className="form-group">
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary, #cbd5e1)', marginBottom: '8px' }}>
+                    Choose Shift to Auto-Fill <span style={{ color: '#f87171' }}>*</span>
+                  </label>
+                  <select
+                    className="admin-filter-select"
+                    style={{ width: '100%', padding: '10px 12px', fontSize: '13px' }}
+                    value={autoFillShiftId}
+                    onChange={e => setAutoFillShiftId(e.target.value)}
+                    required
+                  >
+                    {shifts.map(s => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({s.code}) — {s.start_time} to {s.end_time} ({s.duration_hours || 8} hrs)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Selected Shift Preview Card */}
+                {(() => {
+                  const currentShift = shifts.find(s => s.id === autoFillShiftId);
+                  if (!currentShift) return null;
+                  return (
+                    <div style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '12px', 
+                      padding: '12px 14px', 
+                      background: 'rgba(255, 255, 255, 0.03)', 
+                      border: '1px solid var(--border-color, #334155)', 
+                      borderRadius: '8px' 
+                    }}>
+                      <span style={{ 
+                        background: currentShift.color_code || '#3b82f6', 
+                        color: '#fff', 
+                        fontSize: '11px', 
+                        fontWeight: 700, 
+                        padding: '4px 8px', 
+                        borderRadius: '4px',
+                        textTransform: 'uppercase'
+                      }}>
+                        {currentShift.code}
+                      </span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-primary, #fff)' }}>{currentShift.name}</div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-secondary, #94a3b8)' }}>
+                          ⏰ {currentShift.start_time} - {currentShift.end_time} ({currentShift.duration_hours || 8} hrs)
+                          {currentShift.crosses_midnight ? ' • Crosses Midnight' : ''}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Pattern Explanation Box */}
+                <div style={{ 
+                  background: 'rgba(99, 102, 241, 0.08)', 
+                  border: '1px solid rgba(99, 102, 241, 0.25)', 
+                  borderRadius: '8px', 
+                  padding: '12px 14px',
+                  fontSize: '12.5px',
+                  color: 'var(--text-secondary, #cbd5e1)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ color: '#34d399', fontWeight: 600 }}>📅 Weekdays (Mon - Fri):</span>
+                    <span>Assigned to <strong>{shifts.find(s => s.id === autoFillShiftId)?.name || 'Selected Shift'}</strong></span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ color: '#fbbf24', fontWeight: 600 }}>🏖️ Weekends (Sat - Sun):</span>
+                    <span>Assigned as <strong>RDO (Rostered Day Off)</strong></span>
+                  </div>
+                </div>
+
+                {/* Overwrite Checkbox */}
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--text-secondary, #cbd5e1)', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={overwriteExisting}
+                    onChange={e => setOverwriteExisting(e.target.checked)}
+                    style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                  />
+                  <span>Overwrite existing shifts & RDOs already scheduled this month</span>
+                </label>
+              </div>
+
+              <div className="modal-footer" style={{ padding: '16px 24px', borderTop: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button type="button" className="btn-secondary" onClick={() => setAutoFillModal(null)}>Cancel</button>
+                <button 
+                  type="submit" 
+                  className="btn-primary" 
+                  disabled={isSubmittingAutoFill || shifts.length === 0}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <span>⚡</span>
+                  {isSubmittingAutoFill ? 'Applying...' : `Auto-Fill for ${autoFillModal.employeeName}`}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

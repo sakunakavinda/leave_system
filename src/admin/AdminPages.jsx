@@ -100,6 +100,139 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
     status: 'approved',
   });
 
+  // ── Unannounced Absence / Unpaid Leave state for Manager ──
+  const [showAbsenceModal, setShowAbsenceModal] = useState(false);
+  const [absenceError, setAbsenceError] = useState('');
+  const [isSubmittingAbsence, setIsSubmittingAbsence] = useState(false);
+  const [absenceBranchFilter, setAbsenceBranchFilter] = useState('all');
+  const [absenceEmpSearch, setAbsenceEmpSearch] = useState('');
+  const [absenceForm, setAbsenceForm] = useState({
+    employee_id: '',
+    leaveDates: [getTodayStr()],
+    returningDate: '',
+    reasonPreset: 'Absent without prior notice / No-show',
+    customReason: ''
+  });
+
+  const openAbsenceModal = () => {
+    const today = getTodayStr();
+    setAbsenceBranchFilter('all');
+    setAbsenceEmpSearch('');
+    
+    const maxDate = new Date(today);
+    maxDate.setDate(maxDate.getDate() + 1);
+    const year = maxDate.getFullYear();
+    const month = String(maxDate.getMonth() + 1).padStart(2, '0');
+    const day = String(maxDate.getDate()).padStart(2, '0');
+
+    setAbsenceForm({
+      employee_id: '',
+      leaveDates: [today],
+      returningDate: `${year}-${month}-${day}`,
+      reasonPreset: 'Absent without prior notice / No-show',
+      customReason: ''
+    });
+    setAbsenceError('');
+    setShowAbsenceModal(true);
+  };
+
+  const updateAbsenceReturningDate = (dates) => {
+    const validDates = dates.filter(Boolean);
+    if (validDates.length > 0) {
+      const maxDateStr = validDates.reduce((max, cur) => cur > max ? cur : max, validDates[0]);
+      const maxDate = new Date(maxDateStr);
+      maxDate.setDate(maxDate.getDate() + 1);
+      const year = maxDate.getFullYear();
+      const month = String(maxDate.getMonth() + 1).padStart(2, '0');
+      const day = String(maxDate.getDate()).padStart(2, '0');
+      setAbsenceForm(prev => ({ ...prev, returningDate: `${year}-${month}-${day}` }));
+    } else {
+      setAbsenceForm(prev => ({ ...prev, returningDate: '' }));
+    }
+  };
+
+  const handleAbsenceDateChange = (idx, value) => {
+    const updated = [...absenceForm.leaveDates];
+    updated[idx] = value;
+    setAbsenceForm(prev => ({ ...prev, leaveDates: updated }));
+    updateAbsenceReturningDate(updated);
+  };
+
+  const addAbsenceDate = () => {
+    const updated = [...absenceForm.leaveDates, getTodayStr()];
+    setAbsenceForm(prev => ({ ...prev, leaveDates: updated }));
+    updateAbsenceReturningDate(updated);
+  };
+
+  const removeAbsenceDate = (idx) => {
+    const updated = absenceForm.leaveDates.filter((_, i) => i !== idx);
+    setAbsenceForm(prev => ({ ...prev, leaveDates: updated }));
+    updateAbsenceReturningDate(updated);
+  };
+
+  const handleAbsenceSubmit = async (e) => {
+    e.preventDefault();
+    if (!absenceForm.employee_id) {
+      setAbsenceError('Please select an employee.');
+      return;
+    }
+    const validDates = absenceForm.leaveDates.filter(Boolean);
+    if (validDates.length === 0) {
+      setAbsenceError('Please select at least one absence date.');
+      return;
+    }
+    setAbsenceError('');
+    setIsSubmittingAbsence(true);
+
+    const finalReason = absenceForm.reasonPreset === 'Other / Custom Note'
+      ? (absenceForm.customReason.trim() || 'Unannounced absence without notice')
+      : absenceForm.reasonPreset;
+
+    try {
+      const payload = {
+        employee_id: absenceForm.employee_id,
+        isManagerOverride: true,
+        leave_type: 'unpaid',
+        leaveDates: validDates,
+        returningDate: absenceForm.returningDate,
+        substitute_employee_id: null,
+        status: 'approved',
+        appliedDate: getTodayStr(),
+        reason: finalReason
+      };
+
+      await api.addApplication(payload);
+      showToast('Unannounced absence recorded as Unpaid Leave (Loss of Pay).', 'success');
+      setShowAbsenceModal(false);
+      if (onRefreshApplications) await onRefreshApplications();
+    } catch (err) {
+      setAbsenceError(err.message || 'Failed to record absence.');
+    } finally {
+      setIsSubmittingAbsence(false);
+    }
+  };
+
+  const handleMarkAsUnpaid = async (appId) => {
+    const app = applications.find(a => a.id === appId);
+    const emp = getEmp(app?.employee_id);
+    const confirmPrompt = window.prompt(
+      `Mark application #${appId} (${emp.name || 'Employee'}) as Loss of Pay (Unpaid Leave)?\n\nEnter reason or leave as default:`,
+      "Absent without prior notice / Policy violation"
+    );
+    if (confirmPrompt === null) return;
+
+    try {
+      await onUpdateStatus(appId, 'approved', {
+        leave_type: 'unpaid',
+        reason: confirmPrompt.trim() || 'Marked as Unpaid Leave (Loss of Pay) by Manager due to lack of notice'
+      });
+      showToast('Application marked and approved as Loss of Pay (Unpaid Leave).', 'success');
+      if (onRefreshApplications) await onRefreshApplications();
+    } catch (err) {
+      showToast(err.message || 'Failed to update application.', 'danger');
+    }
+  };
+
   const openSpecialModal = () => {
     const today = getTodayStr();
     setSpecialBranchFilter('all');
@@ -467,6 +600,20 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
           </svg>
           Special Leave Application
         </button>
+        <button 
+          className="btn-absence" 
+          id="btn-mark-unannounced-absence"
+          onClick={openAbsenceModal} 
+          title="Directly record an employee absence without prior notice as Loss of Pay (Unpaid Leave)"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px' }}>
+            <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+            <circle cx="8.5" cy="7" r="4" />
+            <line x1="18" y1="8" x2="23" y2="13" />
+            <line x1="23" y1="8" x2="18" y2="13" />
+          </svg>
+          Mark Unannounced Absence
+        </button>
       </div>
 
       {/* Table */}
@@ -515,9 +662,18 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
                 <td className="hide-mobile">{getBranch(getEmp(app.employee_id).branch_id).name}</td>
                 <td className="hide-mobile"><span style={{ color:'var(--text-secondary)', fontSize:'14px' }}>{getRole(getEmp(app.employee_id).role_id).title || '—'}</span></td>
                 <td>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: '220px', alignItems: 'center' }}>
-                    <span style={{ fontSize: '10px', fontWeight: 600, textTransform: 'uppercase', padding: '3px 6px', background: 'var(--accent-primary)', color: '#fff', borderRadius: '4px', marginRight: '4px' }}>
-                      {app.leave_type}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: '240px', alignItems: 'center' }}>
+                    <span style={{ 
+                      fontSize: '10px', 
+                      fontWeight: 700, 
+                      textTransform: 'uppercase', 
+                      padding: '3px 6px', 
+                      background: (app.leave_type === 'unpaid' || app.leave_type === 'lop') ? '#f97316' : 'var(--accent-primary)', 
+                      color: '#fff', 
+                      borderRadius: '4px', 
+                      marginRight: '4px' 
+                    }}>
+                      {(app.leave_type === 'unpaid' || app.leave_type === 'lop') ? 'LOSS OF PAY' : app.leave_type}
                     </span>
                     {app.leaveDates.map(date => (
                       <span key={date} style={{
@@ -532,6 +688,14 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
                         {formatDate(date)}
                       </span>
                     ))}
+                    {app.reason && (
+                      <div style={{ width: '100%', fontSize: '11px', color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '3px' }} title={app.reason}>
+                        <span>📝</span>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '210px', opacity: 0.9 }}>
+                          {app.reason}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </td>
                 <td>{formatDate(app.returningDate)}</td>
@@ -543,7 +707,7 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
                 </td>
                 <td>
                   {app.status === 'pending' ? (
-                    <div className="action-btns">
+                    <div className="action-btns" style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
                       <button className="btn-approve" id={`approve-${app.id}`} onClick={() => handleAction(app.id, 'approved')}>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                         Approve
@@ -552,17 +716,45 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                         Reject
                       </button>
+                      {app.leave_type !== 'unpaid' && app.leave_type !== 'lop' && (
+                        <button 
+                          className="btn-mark-unpaid" 
+                          id={`mark-unpaid-${app.id}`} 
+                          title="Mark and approve as Loss of Pay (Unpaid Leave) due to lack of prior notice or policy breach"
+                          onClick={() => handleMarkAsUnpaid(app.id)}
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '13px', height: '13px' }}>
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="12" y1="8" x2="12" y2="12"/>
+                            <line x1="12" y1="16" x2="12.01" y2="16"/>
+                          </svg>
+                          Mark Unpaid
+                        </button>
+                      )}
                     </div>
                   ) : (
-                    <button 
-                      className="btn-secondary" 
-                      style={{fontSize:'12px',padding:'6px 13px', opacity: hasPastDate ? 0.4 : 1, cursor: hasPastDate ? 'not-allowed' : 'pointer'}} 
-                      onClick={() => !hasPastDate && handleAction(app.id, 'pending')}
-                      disabled={hasPastDate}
-                      title={hasPastDate ? "Cannot reset requests that have already started or passed" : "Reset application to pending"}
-                    >
-                      Reset
-                    </button>
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                      <button 
+                        className="btn-secondary" 
+                        style={{fontSize:'12px',padding:'6px 13px', opacity: hasPastDate ? 0.4 : 1, cursor: hasPastDate ? 'not-allowed' : 'pointer'}} 
+                        onClick={() => !hasPastDate && handleAction(app.id, 'pending')}
+                        disabled={hasPastDate}
+                        title={hasPastDate ? "Cannot reset requests that have already started or passed" : "Reset application to pending"}
+                      >
+                        Reset
+                      </button>
+                      {app.status === 'approved' && app.leave_type !== 'unpaid' && app.leave_type !== 'lop' && (
+                        <button 
+                          className="btn-mark-unpaid" 
+                          id={`convert-unpaid-${app.id}`} 
+                          style={{ padding: '5px 9px', fontSize: '11px' }}
+                          title="Convert this approved leave to Loss of Pay (Unpaid Leave)"
+                          onClick={() => handleMarkAsUnpaid(app.id)}
+                        >
+                          To Unpaid
+                        </button>
+                      )}
+                    </div>
                   )}
                 </td>
               </tr>
@@ -1072,6 +1264,359 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
                 <button type="button" className="btn-secondary" onClick={() => setShowSpecialModal(false)}>Cancel</button>
                 <button type="submit" className="btn-primary" disabled={isSubmittingSpecial}>
                   {isSubmittingSpecial ? 'Scheduling...' : 'Schedule Leave'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Unannounced Absence Modal (Loss of Pay / LOP) ── */}
+      {showAbsenceModal && (
+        <div className="modal-backdrop" onClick={() => setShowAbsenceModal(false)} style={{ zIndex: 9999, overflow: 'hidden' }}>
+          <div 
+            className="modal-box" 
+            onClick={e => e.stopPropagation()} 
+            style={{ 
+              maxWidth: '620px', 
+              width: '92%', 
+              maxHeight: 'calc(100vh - 40px)',
+              background: 'var(--bg-secondary, #131927)', 
+              border: '1px solid rgba(239, 68, 68, 0.25)',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.85), 0 0 30px rgba(239, 68, 68, 0.15)',
+              zIndex: 10000,
+              position: 'relative',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              borderRadius: '16px'
+            }}
+          >
+            <div className="modal-header" style={{ flexShrink: 0, borderBottom: '1px solid rgba(239, 68, 68, 0.15)', background: 'linear-gradient(180deg, rgba(239, 68, 68, 0.08), transparent)' }}>
+              <div>
+                <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', color: '#fca5a5' }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '22px', height: '22px', color: '#ef4444' }}>
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                    <circle cx="8.5" cy="7" r="4" />
+                    <line x1="18" y1="8" x2="23" y2="13" />
+                    <line x1="23" y1="8" x2="18" y2="13" />
+                  </svg>
+                  Mark Unannounced Absence (Loss of Pay)
+                </h3>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '4px 0 0' }}>
+                  Record an employee absence without prior notice. The system immediately registers Loss of Pay (Unpaid Leave) and applies month-end payroll deduction.
+                </p>
+              </div>
+              <button className="modal-close" onClick={() => setShowAbsenceModal(false)}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleAbsenceSubmit} style={{ display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0, overflow: 'hidden' }}>
+              <div 
+                className="modal-body" 
+                style={{ 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  gap: '16px', 
+                  flex: '1 1 auto', 
+                  minHeight: 0, 
+                  overflowY: 'auto', 
+                  overscrollBehavior: 'contain',
+                  WebkitOverflowScrolling: 'touch',
+                  padding: '20px 24px'
+                }}
+              >
+                {/* Alert info banner */}
+                <div style={{ 
+                  display: 'flex', 
+                  gap: '10px', 
+                  alignItems: 'flex-start',
+                  background: 'rgba(239, 68, 68, 0.08)', 
+                  border: '1px solid rgba(239, 68, 68, 0.25)', 
+                  borderRadius: '10px', 
+                  padding: '12px 14px',
+                  fontSize: '12.5px',
+                  color: '#fca5a5',
+                  lineHeight: '1.45'
+                }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '18px', height: '18px', flexShrink: 0, marginTop: '2px', color: '#f87171' }}>
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
+                  <div>
+                    <strong>Executive Absence Action:</strong> This record bypasses employee advance notice limits and deduction balance caps. It immediately logs the absence as <strong>Loss of Pay (Unpaid Leave)</strong>, removes the employee from active capacity, and marks scheduled days as salary-deducted in the <strong>Payroll & LOP Export</strong>.
+                  </div>
+                </div>
+
+                {absenceError && (
+                  <div style={{ color: '#ff5252', fontSize: '13px', background: 'rgba(255,82,82,0.1)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,82,82,0.2)' }}>
+                    {absenceError}
+                  </div>
+                )}
+
+                {/* Branch & Name Search Filter Controls */}
+                {(() => {
+                  const safeEmployees = employees || [];
+                  const safeBranches = branches || [];
+                  const filteredEmps = safeEmployees.filter(e => {
+                    if (e.status !== 'active') return false;
+                    if (absenceBranchFilter !== 'all' && e.branch_id !== absenceBranchFilter) return false;
+                    if (absenceEmpSearch && absenceEmpSearch.trim() !== '') {
+                      const q = absenceEmpSearch.toLowerCase();
+                      return (e.name || '').toLowerCase().includes(q);
+                    }
+                    return true;
+                  });
+
+                  return (
+                    <>
+                      <div style={{ display: 'grid', gridTemplateColumns: safeBranches.length > 1 ? '1fr 1fr' : '1fr', gap: '12px' }}>
+                        {safeBranches.length > 1 && (
+                          <div className="form-group">
+                            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                              Filter by Branch
+                            </label>
+                            <select
+                              className="admin-filter-select"
+                              style={{ width: '100%' }}
+                              value={absenceBranchFilter}
+                              onChange={e => setAbsenceBranchFilter(e.target.value)}
+                            >
+                              <option value="all">All Branches</option>
+                              {safeBranches.map(b => (
+                                <option key={b.id} value={b.id}>{b.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+
+                        <div className="form-group">
+                          <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                            Search Absent Employee
+                          </label>
+                          <div className="admin-search-box" style={{ width: '100%', height: '42px', position: 'relative' }}>
+                            <svg className="s-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                            </svg>
+                            <input
+                              type="text"
+                              placeholder="Type name to find absent staff…"
+                              value={absenceEmpSearch}
+                              onChange={e => setAbsenceEmpSearch(e.target.value)}
+                              style={{ paddingRight: absenceEmpSearch ? '28px' : '12px' }}
+                            />
+                            {absenceEmpSearch && (
+                              <button
+                                type="button"
+                                onClick={() => setAbsenceEmpSearch('')}
+                                style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '14px' }}
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Select Employee (Inline List) */}
+                      <div className="form-group">
+                        <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                          Select Absent Employee <span style={{ color: '#f87171' }}>*</span>
+                          <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: '8px', fontWeight: 'normal' }}>
+                            ({filteredEmps.length} active employee{filteredEmps.length === 1 ? '' : 's'})
+                          </span>
+                        </label>
+                        <div 
+                          style={{ 
+                            border: '1px solid var(--bg-card-border)', 
+                            borderRadius: '8px', 
+                            maxHeight: '160px', 
+                            overflowY: 'auto', 
+                            background: 'var(--bg-card)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            overscrollBehavior: 'contain'
+                          }}
+                        >
+                          {filteredEmps.length === 0 ? (
+                            <div style={{ padding: '16px', fontSize: '13px', color: 'var(--text-muted)', textAlign: 'center' }}>
+                              No active employees found matching criteria.
+                            </div>
+                          ) : (
+                            filteredEmps.map(emp => {
+                              const br = getBranch(emp.branch_id);
+                              const rl = getRole(emp.role_id);
+                              const isSelected = absenceForm.employee_id === emp.id;
+                              return (
+                                <div 
+                                  key={emp.id} 
+                                  onClick={() => setAbsenceForm(prev => ({ ...prev, employee_id: emp.id }))}
+                                  style={{
+                                    padding: '10px 14px',
+                                    cursor: 'pointer',
+                                    borderBottom: '1px solid var(--bg-card-border)',
+                                    background: isSelected ? 'rgba(239, 68, 68, 0.15)' : 'transparent',
+                                    color: isSelected ? '#f87171' : 'var(--text-primary)',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    transition: 'all 0.15s ease'
+                                  }}
+                                  onMouseOver={e => !isSelected && (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
+                                  onMouseOut={e => !isSelected && (e.currentTarget.style.background = 'transparent')}
+                                >
+                                  <div>
+                                    <div style={{ fontWeight: isSelected ? 600 : 500, fontSize: '13px' }}>{emp.name}</div>
+                                    <div style={{ fontSize: '11px', color: isSelected ? '#fca5a5' : 'var(--text-muted)', opacity: isSelected ? 0.9 : 0.7, marginTop: '2px' }}>
+                                      {br?.name || 'Branch'} • {rl?.title || 'Role'}
+                                    </div>
+                                  </div>
+                                  {isSelected && (
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px' }}>
+                                      <polyline points="20 6 9 17 4 12" />
+                                    </svg>
+                                  )}
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                        <input type="text" value={absenceForm.employee_id} onChange={()=>{}} required style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: '1px', height: '1px', padding: 0, border: 0 }} tabIndex={-1} />
+                      </div>
+                    </>
+                  );
+                })()}
+
+                {/* Absence Dates */}
+                <div className="form-group">
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                    Absence Date(s) <span style={{ color: '#f87171' }}>*</span>
+                    <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: '8px', fontWeight: 'normal' }}>
+                      (Date employee failed to report to work)
+                    </span>
+                  </label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {(absenceForm.leaveDates || []).map((ld, idx) => (
+                      <div key={idx} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <input
+                          type="date"
+                          className="admin-filter-select"
+                          style={{ flex: 1 }}
+                          value={ld}
+                          onChange={e => handleAbsenceDateChange(idx, e.target.value)}
+                          required
+                        />
+                        {(absenceForm.leaveDates || []).length > 1 && (
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            onClick={() => removeAbsenceDate(idx)}
+                            style={{ padding: '8px 12px', color: '#f87171', borderColor: 'rgba(248,113,113,0.3)' }}
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={addAbsenceDate}
+                      style={{ alignSelf: 'flex-start', marginTop: '4px', fontSize: '13px' }}
+                    >
+                      + Add Additional Absence Date
+                    </button>
+                  </div>
+                </div>
+
+                {/* Leave Classification & Payroll Impact */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div className="form-group">
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                      Applied Leave Classification
+                    </label>
+                    <div style={{ 
+                      padding: '10px 14px', 
+                      background: 'rgba(249, 115, 22, 0.12)', 
+                      border: '1px solid rgba(249, 115, 22, 0.35)', 
+                      borderRadius: '8px',
+                      color: '#fb923c',
+                      fontWeight: 600,
+                      fontSize: '13px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}>
+                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#f97316' }}></span>
+                      Loss of Pay (Unpaid Leave / LOP)
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                      Approval Status
+                    </label>
+                    <div style={{ 
+                      padding: '10px 14px', 
+                      background: 'rgba(0, 184, 148, 0.1)', 
+                      border: '1px solid rgba(0, 184, 148, 0.3)', 
+                      borderRadius: '8px',
+                      color: '#34d399',
+                      fontWeight: 600,
+                      fontSize: '13px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}>
+                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }}></span>
+                      Approved (Immediate Deduction)
+                    </div>
+                  </div>
+                </div>
+
+                {/* Absence Reason Presets & Custom Note */}
+                <div className="form-group">
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                    Absence Reason / Note <span style={{ color: '#f87171' }}>*</span>
+                  </label>
+                  <select
+                    className="admin-filter-select"
+                    style={{ width: '100%', marginBottom: absenceForm.reasonPreset === 'Other / Custom Note' ? '8px' : '0' }}
+                    value={absenceForm.reasonPreset}
+                    onChange={e => setAbsenceForm(p => ({ ...p, reasonPreset: e.target.value }))}
+                  >
+                    <option value="Absent without prior notice / No-show">Absent without prior notice / No-show</option>
+                    <option value="Failed to report for scheduled shift without communication">Failed to report for scheduled shift without communication</option>
+                    <option value="Emergency personal absence without prior authorization">Emergency personal absence without prior authorization</option>
+                    <option value="Unauthorized absence — salary deduction applicable">Unauthorized absence — salary deduction applicable</option>
+                    <option value="Other / Custom Note">Other / Custom Note</option>
+                  </select>
+
+                  {absenceForm.reasonPreset === 'Other / Custom Note' && (
+                    <input
+                      type="text"
+                      className="admin-filter-select"
+                      style={{ width: '100%' }}
+                      placeholder="Enter custom justification or absence details…"
+                      value={absenceForm.customReason}
+                      onChange={e => setAbsenceForm(p => ({ ...p, customReason: e.target.value }))}
+                      required
+                    />
+                  )}
+                </div>
+              </div>
+
+              <div className="modal-footer" style={{ padding: '16px 24px', borderTop: '1px solid var(--bg-card-border)', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                <button type="button" className="btn-secondary" onClick={() => setShowAbsenceModal(false)}>Cancel</button>
+                <button 
+                  type="submit" 
+                  className="btn-absence" 
+                  disabled={isSubmittingAbsence}
+                  style={{ background: 'linear-gradient(135deg, #ef4444, #f97316)', color: '#fff', border: 'none', padding: '10px 20px', fontWeight: 600 }}
+                >
+                  {isSubmittingAbsence ? 'Recording...' : 'Record Absence as Loss of Pay'}
                 </button>
               </div>
             </form>
