@@ -63,23 +63,25 @@ export function PayrollExportManager({ branches = [] }) {
   const years = [currentYear - 1, currentYear, currentYear + 1];
 
   return (
-    <div className="admin-section">
+    <div className="admin-section payroll-container">
       {/* Toast Notification */}
       {toast && (
         <div style={{
           position: 'fixed',
           top: '20px',
           right: '20px',
+          maxWidth: 'calc(100vw - 40px)',
           zIndex: 9999,
           background: toast.isError ? '#dc2626' : '#059669',
           color: '#fff',
           padding: '12px 20px',
           borderRadius: '8px',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
           display: 'flex',
           alignItems: 'center',
           gap: '8px',
-          fontWeight: 600
+          fontWeight: 600,
+          animation: 'slideIn 0.3s ease-out'
         }}>
           <span>{toast.isError ? '⚠️' : '✓'}</span>
           <span>{toast.text}</span>
@@ -87,21 +89,14 @@ export function PayrollExportManager({ branches = [] }) {
       )}
 
       {/* Header Banner */}
-      <div style={{
-        background: 'linear-gradient(135deg, #064e3b 0%, #065f46 100%)',
-        color: '#fff',
-        borderRadius: '12px',
-        padding: '24px',
-        marginBottom: '24px',
-        boxShadow: '0 4px 15px rgba(6, 78, 59, 0.15)'
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-              <span style={{ fontSize: '28px' }}>📊</span>
-              <h2 style={{ margin: 0, fontSize: '24px', fontWeight: 700 }}>Payroll & Loss of Pay (LOP) Exporter</h2>
+      <div className="payroll-header-banner">
+        <div className="payroll-header-main">
+          <div className="payroll-header-info">
+            <div className="payroll-title-row">
+              <span style={{ fontSize: '26px' }}>📊</span>
+              <h2>Payroll &amp; Loss of Pay (LOP) Exporter</h2>
             </div>
-            <p style={{ margin: 0, opacity: 0.85, fontSize: '14px', maxWidth: '750px', lineHeight: 1.5 }}>
+            <p className="payroll-header-desc">
               Monthly reconciliation of employee attendance, paid leaves, and Loss of Pay (LOP) deductions for standard domestic payroll processing. All calculations account for branch weekend schedules, gazetted holidays, roster assignments, and contingency shields.
             </p>
           </div>
@@ -109,21 +104,7 @@ export function PayrollExportManager({ branches = [] }) {
           <button
             onClick={handleExportCsv}
             disabled={exporting || loading}
-            style={{
-              background: '#10b981',
-              color: '#fff',
-              border: 'none',
-              padding: '12px 22px',
-              borderRadius: '8px',
-              fontWeight: 700,
-              fontSize: '14px',
-              cursor: exporting ? 'not-allowed' : 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              boxShadow: '0 4px 12px rgba(16, 185, 129, 0.35)',
-              transition: 'all 0.2s ease'
-            }}
+            className="payroll-export-btn"
           >
             <span>📥</span>
             <span>{exporting ? 'Generating CSV...' : 'Export Payroll CSV'}</span>
@@ -132,43 +113,36 @@ export function PayrollExportManager({ branches = [] }) {
 
         {/* Aggregate KPI Summary Cards */}
         {data && (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-            gap: '16px',
-            marginTop: '20px',
-            paddingTop: '20px',
-            borderTop: '1px solid rgba(255, 255, 255, 0.15)'
-          }}>
-            <div style={{ background: 'rgba(255,255,255,0.08)', borderRadius: '8px', padding: '12px 16px' }}>
-              <div style={{ fontSize: '11px', opacity: 0.75, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Staff Headcount</div>
-              <div style={{ fontSize: '24px', fontWeight: 800, marginTop: '4px' }}>{data.totalEmployees}</div>
+          <div className="payroll-kpi-grid">
+            <div className="payroll-kpi-card">
+              <div className="payroll-kpi-label">Staff Headcount</div>
+              <div className="payroll-kpi-val">{data.totalEmployees}</div>
             </div>
 
-            <div style={{ background: 'rgba(255,255,255,0.08)', borderRadius: '8px', padding: '12px 16px' }}>
-              <div style={{ fontSize: '11px', opacity: 0.75, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Scheduled Days</div>
-              <div style={{ fontSize: '24px', fontWeight: 800, marginTop: '4px' }}>
+            <div className="payroll-kpi-card">
+              <div className="payroll-kpi-label">Scheduled Days</div>
+              <div className="payroll-kpi-val">
                 {data.records?.reduce((acc, r) => acc + r.scheduledWorkingDays, 0) || 0}
               </div>
             </div>
 
-            <div style={{ background: 'rgba(255,255,255,0.08)', borderRadius: '8px', padding: '12px 16px' }}>
-              <div style={{ fontSize: '11px', opacity: 0.75, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Paid Leaves</div>
-              <div style={{ fontSize: '24px', fontWeight: 800, marginTop: '4px', color: '#93c5fd' }}>
+            <div className="payroll-kpi-card">
+              <div className="payroll-kpi-label">Total Paid Leaves</div>
+              <div className="payroll-kpi-val" style={{ color: '#93c5fd' }}>
                 {data.records?.reduce((acc, r) => acc + r.paidLeaveDays, 0).toFixed(1) || 0}
               </div>
             </div>
 
-            <div style={{ background: 'rgba(255,255,255,0.08)', borderRadius: '8px', padding: '12px 16px' }}>
-              <div style={{ fontSize: '11px', opacity: 0.75, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total LOP Deductions</div>
-              <div style={{ fontSize: '24px', fontWeight: 800, marginTop: '4px', color: data.totalLopDays > 0 ? '#fca5a5' : '#86efac' }}>
+            <div className="payroll-kpi-card">
+              <div className="payroll-kpi-label">Total LOP Deductions</div>
+              <div className="payroll-kpi-val" style={{ color: data.totalLopDays > 0 ? '#fca5a5' : '#86efac' }}>
                 {data.totalLopDays?.toFixed(1) || 0}
               </div>
             </div>
 
-            <div style={{ background: 'rgba(255,255,255,0.08)', borderRadius: '8px', padding: '12px 16px' }}>
-              <div style={{ fontSize: '11px', opacity: 0.75, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Net Payable Days</div>
-              <div style={{ fontSize: '24px', fontWeight: 800, marginTop: '4px', color: '#6ee7b7' }}>
+            <div className="payroll-kpi-card">
+              <div className="payroll-kpi-label">Net Payable Days</div>
+              <div className="payroll-kpi-val" style={{ color: '#6ee7b7' }}>
                 {data.totalPayableDays?.toFixed(1) || 0}
               </div>
             </div>
@@ -177,15 +151,12 @@ export function PayrollExportManager({ branches = [] }) {
       </div>
 
       {/* Filter Controls */}
-      <div className="filter-row" style={{ display: 'flex', gap: '16px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
-        <div className="filter-item" style={{ minWidth: '180px' }}>
-          <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '4px' }}>
-            Month:
-          </label>
+      <div className="payroll-filters-bar">
+        <div className="payroll-filter-item">
+          <label>Month:</label>
           <select
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-            style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
           >
             {MONTH_NAMES.map((name, idx) => (
               <option key={idx + 1} value={idx + 1}>{name}</option>
@@ -193,14 +164,11 @@ export function PayrollExportManager({ branches = [] }) {
           </select>
         </div>
 
-        <div className="filter-item" style={{ minWidth: '120px' }}>
-          <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '4px' }}>
-            Year:
-          </label>
+        <div className="payroll-filter-item">
+          <label>Year:</label>
           <select
             value={selectedYear}
             onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-            style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
           >
             {years.map(y => (
               <option key={y} value={y}>{y}</option>
@@ -208,14 +176,11 @@ export function PayrollExportManager({ branches = [] }) {
           </select>
         </div>
 
-        <div className="filter-item" style={{ minWidth: '220px' }}>
-          <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '4px' }}>
-            Branch Facility:
-          </label>
+        <div className="payroll-filter-item" style={{ flexGrow: 1.5 }}>
+          <label>Branch Facility:</label>
           <select
             value={branchFilter}
             onChange={(e) => setBranchFilter(e.target.value)}
-            style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
           >
             <option value="all">🏢 All Domestic Branches</option>
             {branches.map(b => (
@@ -224,137 +189,204 @@ export function PayrollExportManager({ branches = [] }) {
           </select>
         </div>
 
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
-          <button
-            onClick={loadPayrollSummary}
-            className="btn btn-secondary"
-            style={{ padding: '8px 14px', fontSize: '13px' }}
-          >
-            🔄 Refresh Summary
-          </button>
-        </div>
+        <button
+          onClick={loadPayrollSummary}
+          className="btn-secondary payroll-refresh-btn"
+          style={{ marginLeft: 'auto' }}
+        >
+          🔄 Refresh Summary
+        </button>
       </div>
 
-      {/* Payroll Table */}
+      {/* Payroll Display (Table for desktop, Cards for mobile) */}
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
-          <p>Calculating month payroll records & LOP deductions...</p>
+        <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted, #64748b)' }}>
+          <p>Calculating month payroll records &amp; LOP deductions...</p>
         </div>
       ) : !data || data.records.length === 0 ? (
         <div style={{
           textAlign: 'center',
           padding: '48px 24px',
-          background: '#f8fafc',
+          background: 'var(--bg-card, rgba(255,255,255,0.02))',
           borderRadius: '12px',
-          border: '1px dashed #cbd5e1'
+          border: '1px dashed var(--bg-card-border, #cbd5e1)'
         }}>
           <span style={{ fontSize: '40px' }}>📋</span>
-          <h3 style={{ margin: '12px 0 6px 0', color: '#334155' }}>No Active Employees Found</h3>
-          <p style={{ margin: 0, color: '#64748b', fontSize: '14px' }}>
+          <h3 style={{ margin: '12px 0 6px 0', color: 'var(--text-primary, #334155)' }}>No Active Employees Found</h3>
+          <p style={{ margin: 0, color: 'var(--text-muted, #64748b)', fontSize: '14px' }}>
             There are no active employees assigned to the selected branch.
           </p>
         </div>
       ) : (
-        <div className="table-container" style={{ background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
-          <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
-            <thead>
-              <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0', textAlign: 'left', color: '#475569' }}>
-                <th style={{ padding: '12px 16px' }}>Employee</th>
-                <th style={{ padding: '12px 16px' }}>Branch & Role</th>
-                <th style={{ padding: '12px 16px', textAlign: 'center' }}>Calendar Days</th>
-                <th style={{ padding: '12px 16px', textAlign: 'center' }}>Off Days / Holidays</th>
-                <th style={{ padding: '12px 16px', textAlign: 'center' }}>Scheduled Work Days</th>
-                <th style={{ padding: '12px 16px', textAlign: 'center' }}>Paid Leaves</th>
-                <th style={{ padding: '12px 16px', textAlign: 'center' }}>LOP (Unpaid)</th>
-                <th style={{ padding: '12px 16px', textAlign: 'center', background: '#f0fdf4', color: '#166534' }}>Net Payable Days</th>
-                <th style={{ padding: '12px 16px' }}>Leave Breakdown</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.records.map(rec => {
-                const hasLop = rec.lopDays > 0;
-                return (
-                  <tr
-                    key={rec.employee_id}
-                    style={{
-                      borderBottom: '1px solid #f1f5f9',
-                      background: hasLop ? '#fffbeb' : '#fff'
-                    }}
-                  >
-                    <td style={{ padding: '12px 16px', fontWeight: 700, color: '#1e293b' }}>
-                      {rec.employee_name}
-                    </td>
-                    <td style={{ padding: '12px 16px' }}>
-                      <div style={{ color: '#334155', fontWeight: 600 }}>🏢 {rec.branch_name}</div>
-                      <div style={{ fontSize: '12px', color: '#64748b' }}>{rec.role_name}</div>
-                    </td>
-                    <td style={{ padding: '12px 16px', textAlign: 'center', color: '#64748b' }}>
-                      {rec.calendarDays}
-                    </td>
-                    <td style={{ padding: '12px 16px', textAlign: 'center', color: '#64748b' }}>
-                      {rec.offDays + rec.holidays}
-                    </td>
-                    <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600, color: '#0f172a' }}>
-                      {rec.scheduledWorkingDays}
-                    </td>
-                    <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600, color: '#2563eb' }}>
-                      {rec.paidLeaveDays > 0 ? `${rec.paidLeaveDays.toFixed(1)}d` : '-'}
-                    </td>
-                    <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                      {hasLop ? (
-                        <span style={{
-                          background: '#fee2e2',
-                          color: '#b91c1c',
-                          padding: '3px 8px',
-                          borderRadius: '4px',
-                          fontWeight: 700,
-                          fontSize: '13px'
-                        }}>
-                          -{rec.lopDays.toFixed(1)}d
+        <>
+          {/* Desktop Table View */}
+          <div className="payroll-desktop-table data-table-wrap">
+            <table className="data-table" style={{ minWidth: '820px' }}>
+              <thead>
+                <tr>
+                  <th>Employee</th>
+                  <th>Branch &amp; Role</th>
+                  <th style={{ textAlign: 'center' }}>Calendar</th>
+                  <th style={{ textAlign: 'center' }}>Off / Holiday</th>
+                  <th style={{ textAlign: 'center' }}>Work Days</th>
+                  <th style={{ textAlign: 'center' }}>Paid Leaves</th>
+                  <th style={{ textAlign: 'center' }}>LOP (Unpaid)</th>
+                  <th style={{ textAlign: 'center', background: 'rgba(16, 185, 129, 0.1)', color: '#34d399' }}>Net Payable Days</th>
+                  <th>Leave Breakdown</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.records.map(rec => {
+                  const hasLop = rec.lopDays > 0;
+                  return (
+                    <tr
+                      key={rec.employee_id}
+                      style={{
+                        background: hasLop ? 'rgba(239, 68, 68, 0.04)' : undefined
+                      }}
+                    >
+                      <td style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                        {rec.employee_name}
+                      </td>
+                      <td>
+                        <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>🏢 {rec.branch_name}</div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{rec.role_name}</div>
+                      </td>
+                      <td style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+                        {rec.calendarDays}
+                      </td>
+                      <td style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+                        {rec.offDays + rec.holidays}
+                      </td>
+                      <td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--text-primary)' }}>
+                        {rec.scheduledWorkingDays}
+                      </td>
+                      <td style={{ textAlign: 'center', fontWeight: 600, color: '#60a5fa' }}>
+                        {rec.paidLeaveDays > 0 ? `${rec.paidLeaveDays.toFixed(1)}d` : '-'}
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        {hasLop ? (
+                          <span style={{
+                            background: 'rgba(239, 68, 68, 0.15)',
+                            color: '#f87171',
+                            border: '1px solid rgba(239, 68, 68, 0.3)',
+                            padding: '3px 8px',
+                            borderRadius: '4px',
+                            fontWeight: 700,
+                            fontSize: '12.5px'
+                          }}>
+                            -{rec.lopDays.toFixed(1)}d
+                          </span>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)' }}>0</span>
+                        )}
+                      </td>
+                      <td style={{
+                        textAlign: 'center',
+                        fontWeight: 800,
+                        fontSize: '15px',
+                        background: 'rgba(16, 185, 129, 0.1)',
+                        color: '#34d399'
+                      }}>
+                        {rec.netPayableDays.toFixed(1)}
+                      </td>
+                      <td style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                        {rec.leaveBreakdown && Object.keys(rec.leaveBreakdown).length > 0 ? (
+                          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                            {Object.entries(rec.leaveBreakdown).map(([typeName, days]) => (
+                              <span
+                                key={typeName}
+                                style={{
+                                  background: typeName.toLowerCase().includes('unpaid') ? 'rgba(239, 68, 68, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                                  color: typeName.toLowerCase().includes('unpaid') ? '#f87171' : '#60a5fa',
+                                  border: `1px solid ${typeName.toLowerCase().includes('unpaid') ? 'rgba(239, 68, 68, 0.3)' : 'rgba(59, 130, 246, 0.3)'}`,
+                                  padding: '2px 6px',
+                                  borderRadius: '4px',
+                                  fontSize: '11px',
+                                  fontWeight: 600
+                                }}
+                              >
+                                {typeName}: {days}d
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)' }}>No leaves taken</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile Cards View */}
+          <div className="payroll-mobile-cards">
+            {data.records.map(rec => {
+              const hasLop = rec.lopDays > 0;
+              return (
+                <div key={rec.employee_id} className={`payroll-card ${hasLop ? 'has-lop' : ''}`}>
+                  <div className="payroll-card-header">
+                    <div>
+                      <div className="payroll-card-name">{rec.employee_name}</div>
+                      <div className="payroll-card-sub">🏢 {rec.branch_name} • {rec.role_name}</div>
+                    </div>
+                    <div className="payroll-card-payable">
+                      <div className="payroll-card-payable-num">{rec.netPayableDays.toFixed(1)}d</div>
+                      <div className="payroll-card-payable-lbl">Payable Days</div>
+                    </div>
+                  </div>
+
+                  <div className="payroll-card-grid">
+                    <div className="payroll-card-metric">
+                      <div className="payroll-card-metric-val">{rec.scheduledWorkingDays}</div>
+                      <div className="payroll-card-metric-lbl">Scheduled</div>
+                    </div>
+                    <div className="payroll-card-metric">
+                      <div className="payroll-card-metric-val" style={{ color: '#60a5fa' }}>
+                        {rec.paidLeaveDays > 0 ? `${rec.paidLeaveDays.toFixed(1)}d` : '0'}
+                      </div>
+                      <div className="payroll-card-metric-lbl">Paid Leave</div>
+                    </div>
+                    <div className="payroll-card-metric">
+                      <div className="payroll-card-metric-val" style={{ color: hasLop ? '#f87171' : 'var(--text-muted)' }}>
+                        {hasLop ? `-${rec.lopDays.toFixed(1)}d` : '0'}
+                      </div>
+                      <div className="payroll-card-metric-lbl">LOP (Unpaid)</div>
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', padding: '0 4px' }}>
+                    <span>Calendar: <strong>{rec.calendarDays}d</strong></span>
+                    <span>Off &amp; Holidays: <strong>{rec.offDays + rec.holidays}d</strong></span>
+                  </div>
+
+                  {rec.leaveBreakdown && Object.keys(rec.leaveBreakdown).length > 0 && (
+                    <div className="payroll-card-breakdown">
+                      {Object.entries(rec.leaveBreakdown).map(([typeName, days]) => (
+                        <span
+                          key={typeName}
+                          style={{
+                            background: typeName.toLowerCase().includes('unpaid') ? 'rgba(239, 68, 68, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                            color: typeName.toLowerCase().includes('unpaid') ? '#f87171' : '#60a5fa',
+                            border: `1px solid ${typeName.toLowerCase().includes('unpaid') ? 'rgba(239, 68, 68, 0.3)' : 'rgba(59, 130, 246, 0.3)'}`,
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            fontSize: '11px',
+                            fontWeight: 600
+                          }}
+                        >
+                          {typeName}: {days}d
                         </span>
-                      ) : (
-                        <span style={{ color: '#94a3b8' }}>0</span>
-                      )}
-                    </td>
-                    <td style={{
-                      padding: '12px 16px',
-                      textAlign: 'center',
-                      fontWeight: 800,
-                      fontSize: '15px',
-                      background: '#f0fdf4',
-                      color: '#15803d'
-                    }}>
-                      {rec.netPayableDays.toFixed(1)}
-                    </td>
-                    <td style={{ padding: '12px 16px', fontSize: '12px', color: '#475569' }}>
-                      {rec.leaveBreakdown && Object.keys(rec.leaveBreakdown).length > 0 ? (
-                        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                          {Object.entries(rec.leaveBreakdown).map(([typeName, days]) => (
-                            <span
-                              key={typeName}
-                              style={{
-                                background: typeName.toLowerCase().includes('unpaid') ? '#fee2e2' : '#eff6ff',
-                                color: typeName.toLowerCase().includes('unpaid') ? '#991b1b' : '#1e40af',
-                                padding: '2px 6px',
-                                borderRadius: '4px',
-                                fontSize: '11px',
-                                fontWeight: 600
-                              }}
-                            >
-                              {typeName}: {days}d
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <span style={{ color: '#94a3b8' }}>No leaves taken</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
     </div>
   );
