@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AdminDashboard, ManageEmployees, ManageBranches, ManageBranchHolidays, ManageManagers, ManageDepartments, ManageRoles, ManageLeaveTypes, ManageLeaveProfiles, AccountSettings, SystemSettings, LeaveOverview } from './AdminPages.jsx'
+import { AdminDashboard, ManageEmployees, ManageBranches, ManageBranchHolidays, ManageManagers, ManageUsers, UserPermissionsMatrix, ManageDepartments, ManageRoles, ManageLeaveTypes, ManageLeaveProfiles, AccountSettings, SystemSettings, LeaveOverview } from './AdminPages.jsx'
 import { ManageShiftMasters, ManageShiftRosters } from './ShiftRosterManager.jsx'
 import { ContingencyShieldManager } from './ContingencyShieldManager.jsx'
 import { PayrollExportManager } from './PayrollExportManager.jsx'
@@ -92,18 +92,45 @@ const NAV = [
     ),
   },
   {
-    id: 'managers',
+    id: 'user_configuration',
     group: 'Management',
-    label: 'Manage Managers',
-    desc: 'Branch managers',
+    label: 'User Configuration',
+    desc: 'Users & role permissions',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-        <circle cx="12" cy="7" r="4" />
-        <path d="M12 11v4" />
-        <path d="M10 13h4" />
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+        <circle cx="9" cy="7" r="4"/>
+        <circle cx="19" cy="11" r="2"/>
+        <path d="M19 17v4"/>
+        <path d="M17 19h4"/>
       </svg>
     ),
+    children: [
+      {
+        id: 'manage_users',
+        label: 'Manage Users',
+        desc: 'User accounts & overrides',
+        icon: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+            <path d="M12 11v4" />
+            <path d="M10 13h4" />
+          </svg>
+        ),
+      },
+      {
+        id: 'user_permissions',
+        label: 'User Permissions',
+        desc: 'Role default permission matrix',
+        icon: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+        ),
+      }
+    ]
   },
   {
     id: 'branch_configurations',
@@ -256,7 +283,10 @@ const PAGE_META = {
   roster:     { title: 'Shift Rostering Matrix', subtitle: 'Monthly workforce shift schedule & RDO planner' },
   contingencies: { title: 'Operational Contingency Shield', subtitle: 'Declare emergencies, force majeure shields, and retroactive balance refunds' },
   payroll:    { title: 'Payroll & Loss of Pay (LOP) Exporter', subtitle: 'Monthly attendance, leave deductions, and LOP export for domestic payroll' },
-  managers:   { title: 'Manage Managers',   subtitle: 'View, add, edit or remove branch managers' },
+  user_configuration: { title: 'User Configuration', subtitle: 'Manage user accounts, roles, and default permissions matrix' },
+  manage_users:   { title: 'Manage Users',   subtitle: 'View, add, edit or remove system users & custom overrides' },
+  user_permissions: { title: 'User Permissions Matrix', subtitle: 'Configure default operational permissions per user type' },
+  managers:   { title: 'Manage Users',   subtitle: 'View, add, edit or remove branch managers' },
   branch_configurations: { title: 'Branch Configurations', subtitle: 'Manage office branches, regional holidays, and operating schedules' },
   branches:   { title: 'Manage Branches',   subtitle: 'Configure and track office branches'  },
   operating_schedules: { title: 'Operating Schedules', subtitle: 'Define custom operating models, workweeks, and daily hours' },
@@ -282,7 +312,20 @@ export default function AdminApp() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
   const [activePage, setActivePage]     = useState('dashboard')
-  const [expandedMenus, setExpandedMenus] = useState({ leave_configuration: true, branch_configurations: true })
+  const [expandedMenus, setExpandedMenus] = useState({
+    leave_configuration: false,
+    branch_configurations: false,
+    user_configuration: false
+  })
+
+  useEffect(() => {
+    // If activePage belongs to a collapsible menu, keep that parent menu expanded
+    for (const item of NAV) {
+      if (item.children?.some(c => c.id === activePage)) {
+        setExpandedMenus(prev => ({ ...prev, [item.id]: true }))
+      }
+    }
+  }, [activePage])
 
   const toggleMenu = (menuId) => {
     setExpandedMenus(prev => ({
@@ -833,8 +876,11 @@ export default function AdminApp() {
             canDelete={hasPermission('employees.delete')}
           />
         )}
-        {activePage === 'managers' && (
-          <ManageManagers branches={branches} managers={managers} setManagers={setManagers} />
+        {(activePage === 'manage_users' || activePage === 'managers' || activePage === 'user_configuration') && (
+          <ManageUsers branches={branches} managers={managers} setManagers={setManagers} onNavigatePage={setActivePage} />
+        )}
+        {activePage === 'user_permissions' && (
+          <UserPermissionsMatrix onNavigatePage={setActivePage} />
         )}
         {(activePage === 'branches' || activePage === 'branch_configurations') && (
           <ManageBranches branches={allowedBranches} setBranches={setBranches} employees={employees} managers={managers} setManagers={setManagers} onNavigatePage={setActivePage} />

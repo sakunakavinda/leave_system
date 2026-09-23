@@ -102,11 +102,14 @@ export const api = {
   updateEmployee: (id, data) => fetchApi(`/employees/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteEmployee: (id) => fetchApi(`/employees/${id}`, { method: 'DELETE' }),
 
-  // Managers
+  // Managers / Users
   getManagers: () => fetchApi('/managers'),
   addManager: (data) => fetchApi('/managers', { method: 'POST', body: JSON.stringify(data) }),
   updateManager: (id, data) => fetchApi(`/managers/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteManager: (id) => fetchApi(`/managers/${id}`, { method: 'DELETE' }),
+  getRolePermissions: () => fetchApi('/managers/role-permissions'),
+  updateRolePermissions: (data) => fetchApi('/managers/role-permissions', { method: 'PUT', body: JSON.stringify(data) }),
+  resetRolePermissions: () => fetchApi('/managers/role-permissions/reset', { method: 'POST' }),
 
   // Rules
   getRules: () => fetchApi('/rules').then(res => res.map(r => ({ ...r, maxPerDay: r.max_per_day }))),

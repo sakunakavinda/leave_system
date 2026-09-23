@@ -82,14 +82,54 @@ export function getDefaultPermissionsForRole(role) {
   return DEFAULT_BRANCH_MANAGER_PERMISSIONS;
 }
 
-export function formatPermissions(perms, role) {
+export async function getLiveRoleDefaultPermissions() {
+  try {
+    const [rows] = await pool.query('SELECT role, permissions FROM role_default_permissions');
+    const map = {
+      branch_manager: { ...DEFAULT_BRANCH_MANAGER_PERMISSIONS },
+      hr_officer: { ...DEFAULT_HR_OFFICER_PERMISSIONS },
+      admin: { ...DEFAULT_ADMIN_PERMISSIONS }
+    };
+
+    rows.forEach(r => {
+      let p = r.permissions;
+      if (typeof p === 'string') {
+        try { p = JSON.parse(p); } catch (e) {}
+      }
+      if (p && typeof p === 'object') {
+        const normRole = r.role === 'super manager' || r.role === 'super_admin' ? 'admin' : (r.role === 'hr' ? 'hr_officer' : r.role);
+        map[normRole] = { ...map[normRole], ...p };
+      }
+    });
+
+    return map;
+  } catch (err) {
+    return {
+      branch_manager: { ...DEFAULT_BRANCH_MANAGER_PERMISSIONS },
+      hr_officer: { ...DEFAULT_HR_OFFICER_PERMISSIONS },
+      admin: { ...DEFAULT_ADMIN_PERMISSIONS }
+    };
+  }
+}
+
+export function formatPermissions(perms, role, liveDefaults = null) {
+  const normRole = (role === 'super manager' || role === 'super_admin' || role === 'admin')
+    ? 'admin'
+    : (role === 'hr_officer' || role === 'hr' ? 'hr_officer' : 'branch_manager');
+
   if (!perms) {
+    if (liveDefaults && liveDefaults[normRole]) {
+      return liveDefaults[normRole];
+    }
     return getDefaultPermissionsForRole(role);
   }
   if (typeof perms === 'string') {
     try {
       return JSON.parse(perms);
     } catch (e) {
+      if (liveDefaults && liveDefaults[normRole]) {
+        return liveDefaults[normRole];
+      }
       return getDefaultPermissionsForRole(role);
     }
   }
@@ -97,7 +137,7 @@ export function formatPermissions(perms, role) {
 }
 
 /**
- * Initialize managers table schema (ensures permissions column exists)
+ * Initialize managers and role_default_permissions tables
  */
 export async function initManagersTable() {
   try {
@@ -111,18 +151,131 @@ export async function initManagersTable() {
   } catch (err) {
     console.warn('initManagersTable notice:', err.message);
   }
+
+  await initRolePermissionsTable();
 }
+
+export async function initRolePermissionsTable() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS role_default_permissions (
+        role VARCHAR(50) PRIMARY KEY,
+        permissions JSON NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        updated_by VARCHAR(100) NULL
+      )
+    `);
+
+    // Seed defaults if empty
+    const [rows] = await pool.query('SELECT role FROM role_default_permissions');
+    const existing = new Set(rows.map(r => r.role));
+
+    if (!existing.has('branch_manager')) {
+      await pool.query(
+        'INSERT INTO role_default_permissions (role, permissions, updated_by) VALUES (?, ?, ?)',
+        ['branch_manager', JSON.stringify(DEFAULT_BRANCH_MANAGER_PERMISSIONS), 'system']
+      );
+    }
+    if (!existing.has('hr_officer')) {
+      await pool.query(
+        'INSERT INTO role_default_permissions (role, permissions, updated_by) VALUES (?, ?, ?)',
+        ['hr_officer', JSON.stringify(DEFAULT_HR_OFFICER_PERMISSIONS), 'system']
+      );
+    }
+    if (!existing.has('admin')) {
+      await pool.query(
+        'INSERT INTO role_default_permissions (role, permissions, updated_by) VALUES (?, ?, ?)',
+        ['admin', JSON.stringify(DEFAULT_ADMIN_PERMISSIONS), 'system']
+      );
+    }
+    console.log('  ✓ Initialized role_default_permissions table and default roles');
+  } catch (err) {
+    console.warn('initRolePermissionsTable notice:', err.message);
+  }
+}
+
+// GET role default permissions matrix
+router.get('/role-permissions', async (req, res) => {
+  try {
+    const liveDefaults = await getLiveRoleDefaultPermissions();
+    res.json(liveDefaults);
+  } catch (err) {
+    console.error('Fetch role permissions error:', err);
+    res.status(500).json({ error: 'Failed to fetch role permissions' });
+  }
+});
+
+// PUT update role default permissions matrix
+router.put('/role-permissions', async (req, res) => {
+  const { role, permissions, matrix } = req.body;
+  try {
+    if (matrix && typeof matrix === 'object') {
+      for (const [rKey, rPerms] of Object.entries(matrix)) {
+        await pool.query(
+          `INSERT INTO role_default_permissions (role, permissions, updated_by) 
+           VALUES (?, ?, 'admin') 
+           ON DUPLICATE KEY UPDATE permissions = VALUES(permissions), updated_by = VALUES(updated_by)`,
+          [rKey, JSON.stringify(rPerms)]
+        );
+      }
+    } else if (role && permissions) {
+      await pool.query(
+        `INSERT INTO role_default_permissions (role, permissions, updated_by) 
+         VALUES (?, ?, 'admin') 
+         ON DUPLICATE KEY UPDATE permissions = VALUES(permissions), updated_by = VALUES(updated_by)`,
+        [role, JSON.stringify(permissions)]
+      );
+    } else {
+      return res.status(400).json({ error: 'Invalid payload. Provide role and permissions or matrix object.' });
+    }
+
+    const updated = await getLiveRoleDefaultPermissions();
+    res.json({ success: true, matrix: updated });
+  } catch (err) {
+    console.error('Update role permissions error:', err);
+    res.status(500).json({ error: 'Failed to update role permissions' });
+  }
+});
+
+// POST reset role permissions to static defaults
+router.post('/role-permissions/reset', async (req, res) => {
+  try {
+    await pool.query(
+      `INSERT INTO role_default_permissions (role, permissions, updated_by) VALUES 
+       ('branch_manager', ?, 'system'),
+       ('hr_officer', ?, 'system'),
+       ('admin', ?, 'system')
+       ON DUPLICATE KEY UPDATE permissions = VALUES(permissions), updated_by = VALUES(updated_by)`,
+      [
+        JSON.stringify(DEFAULT_BRANCH_MANAGER_PERMISSIONS),
+        JSON.stringify(DEFAULT_HR_OFFICER_PERMISSIONS),
+        JSON.stringify(DEFAULT_ADMIN_PERMISSIONS)
+      ]
+    );
+
+    const resetMatrix = await getLiveRoleDefaultPermissions();
+    res.json({ success: true, message: 'Role permissions reset to factory defaults', matrix: resetMatrix });
+  } catch (err) {
+    console.error('Reset role permissions error:', err);
+    res.status(500).json({ error: 'Failed to reset role permissions' });
+  }
+});
 
 // GET all managers
 router.get('/', async (req, res) => {
   try {
+    const liveDefaults = await getLiveRoleDefaultPermissions();
     const [rows] = await pool.query(
       'SELECT id, username, role, branch_id, status, permissions, created_at FROM managers ORDER BY created_at ASC'
     );
-    const managers = rows.map(m => ({
-      ...m,
-      permissions: formatPermissions(m.permissions, m.role)
-    }));
+    const managers = rows.map(m => {
+      const hasCustom = !!m.permissions;
+      return {
+        ...m,
+        has_custom_permissions: hasCustom,
+        permissions: formatPermissions(m.permissions, m.role, liveDefaults)
+      };
+    });
     res.json(managers);
   } catch (err) {
     console.error('Fetch managers error:', err);
@@ -176,7 +329,8 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid username or password' });
     }
 
-    const userPermissions = formatPermissions(manager.permissions, manager.role);
+    const liveDefaults = await getLiveRoleDefaultPermissions();
+    const userPermissions = formatPermissions(manager.permissions, manager.role, liveDefaults);
 
     const token = generateToken({
       id: manager.id,
@@ -193,6 +347,7 @@ router.post('/login', async (req, res) => {
       role: manager.role,
       branch_id: manager.branch_id,
       status: manager.status,
+      has_custom_permissions: !!manager.permissions,
       permissions: userPermissions,
       token
     });
@@ -204,12 +359,16 @@ router.post('/login', async (req, res) => {
 
 // POST create manager
 router.post('/', async (req, res) => {
-  const { username, password, role, branch_id, status, permissions } = req.body;
+  const { username, password, role, branch_id, status, permissions, is_custom_override } = req.body;
   const id = crypto.randomUUID();
 
   const normalizedRole = role || 'branch_manager';
   const assignedBranch = isAdminRole(normalizedRole) ? null : (branch_id || null);
-  const finalPermissions = JSON.stringify(formatPermissions(permissions, normalizedRole));
+  
+  // If not explicitly marked as custom override or permissions is empty, leave as NULL to inherit role defaults
+  const finalPermissions = (is_custom_override && permissions)
+    ? JSON.stringify(permissions)
+    : null;
 
   try {
     const hash = await bcrypt.hash(password || 'password', 10);
@@ -218,13 +377,15 @@ router.post('/', async (req, res) => {
       [id, username.trim(), hash, normalizedRole, assignedBranch, status || 'active', finalPermissions]
     );
 
+    const liveDefaults = await getLiveRoleDefaultPermissions();
     const [rows] = await pool.query(
       'SELECT id, username, role, branch_id, status, permissions, created_at FROM managers WHERE id = ?',
       [id]
     );
     const created = {
       ...rows[0],
-      permissions: formatPermissions(rows[0].permissions, rows[0].role)
+      has_custom_permissions: !!rows[0].permissions,
+      permissions: formatPermissions(rows[0].permissions, rows[0].role, liveDefaults)
     };
     res.status(201).json(created);
   } catch (err) {
@@ -236,11 +397,15 @@ router.post('/', async (req, res) => {
 // PUT update manager
 router.put('/:id', async (req, res) => {
   const { id } = req.params;
-  const { username, password, role, branch_id, status, permissions } = req.body;
+  const { username, password, role, branch_id, status, permissions, is_custom_override, reset_to_default } = req.body;
 
   const normalizedRole = role || 'branch_manager';
   const assignedBranch = isAdminRole(normalizedRole) ? null : (branch_id || null);
-  const finalPermissions = JSON.stringify(formatPermissions(permissions, normalizedRole));
+
+  let finalPermissions = null;
+  if (!reset_to_default && (is_custom_override || (permissions && is_custom_override !== false))) {
+    finalPermissions = JSON.stringify(permissions);
+  }
 
   try {
     let result;
@@ -261,13 +426,15 @@ router.put('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Manager not found' });
     }
 
+    const liveDefaults = await getLiveRoleDefaultPermissions();
     const [rows] = await pool.query(
       'SELECT id, username, role, branch_id, status, permissions FROM managers WHERE id = ?',
       [id]
     );
     const updated = {
       ...rows[0],
-      permissions: formatPermissions(rows[0].permissions, rows[0].role)
+      has_custom_permissions: !!rows[0].permissions,
+      permissions: formatPermissions(rows[0].permissions, rows[0].role, liveDefaults)
     };
     res.json(updated);
   } catch (err) {

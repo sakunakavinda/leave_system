@@ -90,7 +90,7 @@ export function AdminDashboard({
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
   })
-  const [isCalendarExpanded, setIsCalendarExpanded] = useState(true)
+  const [isCalendarExpanded, setIsCalendarExpanded] = useState(false)
   const [selectedDayLeaves, setSelectedDayLeaves] = useState(null)
 
   // Special Leave Application state for Manager Override
@@ -3264,6 +3264,15 @@ const PERMISSION_SECTIONS = [
     ]
   },
   {
+    id: 'shifts',
+    title: 'Shift Masters',
+    icon: '⏱️',
+    permissions: [
+      { key: 'shifts.view', label: 'View Shift Masters', desc: 'Inspect defined operational shifts and work hours' },
+      { key: 'shifts.manage', label: 'Manage Shift Masters', desc: 'Create, update, or remove operational shift definitions' },
+    ]
+  },
+  {
     id: 'payroll',
     title: 'Payroll & Loss of Pay',
     icon: '💵',
@@ -3311,13 +3320,15 @@ const DEFAULT_PERMS = {
     'employees.delete': false,
     'rosters.view': true,
     'rosters.edit': true,
+    'shifts.view': true,
+    'shifts.manage': false,
     'payroll.view': true,
     'payroll.export': false,
     'holidays.view': true,
     'holidays.manage': false,
     'overview.view': true,
     'contingencies.view': true,
-    'contingencies.declare': false,
+    'contingencies.declare': false
   },
   hr_officer: {
     'leaves.view': true,
@@ -3329,13 +3340,15 @@ const DEFAULT_PERMS = {
     'employees.delete': true,
     'rosters.view': true,
     'rosters.edit': false,
+    'shifts.view': true,
+    'shifts.manage': false,
     'payroll.view': true,
     'payroll.export': true,
     'holidays.view': true,
     'holidays.manage': true,
     'overview.view': true,
     'contingencies.view': true,
-    'contingencies.declare': false,
+    'contingencies.declare': false
   },
   admin: {
     '*': true,
@@ -3348,17 +3361,19 @@ const DEFAULT_PERMS = {
     'employees.delete': true,
     'rosters.view': true,
     'rosters.edit': true,
+    'shifts.view': true,
+    'shifts.manage': true,
     'payroll.view': true,
     'payroll.export': true,
     'holidays.view': true,
     'holidays.manage': true,
     'overview.view': true,
     'contingencies.view': true,
-    'contingencies.declare': true,
+    'contingencies.declare': true
   }
 };
 
-export function ManageManagers({ branches, managers, setManagers }) {
+export function ManageManagers({ branches, managers, setManagers, onNavigatePage }) {
   const [search, setSearch]       = useState('')
   const [modal, setModal]         = useState(null) // null | 'add' | manager object
   const [toast, setToast]         = useState(null)
@@ -3369,6 +3384,7 @@ export function ManageManagers({ branches, managers, setManagers }) {
     branch_id: branches[0]?.id || '', 
     status:'active', 
     role: 'branch_manager',
+    is_custom_override: false,
     permissions: { ...DEFAULT_PERMS.branch_manager }
   }
   const [form, setForm] = useState(EMPTY_MGR)
@@ -3379,6 +3395,7 @@ export function ManageManagers({ branches, managers, setManagers }) {
     setForm({
       ...EMPTY_MGR,
       branch_id: branches[0]?.id || '',
+      is_custom_override: false,
       permissions: { ...DEFAULT_PERMS.branch_manager }
     })
     setModal('add') 
@@ -3397,6 +3414,7 @@ export function ManageManagers({ branches, managers, setManagers }) {
       ...mgr, 
       password: '', // blank unless user explicitly types new password
       role: roleKey,
+      is_custom_override: !!mgr.has_custom_permissions,
       permissions: resolvedPerms 
     })
     setModal(mgr) 
@@ -3404,19 +3422,33 @@ export function ManageManagers({ branches, managers, setManagers }) {
   
   const closeModal = ()  => setModal(null)
 
-  const handleRoleChange = (newRole) => {
-    const defaultPerms = DEFAULT_PERMS[newRole] || DEFAULT_PERMS.branch_manager;
-    setForm(p => ({
-      ...p,
-      role: newRole,
-      branch_id: newRole === 'admin' ? '' : (p.branch_id || branches[0]?.id || ''),
-      permissions: { ...defaultPerms }
-    }));
+  const handleRoleChange = async (newRole) => {
+    try {
+      const liveDefaults = await api.getRolePermissions();
+      const defaultPerms = liveDefaults[newRole] || DEFAULT_PERMS[newRole] || DEFAULT_PERMS.branch_manager;
+      setForm(p => ({
+        ...p,
+        role: newRole,
+        branch_id: newRole === 'admin' ? '' : (p.branch_id || branches[0]?.id || ''),
+        is_custom_override: false,
+        permissions: { ...defaultPerms }
+      }));
+    } catch (e) {
+      const defaultPerms = DEFAULT_PERMS[newRole] || DEFAULT_PERMS.branch_manager;
+      setForm(p => ({
+        ...p,
+        role: newRole,
+        branch_id: newRole === 'admin' ? '' : (p.branch_id || branches[0]?.id || ''),
+        is_custom_override: false,
+        permissions: { ...defaultPerms }
+      }));
+    }
   };
 
   const handleTogglePermission = (key) => {
     setForm(p => ({
       ...p,
+      is_custom_override: true,
       permissions: {
         ...p.permissions,
         [key]: !p.permissions?.[key]
@@ -3424,13 +3456,25 @@ export function ManageManagers({ branches, managers, setManagers }) {
     }));
   };
 
-  const handleResetPermissions = () => {
+  const handleResetPermissions = async () => {
     const roleKey = form.role === 'admin' ? 'admin' : (form.role === 'hr_officer' ? 'hr_officer' : 'branch_manager');
-    setForm(p => ({
-      ...p,
-      permissions: { ...DEFAULT_PERMS[roleKey] }
-    }));
-    showToast('Permissions reset to role defaults', 'info');
+    try {
+      const liveDefaults = await api.getRolePermissions();
+      const defaultPerms = liveDefaults[roleKey] || DEFAULT_PERMS[roleKey];
+      setForm(p => ({
+        ...p,
+        is_custom_override: false,
+        permissions: { ...defaultPerms }
+      }));
+      showToast('Permissions reset to live role defaults', 'info');
+    } catch (e) {
+      setForm(p => ({
+        ...p,
+        is_custom_override: false,
+        permissions: { ...DEFAULT_PERMS[roleKey] }
+      }));
+      showToast('Permissions reset to role defaults', 'info');
+    }
   };
 
   const handleGrantAll = () => {
@@ -3440,7 +3484,7 @@ export function ManageManagers({ branches, managers, setManagers }) {
         granted[perm.key] = true;
       });
     });
-    setForm(p => ({ ...p, permissions: granted }));
+    setForm(p => ({ ...p, is_custom_override: true, permissions: granted }));
     showToast('Granted all permissions');
   };
 
@@ -3453,7 +3497,7 @@ export function ManageManagers({ branches, managers, setManagers }) {
     });
     // keep basic view
     revoked['leaves.view'] = true;
-    setForm(p => ({ ...p, permissions: revoked }));
+    setForm(p => ({ ...p, is_custom_override: true, permissions: revoked }));
     showToast('Revoked all optional permissions', 'warning');
   };
 
@@ -3473,7 +3517,8 @@ export function ManageManagers({ branches, managers, setManagers }) {
         ...form,
         username: form.username.trim(),
         branch_id: form.role === 'admin' ? null : form.branch_id,
-        permissions: form.permissions
+        is_custom_override: form.is_custom_override,
+        permissions: form.is_custom_override ? form.permissions : null
       };
 
       if (modal === 'add') {
@@ -3530,6 +3575,59 @@ export function ManageManagers({ branches, managers, setManagers }) {
 
   return (
     <div className="admin-content">
+      {/* Sub-nav Navigation Tabs for User Configuration */}
+      <div className="sub-nav-tabs" style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+        <button
+          className="tab-btn active"
+          style={{
+            padding: '8px 18px',
+            borderRadius: '8px',
+            fontSize: '13px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            border: 'none',
+            background: 'var(--accent-primary, #6366f1)',
+            color: '#fff',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            boxShadow: '0 2px 8px rgba(99, 102, 241, 0.3)'
+          }}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 16, height: 16 }}>
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+          Manage Users
+        </button>
+        <button
+          className="tab-btn"
+          onClick={() => onNavigatePage && onNavigatePage('user_permissions')}
+          style={{
+            padding: '8px 18px',
+            borderRadius: '8px',
+            fontSize: '13px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            border: '1px solid var(--border-color)',
+            background: 'rgba(255,255,255,0.04)',
+            color: 'var(--text-secondary)',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            transition: 'all 0.2s ease'
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+          onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 16, height: 16 }}>
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+          User Permissions Matrix
+        </button>
+      </div>
+
       <div className="controls-bar">
         <div className="admin-search-box">
           <svg className="s-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -3553,7 +3651,7 @@ export function ManageManagers({ branches, managers, setManagers }) {
               <th>User</th>
               <th>Role Type</th>
               <th>Assigned Scope</th>
-              <th>Permissions</th>
+              <th>Permissions Status</th>
               <th>Status</th>
               <th>Actions</th>
             </tr>
@@ -3589,17 +3687,52 @@ export function ManageManagers({ branches, managers, setManagers }) {
                     )}
                   </td>
                   <td>
-                    <span style={{ 
-                      fontSize: '11px', 
-                      padding: '3px 8px', 
-                      borderRadius: '12px', 
-                      background: 'var(--bg-card-subtle, rgba(255,255,255,0.06))',
-                      color: 'var(--text-secondary)',
-                      fontWeight: 600,
-                      border: '1px solid var(--border-color)'
-                    }}>
-                      ⚡ {getActivePermCount(mgr)}
-                    </span>
+                    {isAdmin ? (
+                      <span style={{ 
+                        fontSize: '11px', 
+                        padding: '3px 8px', 
+                        borderRadius: '12px', 
+                        background: 'rgba(249, 115, 22, 0.12)', 
+                        color: '#f97316', 
+                        fontWeight: 700, 
+                        border: '1px solid rgba(249, 115, 22, 0.25)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}>
+                        👑 All Capabilities
+                      </span>
+                    ) : mgr.has_custom_permissions ? (
+                      <span style={{ 
+                        fontSize: '11px', 
+                        padding: '3px 8px', 
+                        borderRadius: '12px', 
+                        background: 'rgba(234, 179, 8, 0.15)',
+                        color: '#eab308',
+                        fontWeight: 700,
+                        border: '1px solid rgba(234, 179, 8, 0.35)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }} title="This user has customized capability overrides configured">
+                        ⚡ Custom Override ({getActivePermCount(mgr)})
+                      </span>
+                    ) : (
+                      <span style={{ 
+                        fontSize: '11px', 
+                        padding: '3px 8px', 
+                        borderRadius: '12px', 
+                        background: 'rgba(99, 102, 241, 0.12)', 
+                        color: '#818cf8', 
+                        fontWeight: 600, 
+                        border: '1px solid rgba(99, 102, 241, 0.25)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }} title="Inheriting active baseline defaults from User Permissions matrix">
+                        🔒 Role Default ({getActivePermCount(mgr)})
+                      </span>
+                    )}
                   </td>
                   <td>
                     <span className={`badge badge-${mgr.status}`}>{mgr.status === 'active' ? 'Active' : 'Inactive'}</span>
@@ -3636,7 +3769,7 @@ export function ManageManagers({ branches, managers, setManagers }) {
               <div>
                 <h3 style={{ margin: 0 }}>{modal === 'add' ? 'Add User Account' : 'Edit User & Permissions'}</h3>
                 <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--text-secondary)' }}>
-                  Configure role, branch assignment, and customized granular permissions.
+                  Configure user credentials, role assignment, and customized granular permissions.
                 </p>
               </div>
               <button className="modal-close" onClick={closeModal}>
@@ -3735,26 +3868,57 @@ export function ManageManagers({ branches, managers, setManagers }) {
 
               {/* Granular Permissions Matrix */}
               <div style={{ background: 'var(--bg-card-subtle, rgba(255,255,255,0.02))', padding: '16px', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
+                {/* Permission Policy Indicator Banner */}
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '10px 14px',
+                  background: form.is_custom_override ? 'rgba(234, 179, 8, 0.1)' : 'rgba(99, 102, 241, 0.1)',
+                  border: `1px solid ${form.is_custom_override ? 'rgba(234, 179, 8, 0.3)' : 'rgba(99, 102, 241, 0.25)'}`,
+                  borderRadius: '8px',
+                  marginBottom: '16px',
+                  flexWrap: 'wrap',
+                  gap: '10px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '18px' }}>{form.is_custom_override ? '⚡' : '🔒'}</span>
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: 700, color: form.is_custom_override ? '#eab308' : '#a5b4fc' }}>
+                        {form.is_custom_override ? 'Custom User Overrides Active' : 'Inheriting Role Default Permissions'}
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                        {form.is_custom_override
+                          ? 'This user has personalized capabilities overriding the default role template.'
+                          : 'This user dynamically uses baseline permissions defined in User Permissions matrix.'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {form.is_custom_override && (
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      style={{ padding: '4px 10px', fontSize: '11px', height: 'auto', background: 'rgba(255,255,255,0.08)' }}
+                      onClick={handleResetPermissions}
+                    >
+                      🔄 Reset to Role Defaults
+                    </button>
+                  )}
+                </div>
+
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
                   <div>
                     <h4 style={{ margin: 0, fontSize: '14px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      ⚡ Custom Capabilities & Granular Permissions
+                      ⚡ Granular Capabilities
                     </h4>
                     <p style={{ margin: '2px 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                      Fine-tune capabilities for this user. Permissions apply strictly within their assigned branch.
+                      Toggling any action creates a custom override for this specific user.
                     </p>
                   </div>
                   
                   {form.role !== 'admin' && (
                     <div style={{ display: 'flex', gap: '8px' }}>
-                      <button 
-                        type="button" 
-                        className="btn-secondary" 
-                        style={{ padding: '4px 10px', fontSize: '12px', height: 'auto' }} 
-                        onClick={handleResetPermissions}
-                      >
-                        Reset Defaults
-                      </button>
                       <button 
                         type="button" 
                         className="btn-secondary" 
@@ -3854,6 +4018,486 @@ export function ManageManagers({ branches, managers, setManagers }) {
       )}
     </div>
   )
+}
+
+export { ManageManagers as ManageUsers };
+
+/* ─────────────────────────────────────────────────────
+   UserPermissionsMatrix (Role Default Permission Matrix)
+───────────────────────────────────────────────────── */
+export function UserPermissionsMatrix({ onNavigatePage }) {
+  const [matrix, setMatrix] = useState({
+    branch_manager: { ...DEFAULT_PERMS.branch_manager },
+    hr_officer: { ...DEFAULT_PERMS.hr_officer },
+    admin: { ...DEFAULT_PERMS.admin }
+  });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState('');
+  const [selectedSection, setSelectedSection] = useState('all');
+  const [hasChanges, setHasChanges] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const showToast = (msg, type = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3500);
+  };
+
+  useEffect(() => {
+    const fetchMatrix = async () => {
+      try {
+        const data = await api.getRolePermissions();
+        if (data && typeof data === 'object') {
+          setMatrix(prev => ({
+            branch_manager: { ...prev.branch_manager, ...(data.branch_manager || {}) },
+            hr_officer: { ...prev.hr_officer, ...(data.hr_officer || {}) },
+            admin: { ...prev.admin, ...(data.admin || {}) }
+          }));
+        }
+      } catch (err) {
+        console.error('Failed to load role permissions:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchMatrix();
+  }, []);
+
+  const handleToggle = (role, key) => {
+    setMatrix(prev => ({
+      ...prev,
+      [role]: {
+        ...prev[role],
+        [key]: !prev[role]?.[key]
+      }
+    }));
+    setHasChanges(true);
+  };
+
+  const handleRoleQuickToggle = (role, enable) => {
+    setMatrix(prev => {
+      const updated = { ...(prev[role] || {}) };
+      PERMISSION_SECTIONS.forEach(sec => {
+        sec.permissions.forEach(p => {
+          updated[p.key] = enable;
+        });
+      });
+      if (role === 'admin' && enable) {
+        updated['*'] = true;
+      }
+      return { ...prev, [role]: updated };
+    });
+    setHasChanges(true);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await api.updateRolePermissions({ matrix });
+      setHasChanges(false);
+      showToast('Default role permissions saved successfully! All users without custom overrides now inherit these rules.');
+    } catch (err) {
+      alert('Failed to save permissions: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleResetToSystemDefaults = async () => {
+    if (!window.confirm('Reset all user types to factory system default permissions? This will discard custom role defaults.')) return;
+    try {
+      const res = await api.resetRolePermissions();
+      if (res.matrix) {
+        setMatrix(res.matrix);
+      } else {
+        setMatrix({
+          branch_manager: { ...DEFAULT_PERMS.branch_manager },
+          hr_officer: { ...DEFAULT_PERMS.hr_officer },
+          admin: { ...DEFAULT_PERMS.admin }
+        });
+      }
+      setHasChanges(false);
+      showToast('Reset all role permissions to factory system defaults', 'info');
+    } catch (err) {
+      alert('Failed to reset: ' + err.message);
+    }
+  };
+
+  // Filter sections and permissions
+  const filteredSections = PERMISSION_SECTIONS.filter(sec => {
+    if (selectedSection !== 'all' && sec.id !== selectedSection) return false;
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    const secMatches = sec.title.toLowerCase().includes(q);
+    const permMatches = sec.permissions.some(p => p.label.toLowerCase().includes(q) || p.desc.toLowerCase().includes(q));
+    return secMatches || permMatches;
+  }).map(sec => {
+    if (!search.trim()) return sec;
+    const q = search.toLowerCase();
+    return {
+      ...sec,
+      permissions: sec.permissions.filter(p => 
+        sec.title.toLowerCase().includes(q) || 
+        p.label.toLowerCase().includes(q) || 
+        p.desc.toLowerCase().includes(q)
+      )
+    };
+  }).filter(sec => sec.permissions.length > 0);
+
+  const totalActionsCount = PERMISSION_SECTIONS.reduce((acc, s) => acc + s.permissions.length, 0);
+
+  if (loading) {
+    return (
+      <div className="admin-content" style={{ padding: '60px 20px', textAlign: 'center' }}>
+        <div className="spinner" style={{ margin: '0 auto 16px' }} />
+        <p style={{ color: 'var(--text-secondary)' }}>Loading role permission matrices…</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="admin-content">
+      {/* Sub-nav Navigation Tabs for User Configuration */}
+      <div className="sub-nav-tabs" style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+        <button
+          className="tab-btn"
+          onClick={() => onNavigatePage && onNavigatePage('manage_users')}
+          style={{
+            padding: '8px 18px',
+            borderRadius: '8px',
+            fontSize: '13px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            border: '1px solid var(--border-color)',
+            background: 'rgba(255,255,255,0.04)',
+            color: 'var(--text-secondary)',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            transition: 'all 0.2s ease'
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+          onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 16, height: 16 }}>
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+          Manage Users
+        </button>
+        <button
+          className="tab-btn active"
+          style={{
+            padding: '8px 18px',
+            borderRadius: '8px',
+            fontSize: '13px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            border: 'none',
+            background: 'var(--accent-primary, #6366f1)',
+            color: '#fff',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            boxShadow: '0 2px 8px rgba(99, 102, 241, 0.3)'
+          }}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 16, height: 16 }}>
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+          User Permissions Matrix
+        </button>
+      </div>
+
+      {/* Policy Callout Banner */}
+      <div style={{
+        background: 'rgba(99, 102, 241, 0.08)',
+        border: '1px solid rgba(99, 102, 241, 0.25)',
+        borderRadius: '12px',
+        padding: '16px 20px',
+        marginBottom: '24px',
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: '14px'
+      }}>
+        <div style={{ fontSize: '24px', lineHeight: 1 }}>🛡️</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 700, fontSize: '14px', color: '#c7d2fe', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span>Default Role Permissions Matrix</span>
+            <span style={{ fontSize: '11px', background: 'rgba(99, 102, 241, 0.2)', color: '#a5b4fc', padding: '2px 8px', borderRadius: '10px' }}>
+              {totalActionsCount} Total Actions Configured
+            </span>
+          </div>
+          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+            The configuration below represents the <strong>default baseline permissions</strong> for all users assigned to each user type.
+            Any user in a role automatically inherits these rules. If a specific user requires unique privileges (such as a branch manager granted payroll export rights), their permissions can be individually overridden in <strong>Manage Users → Edit & Permissions</strong>.
+          </div>
+        </div>
+      </div>
+
+      {/* Controls Bar */}
+      <div className="controls-bar" style={{ flexWrap: 'wrap', gap: '12px', marginBottom: '20px' }}>
+        <div className="admin-search-box" style={{ minWidth: '240px' }}>
+          <svg className="s-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input 
+            placeholder="Search capabilities or actions…" 
+            value={search} 
+            onChange={e => setSearch(e.target.value)} 
+          />
+        </div>
+
+        <select 
+          value={selectedSection} 
+          onChange={e => setSelectedSection(e.target.value)}
+          style={{
+            padding: '8px 12px',
+            background: 'var(--bg-input, rgba(255,255,255,0.05))',
+            border: '1px solid var(--border-color)',
+            borderRadius: '8px',
+            color: 'var(--text-primary)',
+            fontSize: '13px'
+          }}
+        >
+          <option value="all">All Modules ({PERMISSION_SECTIONS.length})</option>
+          {PERMISSION_SECTIONS.map(s => (
+            <option key={s.id} value={s.id}>{s.icon} {s.title}</option>
+          ))}
+        </select>
+
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {hasChanges && (
+            <span style={{
+              fontSize: '12px',
+              fontWeight: 700,
+              padding: '4px 10px',
+              borderRadius: '6px',
+              background: 'rgba(234, 179, 8, 0.15)',
+              border: '1px solid rgba(234, 179, 8, 0.35)',
+              color: '#eab308',
+              animation: 'pulse 1.5s infinite'
+            }}>
+              ⚠️ Unsaved Changes
+            </span>
+          )}
+
+          <button 
+            type="button" 
+            className="btn-secondary" 
+            onClick={handleResetToSystemDefaults}
+            title="Reset to factory baseline defaults"
+          >
+            🔄 Reset to Defaults
+          </button>
+
+          <button 
+            type="button" 
+            className="btn-primary" 
+            disabled={saving || !hasChanges}
+            onClick={handleSave}
+            style={{
+              opacity: !hasChanges && !saving ? 0.7 : 1,
+              boxShadow: hasChanges ? '0 0 16px rgba(99, 102, 241, 0.5)' : 'none'
+            }}
+          >
+            {saving ? 'Saving...' : 'Save Role Defaults'}
+          </button>
+        </div>
+      </div>
+
+      {/* Permissions Matrix Table */}
+      <div className="data-table-wrap" style={{ overflowX: 'auto', border: '1px solid var(--border-color)', borderRadius: '12px' }}>
+        <table className="data-table" style={{ minWidth: '780px', width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ background: 'rgba(15, 23, 42, 0.75)' }}>
+              <th style={{ width: '46%', textAlign: 'left', padding: '16px' }}>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  Operation / Capability
+                </span>
+              </th>
+              
+              {/* Branch Manager Column Header */}
+              <th style={{ width: '18%', textAlign: 'center', padding: '12px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#3b82f6', fontWeight: 700, fontSize: '13px' }}>
+                    <span>🏢</span>
+                    <span>Branch Manager</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    <button
+                      type="button"
+                      onClick={() => handleRoleQuickToggle('branch_manager', true)}
+                      style={{ padding: '2px 6px', fontSize: '10px', background: 'rgba(59, 130, 246, 0.15)', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: '4px', color: '#60a5fa', cursor: 'pointer' }}
+                    >
+                      All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleRoleQuickToggle('branch_manager', false)}
+                      style={{ padding: '2px 6px', fontSize: '10px', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid var(--border-color)', borderRadius: '4px', color: 'var(--text-muted)', cursor: 'pointer' }}
+                    >
+                      None
+                    </button>
+                  </div>
+                </div>
+              </th>
+
+              {/* HR Officer Column Header */}
+              <th style={{ width: '18%', textAlign: 'center', padding: '12px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#10b981', fontWeight: 700, fontSize: '13px' }}>
+                    <span>👤</span>
+                    <span>HR Officer</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    <button
+                      type="button"
+                      onClick={() => handleRoleQuickToggle('hr_officer', true)}
+                      style={{ padding: '2px 6px', fontSize: '10px', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '4px', color: '#34d399', cursor: 'pointer' }}
+                    >
+                      All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleRoleQuickToggle('hr_officer', false)}
+                      style={{ padding: '2px 6px', fontSize: '10px', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid var(--border-color)', borderRadius: '4px', color: 'var(--text-muted)', cursor: 'pointer' }}
+                    >
+                      None
+                    </button>
+                  </div>
+                </div>
+              </th>
+
+              {/* Super Admin Column Header */}
+              <th style={{ width: '18%', textAlign: 'center', padding: '12px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#f97316', fontWeight: 700, fontSize: '13px' }}>
+                    <span>👑</span>
+                    <span>Super Admin</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '4px', background: 'rgba(249, 115, 22, 0.15)', color: '#f97316', fontWeight: 700 }}>
+                      Full Access
+                    </span>
+                  </div>
+                </div>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredSections.length === 0 ? (
+              <tr>
+                <td colSpan={4} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+                  No capabilities match your search query.
+                </td>
+              </tr>
+            ) : (
+              filteredSections.map(section => (
+                <React.Fragment key={section.id}>
+                  {/* Category Header Row */}
+                  <tr style={{ background: 'rgba(255, 255, 255, 0.03)', borderTop: '2px solid rgba(255, 255, 255, 0.06)' }}>
+                    <td colSpan={4} style={{ padding: '10px 16px', fontWeight: 700, fontSize: '13px', color: 'var(--text-primary)' }}>
+                      <span style={{ marginRight: '8px' }}>{section.icon}</span>
+                      <span>{section.title}</span>
+                      <span style={{ marginLeft: '10px', fontSize: '11px', fontWeight: 500, color: 'var(--text-muted)' }}>
+                        ({section.permissions.length} actions)
+                      </span>
+                    </td>
+                  </tr>
+
+                  {/* Permission Rows */}
+                  {section.permissions.map((perm, permIdx) => {
+                    const bmChecked = !!matrix.branch_manager?.[perm.key];
+                    const hrChecked = !!matrix.hr_officer?.[perm.key];
+                    const adminChecked = !!(matrix.admin?.['*'] || matrix.admin?.[perm.key]);
+
+                    return (
+                      <tr 
+                        key={perm.key} 
+                        style={{ 
+                          borderBottom: '1px solid rgba(255, 255, 255, 0.04)',
+                          background: permIdx % 2 === 0 ? 'transparent' : 'rgba(255, 255, 255, 0.01)',
+                          transition: 'background 0.15s ease'
+                        }}
+                      >
+                        <td style={{ padding: '12px 16px' }}>
+                          <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-primary)', marginBottom: '2px' }}>
+                            {perm.label}
+                          </div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                            {perm.desc}
+                          </div>
+                        </td>
+
+                        {/* Branch Manager Toggle */}
+                        <td style={{ textAlign: 'center', verticalAlign: 'middle', padding: '12px' }}>
+                          <input 
+                            type="checkbox" 
+                            checked={bmChecked} 
+                            onChange={() => handleToggle('branch_manager', perm.key)}
+                            style={{ 
+                              cursor: 'pointer', 
+                              width: '18px', 
+                              height: '18px', 
+                              accentColor: '#3b82f6' 
+                            }}
+                            title={`Toggle ${perm.label} for Branch Managers`}
+                          />
+                        </td>
+
+                        {/* HR Officer Toggle */}
+                        <td style={{ textAlign: 'center', verticalAlign: 'middle', padding: '12px' }}>
+                          <input 
+                            type="checkbox" 
+                            checked={hrChecked} 
+                            onChange={() => handleToggle('hr_officer', perm.key)}
+                            style={{ 
+                              cursor: 'pointer', 
+                              width: '18px', 
+                              height: '18px', 
+                              accentColor: '#10b981' 
+                            }}
+                            title={`Toggle ${perm.label} for HR Officers`}
+                          />
+                        </td>
+
+                        {/* Super Admin Toggle */}
+                        <td style={{ textAlign: 'center', verticalAlign: 'middle', padding: '12px' }}>
+                          <input 
+                            type="checkbox" 
+                            checked={adminChecked} 
+                            onChange={() => handleToggle('admin', perm.key)}
+                            style={{ 
+                              cursor: 'pointer', 
+                              width: '18px', 
+                              height: '18px', 
+                              accentColor: '#f97316' 
+                            }}
+                            title={`Toggle ${perm.label} for Super Admins`}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </React.Fragment>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {toast && (
+        <div className={`admin-toast admin-toast-${toast.type} show`}>
+          {toast.type === 'success'
+            ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>}
+          {toast.msg}
+        </div>
+      )}
+    </div>
+  );
 }
 
 /* ─────────────────────────────────────────────────────
