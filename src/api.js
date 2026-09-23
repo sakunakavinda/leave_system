@@ -193,6 +193,13 @@ export const api = {
   saveRoster: (data) => fetchApi('/rosters', { method: 'POST', body: JSON.stringify(data) }),
   bulkSaveRoster: (entries) => fetchApi('/rosters/bulk', { method: 'POST', body: JSON.stringify({ entries }) }),
   deleteRoster: (id) => fetchApi(`/rosters/${id}`, { method: 'DELETE' }),
+  clearEmployeeRoster: (employeeId, params = {}) => {
+    const query = new URLSearchParams();
+    if (params.start_date) query.set('start_date', params.start_date);
+    if (params.end_date) query.set('end_date', params.end_date);
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    return fetchApi(`/rosters/employee/${employeeId}${qs}`, { method: 'DELETE' });
+  },
 
   // Fatigue & Substitution
   getAvailableSubstitutes: (data) => fetchApi('/employees/available-substitutes', {

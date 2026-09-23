@@ -1,7 +1,7 @@
 import express from 'express';
 import crypto from 'crypto';
 import pool from '../db.js';
-import { requireAuth, requireRole, optionalAuth } from '../middleware/auth.js';
+import { requireAuth, requireRole, optionalAuth, getBranchScope } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -102,28 +102,48 @@ router.put('/:id', requireAuth, requireRole('super_admin', 'branch_manager'), as
       return res.status(404).json({ error: 'Shift not found' });
     }
 
+    const branchScope = getBranchScope(req);
+    if (branchScope) {
+      if (existing[0].branch_id && existing[0].branch_id !== branchScope) {
+        return res.status(403).json({ error: 'Access denied to this shift' });
+      }
+      if (branch_id !== undefined && branch_id && branch_id !== branchScope) {
+        return res.status(403).json({ error: 'Cannot reassign shift outside your branch' });
+      }
+    }
+
+    const newBranchId = branch_id !== undefined ? (branch_id ? branch_id : null) : existing[0].branch_id;
+    const newCode = code !== undefined && code ? code.trim().toUpperCase() : existing[0].code;
+    const newName = name !== undefined && name ? name.trim() : existing[0].name;
+    const newStartTime = start_time !== undefined && start_time ? start_time : existing[0].start_time;
+    const newEndTime = end_time !== undefined && end_time ? end_time : existing[0].end_time;
+    const newCrossesMidnight = crosses_midnight !== undefined ? Boolean(crosses_midnight) : Boolean(existing[0].crosses_midnight);
+    const newDurationHours = duration_hours !== undefined ? parseFloat(duration_hours) || 8.0 : existing[0].duration_hours;
+    const newColorCode = color_code !== undefined && color_code ? color_code : existing[0].color_code;
+    const newStatus = status !== undefined && status ? status : existing[0].status;
+
     await pool.query(
       `UPDATE shift_masters SET
-        branch_id = COALESCE(?, branch_id),
-        code = COALESCE(?, code),
-        name = COALESCE(?, name),
-        start_time = COALESCE(?, start_time),
-        end_time = COALESCE(?, end_time),
-        crosses_midnight = COALESCE(?, crosses_midnight),
-        duration_hours = COALESCE(?, duration_hours),
-        color_code = COALESCE(?, color_code),
-        status = COALESCE(?, status)
+        branch_id = ?,
+        code = ?,
+        name = ?,
+        start_time = ?,
+        end_time = ?,
+        crosses_midnight = ?,
+        duration_hours = ?,
+        color_code = ?,
+        status = ?
        WHERE id = ?`,
       [
-        branch_id !== undefined ? (branch_id || null) : null,
-        code ? code.trim().toUpperCase() : null,
-        name ? name.trim() : null,
-        start_time || null,
-        end_time || null,
-        crosses_midnight !== undefined ? Boolean(crosses_midnight) : null,
-        duration_hours !== undefined ? parseFloat(duration_hours) : null,
-        color_code || null,
-        status || null,
+        newBranchId,
+        newCode,
+        newName,
+        newStartTime,
+        newEndTime,
+        newCrossesMidnight,
+        newDurationHours,
+        newColorCode,
+        newStatus,
         id
       ]
     );

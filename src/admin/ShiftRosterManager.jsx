@@ -782,11 +782,29 @@ export function ManageShiftRosters({ branches = [], employees = [] }) {
     }
   };
 
-  // Employee-specific Auto-Fill state
-  const [autoFillModal, setAutoFillModal] = useState(null); // null | { employeeId, employeeName, branchName }
+  // Employee-specific Auto-Fill & Clear state
+  const [autoFillModal, setAutoFillModal] = useState(null); // null | { employeeId, employeeName, branchId, branchName, workingDays, offDays }
   const [autoFillShiftId, setAutoFillShiftId] = useState('');
   const [overwriteExisting, setOverwriteExisting] = useState(true);
   const [isSubmittingAutoFill, setIsSubmittingAutoFill] = useState(false);
+
+  const handleClearEmployeeRoster = async (emp) => {
+    const monthName = MONTH_NAMES[selectedMonth - 1];
+    if (!window.confirm(`Are you sure you want to clear all roster assignments and RDOs for ${emp.name} in ${monthName} ${selectedYear}?`)) {
+      return;
+    }
+
+    try {
+      const startDate = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`;
+      const endDate = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+      
+      await api.clearEmployeeRoster(emp.id, { start_date: startDate, end_date: endDate });
+      showToast(`Cleared ${monthName} ${selectedYear} roster for ${emp.name}`, 'info');
+      loadData();
+    } catch (err) {
+      alert(err.message || 'Failed to clear employee roster');
+    }
+  };
 
   const openAutoFillModal = (emp) => {
     const availableShifts = shifts.filter(s => !s.branch_id || s.branch_id === emp.branch_id);
@@ -798,11 +816,25 @@ export function ManageShiftRosters({ branches = [], employees = [] }) {
     const defaultShift = availableShifts.find(s => s.code === 'GEN') || availableShifts[0];
     setAutoFillShiftId(defaultShift ? defaultShift.id : '');
     setOverwriteExisting(true);
+
+    const empBranch = branches.find(b => b.id === emp.branch_id);
+    let branchWorkingDays = empBranch?.working_days || ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+    if (typeof branchWorkingDays === 'string') {
+      try { branchWorkingDays = JSON.parse(branchWorkingDays); } catch (e) {}
+    }
+    if (!Array.isArray(branchWorkingDays) || branchWorkingDays.length === 0) {
+      branchWorkingDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+    }
+    const ALL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const offDays = ALL_DAYS.filter(d => !branchWorkingDays.includes(d));
+
     setAutoFillModal({
       employeeId: emp.id,
       employeeName: emp.name,
       branchId: emp.branch_id,
-      branchName: branches.find(b => b.id === emp.branch_id)?.name || 'Branch'
+      branchName: empBranch?.name || 'Branch',
+      workingDays: branchWorkingDays,
+      offDays: offDays
     });
   };
 
@@ -819,10 +851,12 @@ export function ManageShiftRosters({ branches = [], employees = [] }) {
     try {
       const entries = [];
       const empId = autoFillModal.employeeId;
+      const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const branchWorkingDays = autoFillModal.workingDays || ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
       for (let day = 1; day <= daysInMonth; day++) {
         const dateObj = new Date(selectedYear, selectedMonth - 1, day);
-        const dayOfWeek = dateObj.getDay(); // 0 is Sunday, 6 is Saturday
+        const dayOfWeekName = DAY_NAMES[dateObj.getDay()];
         const dateStr = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
         
         const existing = rosterMap.get(`${empId}_${dateStr}`);
@@ -831,21 +865,23 @@ export function ManageShiftRosters({ branches = [], employees = [] }) {
           continue;
         }
 
-        if (dayOfWeek === 0 || dayOfWeek === 6) {
-          // Weekend RDO
-          entries.push({
-            employee_id: empId,
-            roster_date: dateStr,
-            shift_id: null,
-            is_rdo: true
-          });
-        } else {
-          // Weekday chosen shift
+        const isWorkingDate = branchWorkingDays.includes(dayOfWeekName);
+
+        if (isWorkingDate) {
+          // Working date for this employee's branch: assign selected shift
           entries.push({
             employee_id: empId,
             roster_date: dateStr,
             shift_id: selectedShift.id,
             is_rdo: false
+          });
+        } else {
+          // Non-working date for this employee's branch: assign RDO
+          entries.push({
+            employee_id: empId,
+            roster_date: dateStr,
+            shift_id: null,
+            is_rdo: true
           });
         }
       }
@@ -1014,34 +1050,34 @@ export function ManageShiftRosters({ branches = [], employees = [] }) {
                           {branches.find(b => b.id === emp.branch_id)?.name || 'Branch'}
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        className="btn-autofill-emp"
-                        id={`btn-autofill-${emp.id}`}
-                        title={`Auto-fill ${MONTH_NAMES[selectedMonth - 1]} schedule for ${emp.name}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openAutoFillModal(emp);
-                        }}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '5px',
-                          padding: '5px 10px',
-                          fontSize: '11.5px',
-                          fontWeight: 600,
-                          borderRadius: '6px',
-                          background: 'rgba(99, 102, 241, 0.14)',
-                          color: '#a5b4fc',
-                          border: '1px solid rgba(99, 102, 241, 0.35)',
-                          cursor: 'pointer',
-                          transition: 'all 0.15s ease',
-                          whiteSpace: 'nowrap'
-                        }}
-                      >
-                        <span style={{ fontSize: '12px' }}>⚡</span>
-                        <span>Auto-Fill</span>
-                      </button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <button
+                          type="button"
+                          className="btn-autofill-emp"
+                          id={`btn-autofill-${emp.id}`}
+                          title={`Auto-fill ${MONTH_NAMES[selectedMonth - 1]} schedule for ${emp.name}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openAutoFillModal(emp);
+                          }}
+                        >
+                          <span style={{ fontSize: '12px' }}>⚡</span>
+                          <span>Auto-Fill</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-clear-emp"
+                          id={`btn-clear-${emp.id}`}
+                          title={`Clear all roster assignments in ${MONTH_NAMES[selectedMonth - 1]} ${selectedYear} for ${emp.name}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleClearEmployeeRoster(emp);
+                          }}
+                        >
+                          <span style={{ fontSize: '11px' }}>🗑️</span>
+                          <span>Clear All</span>
+                        </button>
+                      </div>
                     </div>
                   </td>
 
@@ -1349,15 +1385,23 @@ export function ManageShiftRosters({ branches = [], employees = [] }) {
                   color: 'var(--text-secondary, #cbd5e1)',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '6px'
+                  gap: '8px'
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ color: '#34d399', fontWeight: 600 }}>📅 Weekdays (Mon - Fri):</span>
-                    <span>Assigned to <strong>{shifts.find(s => s.id === autoFillShiftId)?.name || 'Selected Shift'}</strong></span>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                    <span style={{ color: '#34d399', fontWeight: 600, minWidth: '155px' }}>
+                      🏢 Branch Working Days:
+                    </span>
+                    <span>
+                      <strong>{autoFillModal.workingDays?.join(', ')}</strong> → Assigned to <strong>{shifts.find(s => s.id === autoFillShiftId)?.name || 'Selected Shift'}</strong>
+                    </span>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ color: '#fbbf24', fontWeight: 600 }}>🏖️ Weekends (Sat - Sun):</span>
-                    <span>Assigned as <strong>RDO (Rostered Day Off)</strong></span>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                    <span style={{ color: '#fbbf24', fontWeight: 600, minWidth: '155px' }}>
+                      🏖️ Non-Working Days:
+                    </span>
+                    <span>
+                      <strong>{autoFillModal.offDays?.length > 0 ? autoFillModal.offDays.join(', ') : 'None'}</strong> → Assigned as <strong>RDO (Rostered Day Off)</strong>
+                    </span>
                   </div>
                 </div>
 

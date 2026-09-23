@@ -162,6 +162,44 @@ router.post('/bulk', requireAuth, requireRole('super_admin', 'branch_manager'), 
 });
 
 /**
+ * DELETE /api/rosters/employee/:employee_id
+ * Clear roster assignments for an employee within an optional date range
+ */
+router.delete('/employee/:employee_id', requireAuth, requireRole('super_admin', 'branch_manager'), async (req, res) => {
+  const { employee_id } = req.params;
+  const { start_date, end_date } = req.query;
+
+  try {
+    // If branch manager, verify employee belongs to manager's branch
+    const branchScope = getBranchScope(req);
+    if (branchScope) {
+      const [emp] = await pool.query('SELECT branch_id FROM employees WHERE id = ?', [employee_id]);
+      if (emp.length === 0 || emp[0].branch_id !== branchScope) {
+        return res.status(403).json({ error: 'Cannot clear roster for employee outside your branch' });
+      }
+    }
+
+    let sql = 'DELETE FROM employee_rosters WHERE employee_id = ?';
+    const params = [employee_id];
+
+    if (start_date) {
+      sql += ' AND roster_date >= ?';
+      params.push(start_date);
+    }
+    if (end_date) {
+      sql += ' AND roster_date <= ?';
+      params.push(end_date);
+    }
+
+    const [result] = await pool.query(sql, params);
+    res.json({ message: `Cleared ${result.affectedRows} roster entries`, affectedRows: result.affectedRows });
+  } catch (err) {
+    console.error('Error clearing employee rosters:', err);
+    res.status(500).json({ error: 'Failed to clear employee rosters' });
+  }
+});
+
+/**
  * DELETE /api/rosters/:id
  * Remove a single roster assignment
  */
