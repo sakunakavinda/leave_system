@@ -2171,6 +2171,7 @@ export function ManageBranches({ branches, setBranches, employees, managers, set
     status:'active', 
     operating_model:'corporate_5day', 
     working_days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], 
+    daily_hours: 8.0,
     weekly_hours: 40.0 
   }
   const [form, setForm]       = useState(EMPTY_BR)
@@ -2181,12 +2182,21 @@ export function ManageBranches({ branches, setBranches, employees, managers, set
   const openAdd  = ()    => { setForm(EMPTY_BR); setModal('add') }
   const openEdit = (br)  => { 
     const mgr = getBranchManager(br.id)
+    const rawDays = br.working_days || ['Monday','Tuesday','Wednesday','Thursday','Friday']
+    let parsedDays = rawDays
+    if (typeof rawDays === 'string') {
+      try { parsedDays = JSON.parse(rawDays) } catch(e) {}
+    }
+    const wkHrs = parseFloat(br.weekly_hours) || 40.0
+    const dayCount = (parsedDays && parsedDays.length) ? parsedDays.length : 5
+    const computedDaily = parseFloat((wkHrs / dayCount).toFixed(1))
     setForm({ 
       ...br, 
       manager_id: mgr ? mgr.id : '',
       operating_model: br.operating_model || 'corporate_5day',
-      working_days: br.working_days || ['Monday','Tuesday','Wednesday','Thursday','Friday'],
-      weekly_hours: br.weekly_hours ?? 40.0
+      working_days: parsedDays,
+      daily_hours: computedDaily,
+      weekly_hours: wkHrs
     })
     setModal(br) 
   }
@@ -2349,39 +2359,67 @@ export function ManageBranches({ branches, setBranches, employees, managers, set
               </div>
 
               <div className="field-row">
-                <div className="field">
+                <div className="field" style={{ flex: 1.5 }}>
                   <label>Operating Schedule Model</label>
                   <select 
                     value={form.operating_model || 'corporate_5day'} 
                     onChange={e => {
                       const val = e.target.value;
                       let days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
-                      let hrs = 40.0;
-                      if (val === 'retail_6day') {
+                      if (val === 'retail_5_5day') {
                         days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-                        hrs = 48.0;
+                      } else if (val === 'retail_6day') {
+                        days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
                       } else if (val === 'factory_24_7') {
                         days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-                        hrs = 56.0;
                       }
-                      setForm(p => ({ ...p, operating_model: val, working_days: days, weekly_hours: hrs }));
+                      const curDaily = form.daily_hours || 8.0;
+                      const newWk = parseFloat((curDaily * days.length).toFixed(1));
+                      setForm(p => ({ ...p, operating_model: val, working_days: days, weekly_hours: newWk }));
                     }}
                   >
-                    <option value="corporate_5day">Corporate 5-Day (Mon–Fri, 40 hrs)</option>
-                    <option value="retail_6day">Retail 6-Day (Mon–Sat, 48 hrs)</option>
-                    <option value="factory_24_7">Manufacturing 24/7 Continuous (7 Days)</option>
+                    <option value="corporate_5day">Corporate 5-Day (Mon–Fri)</option>
+                    <option value="retail_5_5day">Commercial 5.5-Day (Mon–Fri + Sat Half Day)</option>
+                    <option value="retail_6day">Operational / Retail 6-Day (Mon–Sat)</option>
+                    <option value="factory_24_7">Continuous Coverage (All 7 Days)</option>
                   </select>
                 </div>
-                <div className="field">
-                  <label>Weekly Working Hours</label>
+
+                <div className="field" style={{ flex: 1 }}>
+                  <label>Daily Hours (hrs/day)</label>
+                  <input 
+                    type="number" 
+                    step="0.5" 
+                    min="1" 
+                    max="24"
+                    value={form.daily_hours ?? 8.0} 
+                    onChange={e => {
+                      const dHrs = parseFloat(e.target.value) || 0;
+                      const dayCount = (form.working_days || []).length || 5;
+                      const newWk = parseFloat((dHrs * dayCount).toFixed(1));
+                      setForm(p => ({ ...p, daily_hours: dHrs, weekly_hours: newWk }));
+                    }} 
+                  />
+                </div>
+
+                <div className="field" style={{ flex: 1 }}>
+                  <label>Weekly Hours</label>
                   <input 
                     type="number" 
                     step="0.5" 
                     value={form.weekly_hours ?? 40.0} 
-                    onChange={e => setForm(p => ({ ...p, weekly_hours: parseFloat(e.target.value) || 40.0 }))} 
+                    onChange={e => {
+                      const wHrs = parseFloat(e.target.value) || 0;
+                      const dayCount = (form.working_days || []).length || 5;
+                      const newDaily = parseFloat((wHrs / dayCount).toFixed(1));
+                      setForm(p => ({ ...p, weekly_hours: wHrs, daily_hours: newDaily }));
+                    }} 
                   />
                 </div>
               </div>
+              <p style={{ fontSize: '11.5px', color: '#64748b', marginTop: '-6px', marginBottom: '14px', lineHeight: 1.4 }}>
+                💡 <strong>Custom Facility Hours</strong>: Institutes with longer daily hours (e.g. 9h, 10h, or 12h) can set their baseline daily hours here. For employees working multi-shift rotations (e.g. 12-hr hospital/security shifts), configure exact durations in <strong>Shift Masters</strong>.
+              </p>
 
               <div className="field">
                 <label>Status</label>
