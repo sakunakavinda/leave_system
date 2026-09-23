@@ -2279,12 +2279,24 @@ export function ManageBranches({ branches, setBranches, employees, managers, set
       <div className="data-table-wrap">
         <table className="data-table">
           <thead>
-            <tr><th>ID</th><th>Branch Name</th><th>Location</th><th>Manager</th><th>Employees</th><th>Status</th><th>Actions</th></tr>
+            <tr><th>ID</th><th>Branch Name</th><th>Location</th><th>Schedule & Hours</th><th>Manager</th><th>Employees</th><th>Status</th><th>Actions</th></tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={7} style={{ textAlign:'center', padding:'48px', color:'var(--text-muted)' }}>No branches found</td></tr>
-            ) : filtered.map((br, i) => (
+              <tr><td colSpan={8} style={{ textAlign:'center', padding:'48px', color:'var(--text-muted)' }}>No branches found</td></tr>
+            ) : filtered.map((br, i) => {
+              const modelLabels = {
+                corporate_5day: 'Corporate 5-Day (Mon–Fri)',
+                retail_5_5day: 'Commercial 5.5-Day (Mon–Sat half)',
+                retail_6day: 'Operational 6-Day (Mon–Sat)',
+                factory_24_7: 'Continuous 7-Day'
+              };
+              const rawDays = br.working_days || ['Monday','Tuesday','Wednesday','Thursday','Friday'];
+              const parsedDays = typeof rawDays === 'string' ? JSON.parse(rawDays) : rawDays;
+              const wkHrs = parseFloat(br.weekly_hours) || 40.0;
+              const dHrs = (wkHrs / (parsedDays.length || 5)).toFixed(1);
+
+              return (
               <tr key={br.id} style={{ animationDelay: `${i * 0.04}s` }}>
                 <td><span style={{ fontFamily:'monospace', fontSize:'12px', color:'var(--text-muted)' }}>{br.id}</span></td>
                 <td>
@@ -2296,6 +2308,14 @@ export function ManageBranches({ branches, setBranches, employees, managers, set
                   </div>
                 </td>
                 <td style={{ color:'var(--text-secondary)' }}>{br.location}</td>
+                <td>
+                  <div style={{ fontWeight: 600, fontSize: '12.5px', color: 'var(--text-primary)' }}>
+                    {modelLabels[br.operating_model] || br.operating_model || 'Corporate 5-Day'}
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    <span style={{ color: '#2563eb', fontWeight: 600 }}>{dHrs}h/day</span> • {wkHrs}h/week ({parsedDays.length} days)
+                  </div>
+                </td>
                 <td>{getBranchManager(br.id)?.username || '—'}</td>
                 <td>
                   <span style={{ fontWeight:600, color:'var(--text-primary)' }}>{getEmployeeCount(br.id)}</span>
@@ -2322,7 +2342,8 @@ export function ManageBranches({ branches, setBranches, employees, managers, set
                   </div>
                 </td>
               </tr>
-            ))}
+            );
+          })}
           </tbody>
         </table>
       </div>
