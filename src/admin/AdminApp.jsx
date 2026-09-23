@@ -4,6 +4,7 @@ import { AdminDashboard, ManageEmployees, ManageBranches, ManageBranchHolidays, 
 import { ManageShiftMasters, ManageShiftRosters } from './ShiftRosterManager.jsx'
 import { ContingencyShieldManager } from './ContingencyShieldManager.jsx'
 import { PayrollExportManager } from './PayrollExportManager.jsx'
+import { ManageOperatingSchedules } from './OperatingSchedulesManager.jsx'
 import { api, tokenStorage } from '../api.js'
 import { applyTheme } from './theme.js'
 
@@ -113,6 +114,18 @@ const NAV = [
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
         <polyline points="9 22 9 12 15 12 15 22"/>
+      </svg>
+    ),
+  },
+  {
+    id: 'operating_schedules',
+    group: 'Management',
+    label: 'Operating Schedules',
+    desc: 'Workweeks & operating models',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <polyline points="12 6 12 12 16 14"/>
       </svg>
     ),
   },
@@ -234,6 +247,7 @@ const PAGE_META = {
   payroll:    { title: 'Payroll & Loss of Pay (LOP) Exporter', subtitle: 'Monthly attendance, leave deductions, and LOP export for domestic payroll' },
   managers:   { title: 'Manage Managers',   subtitle: 'View, add, edit or remove branch managers' },
   branches:   { title: 'Manage Branches',   subtitle: 'Configure and track office branches'  },
+  operating_schedules: { title: 'Operating Schedules', subtitle: 'Define custom operating models, workweeks, and daily hours' },
   holidays:   { title: 'Branch Public & Mercantile Holidays', subtitle: 'Configure regional and statutory holidays per branch' },
   shifts:     { title: 'Shift Masters',     subtitle: 'Define operational shifts, night shifts, and duration hours' },
   departments: { title: 'Manage Departments', subtitle: 'Configure and organize departments'  },
@@ -699,7 +713,10 @@ export default function AdminApp() {
           <ManageManagers branches={allowedBranches} managers={managers} setManagers={setManagers} />
         )}
         {activePage === 'branches' && (
-          <ManageBranches branches={allowedBranches} setBranches={setBranches} employees={employees} managers={managers} setManagers={setManagers} />
+          <ManageBranches branches={allowedBranches} setBranches={setBranches} employees={employees} managers={managers} setManagers={setManagers} onNavigatePage={setActivePage} />
+        )}
+        {activePage === 'operating_schedules' && (
+          <ManageOperatingSchedules />
         )}
         {activePage === 'holidays' && (
           <ManageBranchHolidays branches={allowedBranches} />

@@ -2733,10 +2733,20 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
 /* ─────────────────────────────────────────────────────
    ManageBranches
 ───────────────────────────────────────────────────── */
-export function ManageBranches({ branches, setBranches, employees, managers, setManagers }) {
+export function ManageBranches({ branches, setBranches, employees, managers, setManagers, onNavigatePage }) {
   const [search, setSearch]   = useState('')
   const [modal, setModal]     = useState(null)
   const [toast, setToast]     = useState(null)
+  const [operatingSchedules, setOperatingSchedules] = useState([])
+
+  useEffect(() => {
+    api.getOperatingSchedules()
+      .then(data => {
+        if (Array.isArray(data)) setOperatingSchedules(data)
+      })
+      .catch(err => console.error('Failed to load operating schedules in ManageBranches:', err))
+  }, [])
+
   const EMPTY_BR = { 
     name:'', 
     location:'', 
@@ -2841,6 +2851,19 @@ export function ManageBranches({ branches, setBranches, employees, managers, set
           </svg>
           <input placeholder="Search branches…" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
+        {onNavigatePage && (
+          <button 
+            type="button" 
+            className="btn-secondary" 
+            onClick={() => onNavigatePage('operating_schedules')}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px' }}>
+              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+            </svg>
+            Operating Schedules
+          </button>
+        )}
         <button className="btn-primary" id="add-branch-btn" onClick={openAdd}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
@@ -2864,9 +2887,12 @@ export function ManageBranches({ branches, setBranches, employees, managers, set
                 retail_6day: 'Operational 6-Day (Mon–Sat)',
                 factory_24_7: 'Continuous 7-Day'
               };
-              const rawDays = br.working_days || ['Monday','Tuesday','Wednesday','Thursday','Friday'];
+              const scheduleObj = operatingSchedules.find(s => s.code === br.operating_model);
+              const scheduleTitle = scheduleObj?.name || modelLabels[br.operating_model] || br.operating_model || 'Corporate 5-Day';
+              const isCustom = scheduleObj && !scheduleObj.is_default;
+              const rawDays = br.working_days || scheduleObj?.working_days || ['Monday','Tuesday','Wednesday','Thursday','Friday'];
               const parsedDays = typeof rawDays === 'string' ? JSON.parse(rawDays) : rawDays;
-              const wkHrs = parseFloat(br.weekly_hours) || 40.0;
+              const wkHrs = parseFloat(br.weekly_hours) || (scheduleObj ? parseFloat(scheduleObj.weekly_hours) : 40.0);
               const dHrs = (wkHrs / (parsedDays.length || 5)).toFixed(1);
 
               return (
@@ -2882,8 +2908,21 @@ export function ManageBranches({ branches, setBranches, employees, managers, set
                 </td>
                 <td style={{ color:'var(--text-secondary)' }}>{br.location}</td>
                 <td>
-                  <div style={{ fontWeight: 600, fontSize: '12.5px', color: 'var(--text-primary)' }}>
-                    {modelLabels[br.operating_model] || br.operating_model || 'Corporate 5-Day'}
+                  <div style={{ fontWeight: 600, fontSize: '12.5px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>{scheduleTitle}</span>
+                    {isCustom && (
+                      <span style={{
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        padding: '1px 5px',
+                        borderRadius: '4px',
+                        background: 'rgba(16, 185, 129, 0.15)',
+                        color: '#34d399',
+                        border: '1px solid rgba(16, 185, 129, 0.3)'
+                      }}>
+                        Custom
+                      </span>
+                    )}
                   </div>
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
                     <span style={{ color: '#2563eb', fontWeight: 600 }}>{dHrs}h/day</span> • {wkHrs}h/week ({parsedDays.length} days)
@@ -2954,28 +2993,76 @@ export function ManageBranches({ branches, setBranches, employees, managers, set
 
               <div className="field-row">
                 <div className="field" style={{ flex: 1.5 }}>
-                  <label>Operating Schedule Model</label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <label style={{ margin: 0 }}>Operating Schedule Model</label>
+                    {onNavigatePage && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          closeModal();
+                          onNavigatePage('operating_schedules');
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#38bdf8',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          padding: 0
+                        }}
+                      >
+                        + Manage Schedules
+                      </button>
+                    )}
+                  </div>
                   <select 
                     value={form.operating_model || 'corporate_5day'} 
                     onChange={e => {
                       const val = e.target.value;
-                      let days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
-                      if (val === 'retail_5_5day') {
-                        days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-                      } else if (val === 'retail_6day') {
-                        days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-                      } else if (val === 'factory_24_7') {
-                        days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+                      const matched = operatingSchedules.find(s => s.code === val);
+                      if (matched) {
+                        const rawDays = matched.working_days || ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+                        const days = Array.isArray(rawDays) ? rawDays : (typeof rawDays === 'string' ? JSON.parse(rawDays) : []);
+                        const dHrs = parseFloat(matched.daily_hours) || 8.0;
+                        const wHrs = parseFloat(matched.weekly_hours) || parseFloat((dHrs * days.length).toFixed(1));
+                        setForm(p => ({ ...p, operating_model: val, working_days: days, daily_hours: dHrs, weekly_hours: wHrs }));
+                      } else {
+                        let days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+                        if (val === 'retail_5_5day' || val === 'retail_6day') {
+                          days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                        } else if (val === 'factory_24_7') {
+                          days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+                        }
+                        const curDaily = form.daily_hours || 8.0;
+                        const newWk = parseFloat((curDaily * days.length).toFixed(1));
+                        setForm(p => ({ ...p, operating_model: val, working_days: days, weekly_hours: newWk }));
                       }
-                      const curDaily = form.daily_hours || 8.0;
-                      const newWk = parseFloat((curDaily * days.length).toFixed(1));
-                      setForm(p => ({ ...p, operating_model: val, working_days: days, weekly_hours: newWk }));
                     }}
                   >
-                    <option value="corporate_5day">Corporate 5-Day (Mon–Fri)</option>
-                    <option value="retail_5_5day">Commercial 5.5-Day (Mon–Fri + Sat Half Day)</option>
-                    <option value="retail_6day">Operational / Retail 6-Day (Mon–Sat)</option>
-                    <option value="factory_24_7">Continuous Coverage (All 7 Days)</option>
+                    <optgroup label="System Default Models">
+                      {(operatingSchedules.filter(s => s.is_default).length > 0 
+                        ? operatingSchedules.filter(s => s.is_default)
+                        : [
+                            { code: 'corporate_5day', name: 'Corporate 5-Day (Mon–Fri)' },
+                            { code: 'retail_5_5day', name: 'Commercial 5.5-Day (Mon–Fri + Sat Half Day)' },
+                            { code: 'retail_6day', name: 'Operational / Retail 6-Day (Mon–Sat)' },
+                            { code: 'factory_24_7', name: 'Continuous Coverage (All 7 Days)' }
+                          ]
+                      ).map(s => (
+                        <option key={s.code} value={s.code}>{s.name}</option>
+                      ))}
+                    </optgroup>
+
+                    {operatingSchedules.filter(s => !s.is_default).length > 0 && (
+                      <optgroup label="Custom Operating Schedules">
+                        {operatingSchedules.filter(s => !s.is_default).map(s => (
+                          <option key={s.code} value={s.code}>
+                            {s.name} ({s.working_days?.length || 0} days, {s.weekly_hours}h)
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
                   </select>
                 </div>
 

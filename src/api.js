@@ -163,6 +163,12 @@ export const api = {
     body: JSON.stringify(data)
   }),
 
+  // Operating Schedules
+  getOperatingSchedules: () => fetchApi('/operating-schedules'),
+  addOperatingSchedule: (data) => fetchApi('/operating-schedules', { method: 'POST', body: JSON.stringify(data) }),
+  updateOperatingSchedule: (id, data) => fetchApi(`/operating-schedules/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteOperatingSchedule: (id) => fetchApi(`/operating-schedules/${id}`, { method: 'DELETE' }),
+
   // Shift Masters
   getShifts: (params = {}) => {
     const query = new URLSearchParams();

@@ -19,8 +19,12 @@ import shiftsRouter from './routes/shifts.js';
 import rostersRouter from './routes/rosters.js';
 import contingenciesRouter from './routes/contingencies.js';
 import payrollRouter from './routes/payroll.js';
+import operatingSchedulesRouter, { initOperatingSchedulesTable } from './routes/operatingSchedules.js';
 
 dotenv.config();
+
+// Ensure operating_schedules table exists and defaults are seeded
+initOperatingSchedulesTable();
 
 const app = express();
 const PORT = process.env.PORT || 5005;
@@ -52,6 +56,7 @@ app.use('/api/shifts', shiftsRouter);
 app.use('/api/rosters', rostersRouter);
 app.use('/api/contingencies', contingenciesRouter);
 app.use('/api/payroll', payrollRouter);
+app.use('/api/operating-schedules', operatingSchedulesRouter);
 
 // Serve static frontend files in production
 app.use(express.static(path.join(__dirname, '../dist')));
