@@ -144,19 +144,20 @@ export function ContingencyShieldManager({ branches = [] }) {
   const activeCount = contingencies.filter(c => c.status === 'ACTIVE').length;
 
   return (
-    <div className="admin-section">
+    <div className="admin-section cs-container">
       {/* Toast Notification */}
       {toast && (
         <div style={{
           position: 'fixed',
           top: '20px',
           right: '20px',
+          maxWidth: 'calc(100vw - 40px)',
           zIndex: 9999,
           background: toast.isError ? '#dc2626' : '#059669',
           color: '#fff',
           padding: '12px 20px',
           borderRadius: '8px',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
           display: 'flex',
           alignItems: 'center',
           gap: '8px',
@@ -169,55 +170,26 @@ export function ContingencyShieldManager({ branches = [] }) {
       )}
 
       {/* Header Banner */}
-      <div style={{
-        background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)',
-        color: '#fff',
-        borderRadius: '12px',
-        padding: '24px',
-        marginBottom: '24px',
-        boxShadow: '0 4px 15px rgba(30, 27, 75, 0.15)'
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-              <span style={{ fontSize: '28px' }}>🛡️</span>
-              <h2 style={{ margin: 0, fontSize: '24px', fontWeight: 700 }}>Operational Contingency Shield</h2>
+      <div className="cs-header-banner">
+        <div className="cs-header-main">
+          <div className="cs-header-info">
+            <div className="cs-title-row">
+              <span style={{ fontSize: '26px' }}>🛡️</span>
+              <h2>Operational Contingency Shield</h2>
               {activeCount > 0 && (
-                <span style={{
-                  background: '#ef4444',
-                  color: '#fff',
-                  padding: '4px 10px',
-                  borderRadius: '20px',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  letterSpacing: '0.5px'
-                }}>
+                <span className="cs-emergency-pill">
                   ● {activeCount} ACTIVE EMERGENCY
                 </span>
               )}
             </div>
-            <p style={{ margin: 0, opacity: 0.85, fontSize: '14px', maxWidth: '750px', lineHeight: 1.5 }}>
+            <p className="cs-header-desc">
               Protect staff from unfair leave balance deductions during domestic emergencies (curfews, cyclones, power grid outages, transport strikes). Applications falling within declared dates deduct 0 days, and existing approved leaves can be refunded retroactively with a single click.
             </p>
           </div>
 
           <button
             onClick={openAdd}
-            className="btn"
-            style={{
-              background: '#ef4444',
-              color: '#fff',
-              border: 'none',
-              padding: '12px 20px',
-              borderRadius: '8px',
-              fontWeight: 700,
-              fontSize: '14px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              boxShadow: '0 4px 12px rgba(239, 68, 68, 0.35)'
-            }}
+            className="cs-declare-btn"
           >
             <span>🚨</span>
             <span>Declare Emergency / Disruption</span>
@@ -225,29 +197,22 @@ export function ContingencyShieldManager({ branches = [] }) {
         </div>
 
         {/* Quick Stats Grid */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: '16px',
-          marginTop: '20px',
-          paddingTop: '20px',
-          borderTop: '1px solid rgba(255, 255, 255, 0.15)'
-        }}>
-          <div style={{ background: 'rgba(255,255,255,0.08)', borderRadius: '8px', padding: '12px 16px' }}>
-            <div style={{ fontSize: '12px', opacity: 0.75, textTransform: 'uppercase' }}>Active Contingencies</div>
-            <div style={{ fontSize: '22px', fontWeight: 800, marginTop: '4px', color: activeCount > 0 ? '#fca5a5' : '#86efac' }}>
+        <div className="cs-stats-grid">
+          <div className="cs-stat-card">
+            <div className="cs-stat-label">Active Contingencies</div>
+            <div className="cs-stat-val" style={{ color: activeCount > 0 ? '#fca5a5' : '#86efac' }}>
               {activeCount} Active
             </div>
           </div>
-          <div style={{ background: 'rgba(255,255,255,0.08)', borderRadius: '8px', padding: '12px 16px' }}>
-            <div style={{ fontSize: '12px', opacity: 0.75, textTransform: 'uppercase' }}>Total Recorded</div>
-            <div style={{ fontSize: '22px', fontWeight: 800, marginTop: '4px' }}>
+          <div className="cs-stat-card">
+            <div className="cs-stat-label">Total Recorded</div>
+            <div className="cs-stat-val">
               {contingencies.length} Events
             </div>
           </div>
-          <div style={{ background: 'rgba(255,255,255,0.08)', borderRadius: '8px', padding: '12px 16px' }}>
-            <div style={{ fontSize: '12px', opacity: 0.75, textTransform: 'uppercase' }}>Staff Deduction Policy</div>
-            <div style={{ fontSize: '14px', fontWeight: 700, marginTop: '6px', color: '#93c5fd' }}>
+          <div className="cs-stat-card">
+            <div className="cs-stat-label">Staff Deduction Policy</div>
+            <div className="cs-stat-val" style={{ fontSize: '13.5px', color: '#93c5fd' }}>
               Zero Balance Deduction (Protected)
             </div>
           </div>
@@ -255,16 +220,12 @@ export function ContingencyShieldManager({ branches = [] }) {
       </div>
 
       {/* Filters Toolbar */}
-      <div className="filter-row" style={{ display: 'flex', gap: '16px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
-        <div className="filter-item" style={{ minWidth: '220px' }}>
-          <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '4px' }}>
-            Branch Facility:
-          </label>
+      <div className="cs-filters-bar">
+        <div className="cs-filter-group">
+          <label>Branch Facility:</label>
           <select
             value={branchFilter}
             onChange={(e) => setBranchFilter(e.target.value)}
-            className="form-select"
-            style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
           >
             <option value="all">🏢 All Domestic Facilities</option>
             {branches.map(b => (
@@ -273,15 +234,11 @@ export function ContingencyShieldManager({ branches = [] }) {
           </select>
         </div>
 
-        <div className="filter-item" style={{ minWidth: '180px' }}>
-          <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#64748b', marginBottom: '4px' }}>
-            Status:
-          </label>
+        <div className="cs-filter-group">
+          <label>Status:</label>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="form-select"
-            style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
           >
             <option value="all">All Statuses</option>
             <option value="ACTIVE">● ACTIVE Only</option>
@@ -291,22 +248,22 @@ export function ContingencyShieldManager({ branches = [] }) {
         </div>
       </div>
 
-      {/* Contingencies Table */}
+      {/* Contingencies Display (Table for desktop, Cards for mobile) */}
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
+        <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted, #64748b)' }}>
           <p>Loading operational contingencies...</p>
         </div>
       ) : contingencies.length === 0 ? (
         <div style={{
           textAlign: 'center',
           padding: '48px 24px',
-          background: '#f8fafc',
+          background: 'var(--bg-card, rgba(255,255,255,0.02))',
           borderRadius: '12px',
-          border: '1px dashed #cbd5e1'
+          border: '1px dashed var(--bg-card-border, #cbd5e1)'
         }}>
           <span style={{ fontSize: '40px' }}>🛡️</span>
-          <h3 style={{ margin: '12px 0 6px 0', color: '#334155' }}>No Contingency Events Declared</h3>
-          <p style={{ margin: 0, color: '#64748b', fontSize: '14px' }}>
+          <h3 style={{ margin: '12px 0 6px 0', color: 'var(--text-primary, #334155)' }}>No Contingency Events Declared</h3>
+          <p style={{ margin: 0, color: 'var(--text-muted, #64748b)', fontSize: '14px' }}>
             All domestic branches are operating under normal operational conditions.
           </p>
           <button
@@ -318,212 +275,254 @@ export function ContingencyShieldManager({ branches = [] }) {
           </button>
         </div>
       ) : (
-        <div className="table-container" style={{ background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
-          <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
-            <thead>
-              <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0', textAlign: 'left', color: '#475569' }}>
-                <th style={{ padding: '12px 16px' }}>Status</th>
-                <th style={{ padding: '12px 16px' }}>Emergency Title & Details</th>
-                <th style={{ padding: '12px 16px' }}>Branch</th>
-                <th style={{ padding: '12px 16px' }}>Effective Dates</th>
-                <th style={{ padding: '12px 16px' }}>Leave Shield</th>
-                <th style={{ padding: '12px 16px', textAlign: 'right' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {contingencies.map(item => {
-                const badge = EVENT_TYPE_BADGES[item.event_type] || EVENT_TYPE_BADGES.other;
-                const isActive = item.status === 'ACTIVE';
+        <>
+          {/* Desktop Table View */}
+          <div className="cs-desktop-table data-table-wrap">
+            <table className="data-table" style={{ minWidth: '760px' }}>
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Emergency Title & Details</th>
+                  <th>Branch</th>
+                  <th>Effective Dates</th>
+                  <th>Leave Shield</th>
+                  <th style={{ textAlign: 'right' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {contingencies.map(item => {
+                  const badge = EVENT_TYPE_BADGES[item.event_type] || EVENT_TYPE_BADGES.other;
+                  const isActive = item.status === 'ACTIVE';
 
-                return (
-                  <tr
-                    key={item.id}
-                    style={{
-                      borderBottom: '1px solid #f1f5f9',
-                      background: isActive ? '#fffbfa' : '#fff'
-                    }}
-                  >
-                    <td style={{ padding: '12px 16px', verticalAlign: 'top' }}>
-                      <span style={{
-                        display: 'inline-block',
-                        padding: '4px 8px',
-                        borderRadius: '4px',
-                        fontSize: '11px',
-                        fontWeight: 700,
-                        background: isActive ? '#fee2e2' : item.status === 'RESOLVED' ? '#ecfdf5' : '#f1f5f9',
-                        color: isActive ? '#991b1b' : item.status === 'RESOLVED' ? '#065f46' : '#475569'
-                      }}>
-                        {item.status}
-                      </span>
-                    </td>
-                    <td style={{ padding: '12px 16px', verticalAlign: 'top' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                  return (
+                    <tr
+                      key={item.id}
+                      style={{
+                        background: isActive ? 'rgba(239, 68, 68, 0.04)' : undefined
+                      }}
+                    >
+                      <td style={{ verticalAlign: 'top' }}>
                         <span style={{
-                          fontSize: '11px',
-                          padding: '2px 8px',
-                          borderRadius: '12px',
-                          background: badge.bg,
-                          color: badge.color,
-                          fontWeight: 600,
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px'
-                        }}>
-                          <span>{badge.icon}</span>
-                          <span>{badge.label}</span>
-                        </span>
-                      </div>
-                      <div style={{ fontWeight: 700, color: '#1e293b', fontSize: '15px' }}>{item.title}</div>
-                      {item.description && (
-                        <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px', lineHeight: 1.4, maxWidth: '400px' }}>
-                          {item.description}
-                        </div>
-                      )}
-                    </td>
-                    <td style={{ padding: '12px 16px', verticalAlign: 'top', fontWeight: 600, color: '#334155' }}>
-                      🏢 {item.branch_name}
-                    </td>
-                    <td style={{ padding: '12px 16px', verticalAlign: 'top', whiteSpace: 'nowrap' }}>
-                      <div style={{ fontWeight: 600, color: '#0f172a' }}>{item.start_date}</div>
-                      <div style={{ fontSize: '11px', color: '#64748b' }}>to {item.end_date}</div>
-                    </td>
-                    <td style={{ padding: '12px 16px', verticalAlign: 'top' }}>
-                      {item.exempt_leave_deductions ? (
-                        <span style={{
-                          background: '#ecfdf5',
-                          color: '#047857',
+                          display: 'inline-block',
                           padding: '4px 8px',
                           borderRadius: '4px',
-                          fontSize: '12px',
-                          fontWeight: 600,
-                          display: 'inline-block'
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          background: isActive ? 'rgba(239, 68, 68, 0.2)' : item.status === 'RESOLVED' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                          color: isActive ? '#f87171' : item.status === 'RESOLVED' ? '#34d399' : 'var(--text-muted)'
                         }}>
-                          🛡️ 0-Day Deduction Active
+                          {item.status}
                         </span>
-                      ) : (
-                        <span style={{ color: '#94a3b8', fontSize: '12px' }}>Normal deductions</span>
-                      )}
-                    </td>
-                    <td style={{ padding: '12px 16px', verticalAlign: 'top', textAlign: 'right' }}>
-                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                        {item.exempt_leave_deductions && (
-                          <button
-                            onClick={() => handleRetroactiveShield(item)}
-                            disabled={retroShielding === item.id}
-                            title="Refund already deducted leave days to staff during this event"
-                            style={{
-                              background: '#3b82f6',
-                              color: '#fff',
-                              border: 'none',
-                              padding: '6px 10px',
-                              borderRadius: '4px',
-                              fontSize: '12px',
-                              fontWeight: 600,
-                              cursor: retroShielding === item.id ? 'not-allowed' : 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '4px'
-                            }}
-                          >
-                            <span>🛡️</span>
-                            <span>{retroShielding === item.id ? 'Refunding...' : 'Retro-Refund'}</span>
-                          </button>
+                      </td>
+                      <td style={{ verticalAlign: 'top' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                          <span style={{
+                            fontSize: '11px',
+                            padding: '2px 8px',
+                            borderRadius: '12px',
+                            background: badge.bg,
+                            color: badge.color,
+                            fontWeight: 600,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}>
+                            <span>{badge.icon}</span>
+                            <span>{badge.label}</span>
+                          </span>
+                        </div>
+                        <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '15px' }}>{item.title}</div>
+                        {item.description && (
+                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px', lineHeight: 1.4, maxWidth: '420px' }}>
+                            {item.description}
+                          </div>
                         )}
-                        <button
-                          onClick={() => openEdit(item)}
-                          style={{
-                            background: '#f1f5f9',
-                            color: '#334155',
-                            border: '1px solid #cbd5e1',
-                            padding: '6px 10px',
+                      </td>
+                      <td style={{ verticalAlign: 'top', fontWeight: 600, color: 'var(--text-primary)' }}>
+                        🏢 {item.branch_name}
+                      </td>
+                      <td style={{ verticalAlign: 'top', whiteSpace: 'nowrap' }}>
+                        <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{item.start_date}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>to {item.end_date}</div>
+                      </td>
+                      <td style={{ verticalAlign: 'top' }}>
+                        {item.exempt_leave_deductions ? (
+                          <span style={{
+                            background: 'rgba(16, 185, 129, 0.15)',
+                            color: '#34d399',
+                            border: '1px solid rgba(16, 185, 129, 0.3)',
+                            padding: '4px 8px',
                             borderRadius: '4px',
                             fontSize: '12px',
                             fontWeight: 600,
-                            cursor: 'pointer'
-                          }}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(item.id, item.title)}
-                          style={{
-                            background: '#fff',
-                            color: '#dc2626',
-                            border: '1px solid #fca5a5',
-                            padding: '6px 10px',
-                            borderRadius: '4px',
-                            fontSize: '12px',
-                            fontWeight: 600,
-                            cursor: 'pointer'
-                          }}
-                        >
-                          Delete
-                        </button>
+                            display: 'inline-block'
+                          }}>
+                            🛡️ 0-Day Deduction Active
+                          </span>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>Normal deductions</span>
+                        )}
+                      </td>
+                      <td style={{ verticalAlign: 'top', textAlign: 'right' }}>
+                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                          {item.exempt_leave_deductions && (
+                            <button
+                              onClick={() => handleRetroactiveShield(item)}
+                              disabled={retroShielding === item.id}
+                              title="Refund already deducted leave days to staff during this event"
+                              className="btn-primary"
+                              style={{
+                                padding: '5px 9px',
+                                fontSize: '11.5px',
+                                background: '#3b82f6',
+                                borderColor: '#2563eb'
+                              }}
+                            >
+                              <span>🛡️</span>
+                              <span>{retroShielding === item.id ? 'Refunding...' : 'Retro-Refund'}</span>
+                            </button>
+                          )}
+                          <button
+                            onClick={() => openEdit(item)}
+                            className="btn-edit"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDelete(item.id, item.title)}
+                            className="btn-danger"
+                            style={{ padding: '5px 9px', fontSize: '11.5px' }}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile Cards View (App-like for small screens) */}
+          <div className="cs-mobile-cards">
+            {contingencies.map(item => {
+              const badge = EVENT_TYPE_BADGES[item.event_type] || EVENT_TYPE_BADGES.other;
+              const isActive = item.status === 'ACTIVE';
+
+              return (
+                <div key={item.id} className={`cs-card-item ${isActive ? 'is-active' : ''}`}>
+                  <div className="cs-card-top">
+                    <span style={{
+                      fontSize: '11px',
+                      padding: '2px 8px',
+                      borderRadius: '12px',
+                      background: badge.bg,
+                      color: badge.color,
+                      fontWeight: 600,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}>
+                      <span>{badge.icon}</span>
+                      <span>{badge.label}</span>
+                    </span>
+
+                    <span style={{
+                      padding: '3px 8px',
+                      borderRadius: '4px',
+                      fontSize: '10.5px',
+                      fontWeight: 700,
+                      background: isActive ? 'rgba(239, 68, 68, 0.2)' : item.status === 'RESOLVED' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                      color: isActive ? '#f87171' : item.status === 'RESOLVED' ? '#34d399' : 'var(--text-muted)'
+                    }}>
+                      {item.status}
+                    </span>
+                  </div>
+
+                  <div>
+                    <div className="cs-card-title">{item.title}</div>
+                    {item.description && (
+                      <div className="cs-card-desc" style={{ marginTop: '4px' }}>
+                        {item.description}
                       </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                    )}
+                  </div>
+
+                  <div className="cs-card-meta">
+                    <div>🏢 <strong>{item.branch_name}</strong></div>
+                    <div>📅 {item.start_date} to {item.end_date}</div>
+                    {item.exempt_leave_deductions ? (
+                      <div style={{ color: '#34d399', fontWeight: 600 }}>🛡️ 0-Day Leave Shield Active</div>
+                    ) : (
+                      <div>Normal Leave Deductions</div>
+                    )}
+                  </div>
+
+                  <div className="cs-card-actions">
+                    {item.exempt_leave_deductions && (
+                      <button
+                        onClick={() => handleRetroactiveShield(item)}
+                        disabled={retroShielding === item.id}
+                        className="btn-primary"
+                        style={{ background: '#3b82f6', borderColor: '#2563eb', fontSize: '12px', padding: '8px' }}
+                      >
+                        🛡️ {retroShielding === item.id ? 'Refunding...' : 'Retro-Refund'}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => openEdit(item)}
+                      className="btn-edit"
+                      style={{ justifyContent: 'center', padding: '8px' }}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDelete(item.id, item.title)}
+                      className="btn-danger"
+                      style={{ justifyContent: 'center', padding: '8px' }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
 
-      {/* Modal: Add/Edit Contingency */}
+      {/* Modal: Add/Edit Contingency (Responsive) */}
       {modal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 9999,
-          padding: '20px'
-        }}>
-          <div style={{
-            background: '#fff',
-            borderRadius: '12px',
-            maxWidth: '560px',
-            width: '100%',
-            maxHeight: '90vh',
-            overflowY: 'auto',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
-          }}>
-            <form onSubmit={handleSave}>
-              <div style={{
-                padding: '20px 24px',
-                borderBottom: '1px solid #e2e8f0',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                background: modal === 'add' ? '#fef2f2' : '#f8fafc'
+        <div className="modal-backdrop" onClick={() => setModal(null)}>
+          <div 
+            className="modal-box" 
+            onClick={e => e.stopPropagation()}
+            style={{ maxWidth: '580px', width: '100%', maxHeight: 'calc(100vh - 30px)' }}
+          >
+            <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+              <div className="modal-header" style={{
+                background: modal === 'add' ? 'color-mix(in srgb, #ef4444 8%, var(--bg-secondary))' : undefined
               }}>
-                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: modal === 'add' ? '#991b1b' : '#1e293b' }}>
+                <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: modal === 'add' ? '#f87171' : 'var(--text-primary)' }}>
                   {modal === 'add' ? '🚨 Declare Operational Emergency / Disruption' : 'Edit Operational Contingency'}
                 </h3>
                 <button
                   type="button"
+                  className="modal-close"
                   onClick={() => setModal(null)}
-                  style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#64748b' }}
                 >
                   ✕
                 </button>
               </div>
 
-              <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
-                    Affected Domestic Branch *
-                  </label>
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto' }}>
+                <div className="field">
+                  <label>Affected Domestic Branch *</label>
                   <select
                     value={form.branch_id}
                     onChange={(e) => setForm({ ...form, branch_id: e.target.value })}
                     required
-                    style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
                   >
                     {branches.map(b => (
                       <option key={b.id} value={b.id}>{b.name}</option>
@@ -531,15 +530,12 @@ export function ContingencyShieldManager({ branches = [] }) {
                   </select>
                 </div>
 
-                <div>
-                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
-                    Emergency Event Type *
-                  </label>
+                <div className="field">
+                  <label>Emergency Event Type *</label>
                   <select
                     value={form.event_type}
                     onChange={(e) => setForm({ ...form, event_type: e.target.value })}
                     required
-                    style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
                   >
                     <option value="curfew">🚨 Curfew / Government Lockdown</option>
                     <option value="cyclone">🌪️ Extreme Weather / Cyclone Alert</option>
@@ -551,69 +547,56 @@ export function ContingencyShieldManager({ branches = [] }) {
                   </select>
                 </div>
 
-                <div>
-                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
-                    Emergency Headline / Title *
-                  </label>
+                <div className="field">
+                  <label>Emergency Headline / Title *</label>
                   <input
                     type="text"
                     value={form.title}
                     onChange={(e) => setForm({ ...form, title: e.target.value })}
                     placeholder="e.g., Colombo District Police Curfew"
                     required
-                    style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
                   />
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
-                      Start Date *
-                    </label>
+                {/* Date pickers auto-stack on narrow screens */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px' }}>
+                  <div className="field">
+                    <label>Start Date *</label>
                     <input
                       type="date"
                       value={form.start_date}
                       onChange={(e) => setForm({ ...form, start_date: e.target.value })}
                       required
-                      style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
                     />
                   </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
-                      End Date *
-                    </label>
+                  <div className="field">
+                    <label>End Date *</label>
                     <input
                       type="date"
                       value={form.end_date}
                       onChange={(e) => setForm({ ...form, end_date: e.target.value })}
                       required
-                      style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
                     />
                   </div>
                 </div>
 
-                <div>
-                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
-                    Operational Details & Directives
-                  </label>
+                <div className="field">
+                  <label>Operational Details & Directives</label>
                   <textarea
                     value={form.description}
                     onChange={(e) => setForm({ ...form, description: e.target.value })}
                     rows={3}
                     placeholder="Provide context for managers and employees, special transport advice, or branch closure details..."
-                    style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', resize: 'vertical' }}
+                    style={{ width: '100%', resize: 'vertical' }}
                   />
                 </div>
 
                 {modal === 'edit' && (
-                  <div>
-                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
-                      Declaration Status
-                    </label>
+                  <div className="field">
+                    <label>Declaration Status</label>
                     <select
                       value={form.status}
                       onChange={(e) => setForm({ ...form, status: e.target.value })}
-                      style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
                     >
                       <option value="ACTIVE">ACTIVE (Shield in effect)</option>
                       <option value="RESOLVED">RESOLVED (Operations normal)</option>
@@ -623,10 +606,10 @@ export function ContingencyShieldManager({ branches = [] }) {
                 )}
 
                 <div style={{
-                  background: '#f0fdf4',
-                  border: '1px solid #bbf7d0',
+                  background: 'rgba(16, 185, 129, 0.08)',
+                  border: '1px solid rgba(16, 185, 129, 0.25)',
                   borderRadius: '8px',
-                  padding: '14px',
+                  padding: '12px 14px',
                   display: 'flex',
                   alignItems: 'flex-start',
                   gap: '12px'
@@ -638,45 +621,27 @@ export function ContingencyShieldManager({ branches = [] }) {
                     onChange={(e) => setForm({ ...form, exempt_leave_deductions: e.target.checked })}
                     style={{ marginTop: '3px', transform: 'scale(1.2)', cursor: 'pointer' }}
                   />
-                  <label htmlFor="exempt_checkbox" style={{ fontSize: '13px', color: '#166534', cursor: 'pointer', lineHeight: 1.4 }}>
-                    <strong>Exempt Leave Deductions (Contingency Shield)</strong><br />
+                  <label htmlFor="exempt_checkbox" style={{ fontSize: '13px', color: '#34d399', cursor: 'pointer', lineHeight: 1.4 }}>
+                    <strong style={{ color: '#fff' }}>Exempt Leave Deductions (Contingency Shield)</strong><br />
                     When checked, any employee leave taken during these dates will deduct <strong>0 balance days</strong>. Staff will NOT lose their annual or casual balances due to force majeure events.
                   </label>
                 </div>
               </div>
 
-              <div style={{
-                padding: '16px 24px',
-                borderTop: '1px solid #e2e8f0',
-                display: 'flex',
-                justifyContent: 'flex-end',
-                gap: '12px',
-                background: '#f8fafc'
-              }}>
+              <div className="modal-footer" style={{ flexWrap: 'wrap', gap: '8px' }}>
                 <button
                   type="button"
+                  className="btn-secondary"
                   onClick={() => setModal(null)}
-                  style={{
-                    background: '#fff',
-                    border: '1px solid #cbd5e1',
-                    padding: '8px 16px',
-                    borderRadius: '6px',
-                    fontWeight: 600,
-                    cursor: 'pointer'
-                  }}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
+                  className="btn-primary"
                   style={{
-                    background: modal === 'add' ? '#dc2626' : '#2563eb',
-                    color: '#fff',
-                    border: 'none',
-                    padding: '8px 18px',
-                    borderRadius: '6px',
-                    fontWeight: 700,
-                    cursor: 'pointer'
+                    background: modal === 'add' ? '#dc2626' : undefined,
+                    borderColor: modal === 'add' ? '#b91c1c' : undefined
                   }}
                 >
                   {modal === 'add' ? '🚨 Declare Emergency' : 'Save Changes'}
@@ -717,7 +682,7 @@ export function ActiveContingencyAlertBanner({ branchId = null }) {
     <div style={{
       background: 'linear-gradient(90deg, #991b1b 0%, #dc2626 100%)',
       color: '#fff',
-      padding: '14px 20px',
+      padding: 'clamp(10px, 2.5vw, 14px) clamp(12px, 3vw, 20px)',
       borderRadius: '8px',
       marginBottom: '20px',
       boxShadow: '0 4px 12px rgba(220, 38, 38, 0.25)',
