@@ -2576,5 +2576,233 @@
   }
 }
 
+/* ===================================================
+   Branch Holidays Manager (Responsive)
+   =================================================== */
+
+.holidays-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.holidays-header-banner {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 25%, #0f172a) 0%, color-mix(in srgb, var(--accent) 10%, #1e1b4b) 100%);
+  color: #fff;
+  border-radius: var(--border-radius-md, 12px);
+  padding: 24px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--bg-card-border, rgba(255, 255, 255, 0.1));
+}
+
+.holidays-header-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.holidays-header-info {
+  flex: 1 1 300px;
+  min-width: 0;
+}
+
+.holidays-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.holidays-title-row h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.holidays-header-desc {
+  margin: 0;
+  opacity: 0.85;
+  font-size: 13.5px;
+  line-height: 1.5;
+  max-width: 720px;
+}
+
+.holidays-header-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.holidays-branch-select {
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--bg-input, rgba(0, 0, 0, 0.3));
+  color: var(--text-primary, #fff);
+  border: 1px solid var(--bg-card-border, rgba(255, 255, 255, 0.15));
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+}
+
+.holidays-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.holidays-stat-card {
+  padding: 14px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--bg-card-border);
+  border-radius: var(--border-radius-md, 10px);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  transition: all var(--transition-fast, 0.2s);
+}
+
+.holidays-stat-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.holidays-stat-val {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.holidays-stat-lbl {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* Dual View: Desktop Table vs Mobile Cards */
+.holidays-desktop-table {
+  display: block;
+}
+
+.holidays-mobile-cards {
+  display: none;
+}
+
+.holidays-card {
+  background: var(--bg-card, #1e293b);
+  border: 1px solid var(--bg-card-border, #334155);
+  border-radius: var(--border-radius-md, 10px);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: all var(--transition-fast, 0.2s);
+}
+
+.holidays-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.holidays-card-date {
+  font-family: monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent-light, #60a5fa);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--bg-card-border, rgba(255, 255, 255, 0.08));
+}
+
+.holidays-card-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary, #fff);
+  line-height: 1.3;
+}
+
+.holidays-card-branch {
+  font-size: 12.5px;
+  color: var(--text-secondary, #94a3b8);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.holidays-card-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--bg-card-border, #334155);
+}
+
+.holidays-card-actions button {
+  flex: 1 1 auto;
+  justify-content: center;
+  padding: 8px 12px;
+}
+
+@media (max-width: 768px) {
+  .holidays-header-banner {
+    padding: 16px;
+  }
+  .holidays-title-row h2 {
+    font-size: 18px;
+  }
+  .holidays-header-actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .holidays-branch-select {
+    width: 100%;
+  }
+  .holidays-header-actions .btn-primary {
+    width: 100%;
+    justify-content: center;
+  }
+  .holidays-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  .holidays-stat-card {
+    padding: 12px;
+    gap: 10px;
+  }
+  .holidays-stat-icon {
+    width: 34px;
+    height: 34px;
+  }
+  .holidays-stat-val {
+    font-size: 17px;
+  }
+  .holidays-desktop-table {
+    display: none;
+  }
+  .holidays-mobile-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .holidays-stats-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
 
 
