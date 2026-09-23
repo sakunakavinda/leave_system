@@ -27,7 +27,7 @@ router.get('/', optionalAuth, async (req, res) => {
         c.exempt_leave_deductions,
         c.status,
         c.created_at,
-        b.name AS branch_name
+        CASE WHEN b.location IS NOT NULL AND TRIM(b.location) != '' THEN CONCAT(b.name, ' (', b.location, ')') ELSE b.name END AS branch_name
       FROM operational_contingencies c
       JOIN branches b ON c.branch_id = b.id
       WHERE 1=1
@@ -100,7 +100,8 @@ router.post('/', requireAuth, requireRole('super_admin', 'branch_manager'), asyn
     const [rows] = await pool.query(
       `SELECT c.id, c.branch_id, DATE_FORMAT(c.start_date, '%Y-%m-%d') AS start_date,
               DATE_FORMAT(c.end_date, '%Y-%m-%d') AS end_date, c.event_type, c.title,
-              c.description, c.exempt_leave_deductions, c.status, b.name AS branch_name
+              c.description, c.exempt_leave_deductions, c.status,
+              CASE WHEN b.location IS NOT NULL AND TRIM(b.location) != '' THEN CONCAT(b.name, ' (', b.location, ')') ELSE b.name END AS branch_name
        FROM operational_contingencies c
        JOIN branches b ON c.branch_id = b.id
        WHERE c.id = ?`,
@@ -153,7 +154,8 @@ router.put('/:id', requireAuth, requireRole('super_admin', 'branch_manager'), as
     const [rows] = await pool.query(
       `SELECT c.id, c.branch_id, DATE_FORMAT(c.start_date, '%Y-%m-%d') AS start_date,
               DATE_FORMAT(c.end_date, '%Y-%m-%d') AS end_date, c.event_type, c.title,
-              c.description, c.exempt_leave_deductions, c.status, b.name AS branch_name
+              c.description, c.exempt_leave_deductions, c.status,
+              CASE WHEN b.location IS NOT NULL AND TRIM(b.location) != '' THEN CONCAT(b.name, ' (', b.location, ')') ELSE b.name END AS branch_name
        FROM operational_contingencies c
        JOIN branches b ON c.branch_id = b.id
        WHERE c.id = ?`,

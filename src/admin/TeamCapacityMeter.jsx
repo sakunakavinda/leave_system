@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { api } from '../api.js';
+import { api, formatBranchName } from '../api.js';
 
 export function TeamCapacityMeter({ branches = [], activeBranch = 'all' }) {
   const todayStr = new Date().toISOString().split('T')[0];
@@ -108,7 +108,7 @@ export function TeamCapacityMeter({ branches = [], activeBranch = 'all' }) {
           >
             <option value="all">All Branches</option>
             {branches.map(b => (
-              <option key={b.id} value={b.id}>{b.name}</option>
+              <option key={b.id} value={b.id}>{formatBranchName(b)}</option>
             ))}
           </select>
 

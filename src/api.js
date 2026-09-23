@@ -49,6 +49,18 @@ async function fetchApi(endpoint, options = {}) {
   return res.json();
 }
 
+export const formatBranchName = (branchOrName, location) => {
+  if (!branchOrName) return '';
+  if (typeof branchOrName === 'object') {
+    const name = branchOrName.name || '';
+    const loc = branchOrName.location ? String(branchOrName.location).trim() : '';
+    if (!name) return loc;
+    return loc ? `${name} (${loc})` : name;
+  }
+  const loc = location ? String(location).trim() : '';
+  return loc ? `${branchOrName} (${loc})` : String(branchOrName);
+};
+
 export const api = {
   // Auth
   loginManager: async (username, password) => {
@@ -73,9 +85,21 @@ export const api = {
   },
 
   // Branches
-  getBranches: () => fetchApi('/branches'),
-  addBranch: (data) => fetchApi('/branches', { method: 'POST', body: JSON.stringify(data) }),
-  updateBranch: (id, data) => fetchApi(`/branches/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  getBranches: async () => {
+    const list = await fetchApi('/branches');
+    return Array.isArray(list) ? list.map(b => ({
+      ...b,
+      displayName: formatBranchName(b)
+    })) : [];
+  },
+  addBranch: async (data) => {
+    const res = await fetchApi('/branches', { method: 'POST', body: JSON.stringify(data) });
+    return res ? { ...res, displayName: formatBranchName(res) } : res;
+  },
+  updateBranch: async (id, data) => {
+    const res = await fetchApi(`/branches/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    return res ? { ...res, displayName: formatBranchName(res) } : res;
+  },
   deleteBranch: (id) => fetchApi(`/branches/${id}`, { method: 'DELETE' }),
 
   // Departments

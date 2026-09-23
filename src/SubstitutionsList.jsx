@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { formatBranchName } from './api'
 import './LeaveList.css'
 
 const STATUS_CONFIG = {
@@ -54,7 +55,7 @@ export default function SubstitutionsList({ onBack, onAgree, submissions = [], e
     return {
       id: sub.id,
       name: emp?.name || 'Unknown',
-      branch: branch?.name || 'Unknown',
+      branch: formatBranchName(branch) || 'Unknown',
       department: 'N/A', // Deprecated
       post: role?.title || 'Unknown',
       appliedDate: sub.appliedDate,

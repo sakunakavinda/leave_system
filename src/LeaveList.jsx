@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { api } from './api'
+import { api, formatBranchName } from './api'
 import './LeaveList.css'
 
 
@@ -115,7 +115,7 @@ export default function LeaveList({ onBack, submissions = [], employees = [], br
     return {
       id: sub.id,
       name: emp?.name || 'Unknown',
-      branch: branch?.name || 'Unknown',
+      branch: formatBranchName(branch) || 'Unknown',
       department: 'N/A', // Deprecated
       post: role?.title || 'Unknown',
       appliedDate: sub.appliedDate,

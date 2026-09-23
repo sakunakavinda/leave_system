@@ -20,7 +20,8 @@ export async function generatePayrollData({ branch_id, month, year }) {
 
   // 1. Fetch employees
   let empSql = `
-    SELECT e.id, e.name, e.branch_id, e.role_id, r.title AS role_name, b.name AS branch_name
+    SELECT e.id, e.name, e.branch_id, e.role_id, r.title AS role_name,
+           CASE WHEN b.location IS NOT NULL AND TRIM(b.location) != '' THEN CONCAT(b.name, ' (', b.location, ')') ELSE b.name END AS branch_name
     FROM employees e
     LEFT JOIN roles r ON e.role_id = r.id
     LEFT JOIN branches b ON e.branch_id = b.id

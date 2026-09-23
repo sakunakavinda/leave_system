@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { api } from '../api.js';
+import { api, formatBranchName } from '../api.js';
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -228,7 +228,7 @@ export function PayrollExportManager({ branches = [], canExport = true, currentU
             >
               <option value="all">🏢 All Domestic Branches</option>
               {branches.map(b => (
-                <option key={b.id} value={b.id}>{b.name}</option>
+                <option key={b.id} value={b.id}>{formatBranchName(b)}</option>
               ))}
             </select>
           )}

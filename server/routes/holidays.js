@@ -17,7 +17,8 @@ router.get('/', optionalAuth, async (req, res) => {
   try {
     let sql = `
       SELECT h.id, h.branch_id, DATE_FORMAT(h.holiday_date, '%Y-%m-%d') AS holiday_date, 
-             h.name, h.holiday_type, h.created_at, b.name AS branch_name
+             h.name, h.holiday_type, h.created_at,
+             CASE WHEN b.location IS NOT NULL AND TRIM(b.location) != '' THEN CONCAT(b.name, ' (', b.location, ')') ELSE b.name END AS branch_name
       FROM branch_holidays h
       JOIN branches b ON h.branch_id = b.id
     `;

@@ -731,7 +731,7 @@ router.get('/overview/:secretCode', async (req, res) => {
     const [empRows] = await pool.query(`
       SELECT e.id, e.name, e.role_id, e.branch_id,
              r.title AS role_title,
-             b.name AS branch_name,
+             CASE WHEN b.location IS NOT NULL AND TRIM(b.location) != '' THEN CONCAT(b.name, ' (', b.location, ')') ELSE b.name END AS branch_name,
              d.name AS department_name
       FROM employees e
       LEFT JOIN roles r ON e.role_id = r.id
@@ -837,7 +837,8 @@ router.get('/capacity-meter', optionalAuth, async (req, res) => {
   try {
     // 1. Fetch active employees in scope
     let empSql = `
-      SELECT e.id, e.name, e.branch_id, e.role_id, r.title AS role_name, b.name AS branch_name
+      SELECT e.id, e.name, e.branch_id, e.role_id, r.title AS role_name,
+             CASE WHEN b.location IS NOT NULL AND TRIM(b.location) != '' THEN CONCAT(b.name, ' (', b.location, ')') ELSE b.name END AS branch_name
       FROM employees e
       LEFT JOIN roles r ON e.role_id = r.id
       LEFT JOIN branches b ON e.branch_id = b.id
@@ -861,7 +862,7 @@ router.get('/capacity-meter', optionalAuth, async (req, res) => {
         e.name AS employee_name,
         e.role_id,
         r.title AS role_name,
-        b.name AS branch_name,
+        CASE WHEN b.location IS NOT NULL AND TRIM(b.location) != '' THEN CONCAT(b.name, ' (', b.location, ')') ELSE b.name END AS branch_name,
         sub.name AS substitute_name
       FROM leave_application_dates d
       JOIN leave_applications a ON d.leave_application_id = a.id

@@ -5,7 +5,7 @@ import { ManageShiftMasters, ManageShiftRosters } from './ShiftRosterManager.jsx
 import { ContingencyShieldManager } from './ContingencyShieldManager.jsx'
 import { PayrollExportManager } from './PayrollExportManager.jsx'
 import { ManageOperatingSchedules } from './OperatingSchedulesManager.jsx'
-import { api, tokenStorage } from '../api.js'
+import { api, tokenStorage, formatBranchName } from '../api.js'
 import { applyTheme } from './theme.js'
 
 const NAV = [
@@ -770,7 +770,7 @@ export default function AdminApp() {
                 color: 'var(--text-secondary)'
               }}>
                 <span>📍</span>
-                <span>{branches.find(b => b.id === currentUser.branch_id)?.name || 'Assigned Branch'}</span>
+                <span>{formatBranchName(branches.find(b => b.id === currentUser.branch_id)) || 'Assigned Branch'}</span>
               </div>
             )}
 

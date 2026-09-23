@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { api } from '../api.js'
+import { api, formatBranchName } from '../api.js'
 import { APP_THEMES, applyTheme } from './theme.js'
 import { TeamCapacityMeter } from './TeamCapacityMeter.jsx'
 import { ActiveContingencyAlertBanner } from './ContingencyShieldManager.jsx'
@@ -361,7 +361,11 @@ export function AdminDashboard({
   const getEmp = (id) => employees?.find(e => e.id === id) || {}
   const getRole = (id) => roles?.find(r => r.id === id) || {}
   const getDept = (id) => departments?.find(d => d.id === id) || {}
-  const getBranch = (id) => branches?.find(b => b.id === id) || {}
+  const getBranch = (id) => {
+    const b = branches?.find(b => b.id === id)
+    if (!b) return {}
+    return { ...b, name: formatBranchName(b) }
+  }
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type })
@@ -608,7 +612,7 @@ export function AdminDashboard({
         {branches.length > 1 && (
           <select className="admin-filter-select" value={branchFilter} onChange={e => setBranchFilter(e.target.value)} id="dash-branch-filter">
             <option value="all">All Branches</option>
-            {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            {branches.map(b => <option key={b.id} value={b.id}>{formatBranchName(b)}</option>)}
           </select>
         )}
         <select className="admin-filter-select" value={filter} onChange={e => setFilter(e.target.value)} id="dash-status-filter">
@@ -1128,7 +1132,7 @@ export function AdminDashboard({
                             >
                               <option value="all">All Branches</option>
                               {safeBranches.map(b => (
-                                <option key={b.id} value={b.id}>{b.name}</option>
+                                <option key={b.id} value={b.id}>{formatBranchName(b)}</option>
                               ))}
                             </select>
                           </div>
@@ -1485,7 +1489,7 @@ export function AdminDashboard({
                             >
                               <option value="all">All Branches</option>
                               {safeBranches.map(b => (
-                                <option key={b.id} value={b.id}>{b.name}</option>
+                                <option key={b.id} value={b.id}>{formatBranchName(b)}</option>
                               ))}
                             </select>
                           </div>
@@ -2075,7 +2079,11 @@ export function ManageEmployees({
 
   const getRole = (role_id) => roles?.find(r => r.id === role_id)
   const getDept = (dept_id) => departments?.find(d => d.id === dept_id)
-  const getBranch = (branch_id) => branches?.find(b => b.id === branch_id)
+  const getBranch = (branch_id) => {
+    const b = branches?.find(b => b.id === branch_id)
+    if (!b) return null
+    return { ...b, name: formatBranchName(b) }
+  }
 
   const showToast = (msg, type='success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000) }
 
@@ -2322,7 +2330,7 @@ export function ManageEmployees({
               branches.length > 1 && (
                 <select className="admin-filter-select" value={branchFilter} onChange={e => setBranchFilter(e.target.value)} id="emp-branch-filter">
                   <option value="all">All Branches</option>
-                  {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  {branches.map(b => <option key={b.id} value={b.id}>{formatBranchName(b)}</option>)}
                 </select>
               )
             )}
@@ -2513,7 +2521,7 @@ export function ManageEmployees({
               </div>
               <select className="admin-filter-select" value={overviewBranchFilter} onChange={e => setOverviewBranchFilter(e.target.value)} id="overview-branch-filter">
                 <option value="all">All Branches</option>
-                {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                {branches.map(b => <option key={b.id} value={b.id}>{formatBranchName(b)}</option>)}
               </select>
             </div>
           )}
@@ -2623,7 +2631,7 @@ export function ManageEmployees({
                     <input readOnly value={getBranch(currentUser.branch_id)?.name || ''} style={{ opacity: 0.8, cursor: 'not-allowed' }} />
                   ) : (
                     <select value={form.branch_id} onChange={e => setForm(p=>({...p, branch_id: e.target.value}))}>
-                      {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                      {branches.map(b => <option key={b.id} value={b.id}>{formatBranchName(b)}</option>)}
                     </select>
                   )}
                 </div>
@@ -2803,7 +2811,7 @@ export function ManageEmployees({
                   const count = overviewEmployees.filter(e => e.branch_id === b.id).length;
                   return (
                     <div key={b.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'var(--bg-input)', borderRadius: '8px', border: '1px solid var(--bg-card-border)' }}>
-                      <div style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{b.name}</div>
+                      <div style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{formatBranchName(b)}</div>
                       <div style={{ background: 'var(--accent-gradient)', color: '#fff', padding: '4px 12px', borderRadius: '20px', fontSize: '13px', fontWeight: 600 }}>{count}</div>
                     </div>
                   );
@@ -3671,7 +3679,7 @@ export function ManageManagers({ branches, managers, setManagers, onNavigatePage
 
   const filtered = managers.filter(m => {
     const q = search.toLowerCase()
-    const bName = branches.find(br => br.id === m.branch_id)?.name || ''
+    const bName = formatBranchName(branches.find(br => br.id === m.branch_id)) || ''
     return !q ||
       m.username.toLowerCase().includes(q) ||
       bName.toLowerCase().includes(q) ||
@@ -3787,7 +3795,7 @@ export function ManageManagers({ branches, managers, setManagers, onNavigatePage
                       </span>
                     ) : (
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '13px', fontWeight: 500 }}>
-                        📍 {branch ? branch.name : <em style={{ color: 'var(--text-muted)' }}>Unassigned</em>}
+                        📍 {branch ? formatBranchName(branch) : <em style={{ color: 'var(--text-muted)' }}>Unassigned</em>}
                       </span>
                     )}
                   </td>
@@ -3957,7 +3965,7 @@ export function ManageManagers({ branches, managers, setManagers, onNavigatePage
                           <>
                             <option value="">Select a branch…</option>
                             {branches.map(b => (
-                              <option key={b.id} value={b.id}>{b.name} ({b.location || 'Active'})</option>
+                              <option key={b.id} value={b.id}>{formatBranchName(b)}</option>
                             ))}
                           </>
                         )}
@@ -5452,7 +5460,7 @@ export function LeaveOverview({ applications = [], employees = [], branches = []
           {branches.length > 1 && (
             <select className="admin-filter-select" value={branchFilter} onChange={e => setBranchFilter(e.target.value)}>
               <option value="all">All Branches</option>
-              {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              {branches.map(b => <option key={b.id} value={b.id}>{formatBranchName(b)}</option>)}
             </select>
           )}
           <select className="admin-filter-select" value={selectedYear} onChange={e => setSelectedYear(parseInt(e.target.value))}>
@@ -6834,12 +6842,12 @@ export function ManageBranchHolidays({ branches = [] }) {
       setIsSubmitting(true);
       if (modal === 'add') {
         const created = await api.addHoliday(form);
-        const branchName = branches.find(b => b.id === form.branch_id)?.name || '';
+        const branchName = formatBranchName(branches.find(b => b.id === form.branch_id)) || '';
         setHolidays(prev => [...prev, { ...created, branch_name: branchName }]);
         showToast('Branch holiday added successfully');
       } else {
         const updated = await api.updateHoliday(modal.id, form);
-        const branchName = branches.find(b => b.id === form.branch_id)?.name || '';
+        const branchName = formatBranchName(branches.find(b => b.id === form.branch_id)) || '';
         setHolidays(prev => prev.map(h => h.id === modal.id ? { ...updated, branch_name: branchName } : h));
         showToast('Holiday updated successfully');
       }
@@ -6893,7 +6901,7 @@ export function ManageBranchHolidays({ branches = [] }) {
             >
               <option value="all">🏢 All Domestic Branches</option>
               {branches.map(b => (
-                <option key={b.id} value={b.id}>{b.name}</option>
+                <option key={b.id} value={b.id}>{formatBranchName(b)}</option>
               ))}
             </select>
             <button className="btn-primary" onClick={openAdd}>
@@ -7116,7 +7124,7 @@ export function ManageBranchHolidays({ branches = [] }) {
                     required
                   >
                     {branches.map(b => (
-                      <option key={b.id} value={b.id}>{b.name} ({b.location || 'Local'})</option>
+                      <option key={b.id} value={b.id}>{formatBranchName(b)}</option>
                     ))}
                   </select>
                 </div>

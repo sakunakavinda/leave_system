@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { api } from '../api.js';
+import { api, formatBranchName } from '../api.js';
 
 const EVENT_TYPE_BADGES = {
   curfew: { label: 'Curfew / Lockdown', bg: '#fee2e2', color: '#991b1b', icon: '🚨' },
@@ -229,7 +229,7 @@ export function ContingencyShieldManager({ branches = [] }) {
           >
             <option value="all">🏢 All Domestic Facilities</option>
             {branches.map(b => (
-              <option key={b.id} value={b.id}>{b.name}</option>
+              <option key={b.id} value={b.id}>{formatBranchName(b)}</option>
             ))}
           </select>
         </div>
@@ -525,7 +525,7 @@ export function ContingencyShieldManager({ branches = [] }) {
                     required
                   >
                     {branches.map(b => (
-                      <option key={b.id} value={b.id}>{b.name}</option>
+                      <option key={b.id} value={b.id}>{formatBranchName(b)}</option>
                     ))}
                   </select>
                 </div>

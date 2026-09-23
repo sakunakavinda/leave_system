@@ -4,7 +4,7 @@ import './admin/admin.css'
 import LeaveList from './LeaveList.jsx'
 import LeaveOverview from './LeaveOverview.jsx'
 import SubstitutionsList from './SubstitutionsList.jsx'
-import { api } from './api.js'
+import { api, formatBranchName } from './api.js'
 import { applyTheme } from './admin/theme.js'
 
 const getMinLeaveDate = () => {
@@ -512,7 +512,7 @@ function App() {
               {applicant && !verifyingCode && (
                 <div style={{ marginTop: '6px', fontSize: '12.5px', color: '#10b981', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 500 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                  <span>Verified: <strong>{applicant.name}</strong> • {branches.find(b => b.id === applicant.branch_id)?.name || 'Branch'}</span>
+                  <span>Verified: <strong>{applicant.name}</strong> • {formatBranchName(branches.find(b => b.id === applicant.branch_id)) || applicant.branch_name || 'Branch'}</span>
                 </div>
               )}
               {codeError && !verifyingCode && (

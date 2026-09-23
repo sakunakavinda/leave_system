@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { api } from '../api.js';
+import { api, formatBranchName } from '../api.js';
 
 const PRESET_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#64748b'];
 
@@ -200,7 +200,7 @@ export function ManageShiftMasters({ branches = [] }) {
           >
             <option value="all">🏢 All Branches (Global & Local)</option>
             {branches.map(b => (
-              <option key={b.id} value={b.id}>{b.name}</option>
+              <option key={b.id} value={b.id}>{formatBranchName(b)}</option>
             ))}
           </select>
 
@@ -567,7 +567,7 @@ export function ManageShiftMasters({ branches = [] }) {
                   >
                     <option value="">🌐 All Branches (Global Shift Template)</option>
                     {branches.map(b => (
-                      <option key={b.id} value={b.id}>🏢 {b.name}</option>
+                      <option key={b.id} value={b.id}>🏢 {formatBranchName(b)}</option>
                     ))}
                   </select>
                 </div>
@@ -968,7 +968,7 @@ export function ManageShiftRosters({ branches = [], employees = [], canEdit = tr
             >
               <option value="all">🏢 All Branches</option>
               {branches.map(b => (
-                <option key={b.id} value={b.id}>{b.name}</option>
+                <option key={b.id} value={b.id}>{formatBranchName(b)}</option>
               ))}
             </select>
           )}
