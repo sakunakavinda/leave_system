@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import pool from '../db.js';
 import { generateToken, requireAuth } from '../middleware/auth.js';
+import { formatPermissions } from './managers.js';
 
 const router = express.Router();
 
@@ -21,7 +22,7 @@ router.post('/login', async (req, res) => {
 
   try {
     const [rows] = await pool.query(
-      'SELECT id, username, password_hash, role, branch_id, status FROM managers WHERE username = ? AND status = ?',
+      'SELECT id, username, password_hash, role, branch_id, status, permissions FROM managers WHERE username = ? AND status = ?',
       [username.trim(), 'active']
     );
 
@@ -58,11 +59,14 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid username or password' });
     }
 
+    const userPermissions = formatPermissions(manager.permissions, manager.role);
+
     const payload = {
       id: manager.id,
       username: manager.username,
       role: manager.role,
       branch_id: manager.branch_id,
+      permissions: userPermissions,
       type: 'manager'
     };
 
@@ -75,7 +79,8 @@ router.post('/login', async (req, res) => {
         username: manager.username,
         role: manager.role,
         branch_id: manager.branch_id,
-        status: manager.status
+        status: manager.status,
+        permissions: userPermissions
       }
     });
   } catch (err) {
@@ -91,13 +96,20 @@ router.get('/me', requireAuth, async (req, res) => {
   try {
     if (req.user.type === 'manager') {
       const [rows] = await pool.query(
-        'SELECT id, username, role, branch_id, status FROM managers WHERE id = ?',
+        'SELECT id, username, role, branch_id, status, permissions FROM managers WHERE id = ?',
         [req.user.id]
       );
       if (rows.length === 0 || rows[0].status !== 'active') {
         return res.status(401).json({ error: 'User account is inactive or not found' });
       }
-      return res.json({ user: rows[0] });
+      const manager = rows[0];
+      const userPermissions = formatPermissions(manager.permissions, manager.role);
+      return res.json({ 
+        user: {
+          ...manager,
+          permissions: userPermissions
+        } 
+      });
     }
 
     if (req.user.type === 'employee') {

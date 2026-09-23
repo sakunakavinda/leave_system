@@ -60,6 +60,16 @@ export const optionalAuth = (req, res, next) => {
   next();
 };
 
+export const ROLES = {
+  ADMIN: 'admin',
+  BRANCH_MANAGER: 'branch_manager',
+  HR_OFFICER: 'hr_officer'
+};
+
+export const isAdminRole = (role) => ['super_admin', 'super manager', 'admin'].includes(role);
+export const isBranchManagerRole = (role) => ['branch_manager', 'manager'].includes(role);
+export const isHrOfficerRole = (role) => ['hr_officer', 'hr'].includes(role);
+
 /**
  * Middleware: Restricts access by user role
  */
@@ -69,16 +79,49 @@ export const requireRole = (...allowedRoles) => {
       return res.status(401).json({ error: 'Authentication required' });
     }
 
-    // super_admin always has access
-    if (req.user.role === 'super_admin' || req.user.role === 'super manager') {
+    // Admins always have access
+    if (isAdminRole(req.user.role)) {
       return next();
     }
 
-    if (!allowedRoles.includes(req.user.role)) {
+    const userRole = req.user.role;
+    const matches = allowedRoles.some(allowed => {
+      if (allowed === 'admin') return isAdminRole(userRole);
+      if (allowed === 'branch_manager' || allowed === 'manager') return isBranchManagerRole(userRole);
+      if (allowed === 'hr_officer' || allowed === 'hr') return isHrOfficerRole(userRole);
+      return userRole === allowed;
+    });
+
+    if (!matches) {
       return res.status(403).json({ error: 'Forbidden: Insufficient privileges' });
     }
 
     next();
+  };
+};
+
+/**
+ * Middleware: Restricts access by granular user permission
+ */
+export const requirePermission = (permissionKey) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    // Admins always have all capabilities
+    if (isAdminRole(req.user.role)) {
+      return next();
+    }
+
+    const perms = req.user.permissions;
+    if (perms && (perms['*'] || perms[permissionKey] === true)) {
+      return next();
+    }
+
+    return res.status(403).json({
+      error: `Forbidden: Missing required capability '${permissionKey}'`
+    });
   };
 };
 
@@ -88,11 +131,11 @@ export const requireRole = (...allowedRoles) => {
  */
 export const getBranchScope = (req) => {
   if (!req.user) return null;
-  // Super admins or executives see all branches
-  if (req.user.role === 'super_admin' || req.user.role === 'super manager') {
+  // Admins see all branches
+  if (isAdminRole(req.user.role)) {
     return null;
   }
-  // Branch managers are scoped to their branch
+  // Branch managers and HR officers are scoped to their branch
   if (req.user.branch_id) {
     return req.user.branch_id;
   }

@@ -10,7 +10,7 @@ const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frid
 /**
  * Calculate payroll summary data for employees in a month
  */
-async function generatePayrollData({ branch_id, month, year }) {
+export async function generatePayrollData({ branch_id, month, year }) {
   const currentYear = parseInt(year) || new Date().getFullYear();
   const currentMonth = parseInt(month) || (new Date().getMonth() + 1);
 
@@ -63,6 +63,9 @@ async function generatePayrollData({ branch_id, month, year }) {
     `SELECT 
       a.employee_id,
       a.leave_type,
+      a.is_no_pay,
+      a.document_status,
+      DATE_FORMAT(a.document_deadline, '%Y-%m-%d') AS document_deadline,
       DATE_FORMAT(d.leave_date, '%Y-%m-%d') AS leave_date
      FROM leave_applications a
      JOIN leave_application_dates d ON a.id = d.leave_application_id
@@ -81,6 +84,15 @@ async function generatePayrollData({ branch_id, month, year }) {
        AND start_date <= ? AND end_date >= ?`,
     [endDateStr, startDateStr]
   );
+
+  // 5. Query all leave types to determine paid vs unpaid (LOP) compensation
+  const [leaveTypes] = await pool.query('SELECT code, name, is_paid FROM leave_types');
+  const leaveTypePaidMap = new Map();
+  leaveTypes.forEach(lt => {
+    const isPaid = (lt.is_paid !== 0 && lt.is_paid !== false);
+    if (lt.code) leaveTypePaidMap.set(lt.code.toLowerCase(), isPaid);
+    if (lt.name) leaveTypePaidMap.set(lt.name.toLowerCase(), isPaid);
+  });
 
   let totalLopAccumulator = 0;
   let totalPayableAccumulator = 0;
@@ -110,6 +122,7 @@ async function generatePayrollData({ branch_id, month, year }) {
     let paidLeaveDays = 0;
     let lopDays = 0;
     let contingencyExemptDays = 0;
+    const leaveBreakdown = {};
 
     empLeaves.forEach(l => {
       // Check if covered by contingency
@@ -117,9 +130,34 @@ async function generatePayrollData({ branch_id, month, year }) {
         c => c.branch_id === emp.branch_id && l.leave_date >= c.start_date && l.leave_date <= c.end_date
       );
 
+      const typeKey = (l.leave_type || '').toLowerCase();
+      // Determine if paid or unpaid based on leave_types.is_paid
+      let isPaid = true;
+      if (typeKey === 'unpaid' || typeKey === 'lop') {
+        isPaid = false;
+      } else if (leaveTypePaidMap.has(typeKey)) {
+        isPaid = leaveTypePaidMap.get(typeKey);
+      }
+
+      // If document was required and not provided/approved (overdue, rejected, or missing past deadline)
+      const today = new Date().toISOString().split('T')[0];
+      const isDocMissingOrRejected = l.is_no_pay || 
+        l.document_status === 'overdue' || 
+        l.document_status === 'rejected' || 
+        (l.document_status === 'pending_upload' && l.document_deadline && l.document_deadline < today);
+
+      if (isDocMissingOrRejected) {
+        isPaid = false;
+      }
+
+      const leaveLabel = !isPaid && typeKey !== 'unpaid' && typeKey !== 'lop'
+        ? `${l.leave_type} (No Pay - Missing/Rejected Doc)`
+        : (l.leave_type || 'Leave');
+      leaveBreakdown[leaveLabel] = (leaveBreakdown[leaveLabel] || 0) + 1;
+
       if (isContingency) {
         contingencyExemptDays++;
-      } else if (l.leave_type === 'unpaid' || l.leave_type === 'lop') {
+      } else if (!isPaid) {
         lopDays++;
       } else {
         paidLeaveDays++;
@@ -141,6 +179,7 @@ async function generatePayrollData({ branch_id, month, year }) {
       contingencyExemptDays,
       lopDays,
       netPayableDays,
+      leaveBreakdown,
       epfEtfStatus: netPayableDays > 0 ? 'Eligible' : 'Zero Contribution'
     };
   });

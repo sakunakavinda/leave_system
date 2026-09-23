@@ -82,6 +82,7 @@ function App() {
   const [calculatingDeduction, setCalculatingDeduction] = useState(false)
   const [candidateSubstitutes, setCandidateSubstitutes] = useState([])
   const [loadingCandidates, setLoadingCandidates] = useState(false)
+  const [attachedDoc, setAttachedDoc] = useState(null)
 
   // Verify secret code dynamically
   useEffect(() => {
@@ -263,6 +264,8 @@ function App() {
         substitute_employee_id: formData.substitute_employee_id,
         leave_type: formData.leave_type,
         appliedDate: new Date().toISOString().split('T')[0],
+        documentData: attachedDoc?.data,
+        documentName: attachedDoc?.name,
       };
       
       await api.addApplication(payload);
@@ -281,10 +284,28 @@ function App() {
         substitute_employee_id: '',
         leave_type: 'annual',
       })
+      setAttachedDoc(null);
     } catch (err) {
       setError(err.message || 'Failed to submit application.');
     }
   }
+
+  const handleDocFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      setError('Document file size must be less than 10MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setAttachedDoc({
+        name: file.name,
+        data: event.target.result
+      });
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleAgreeSubstitution = (submission) => {
     setAgreeModal({ submission, secretCode: '', error: '' })
@@ -515,7 +536,9 @@ function App() {
                 {leaveTypes && leaveTypes.length > 0 ? (
                   <>
                     {leaveTypes.filter(lt => lt.status === 'active').map(lt => (
-                      <option key={lt.id} value={lt.code}>{lt.name}</option>
+                      <option key={lt.id} value={lt.code}>
+                        {lt.name} {lt.is_paid !== 0 && lt.is_paid !== false && lt.code !== 'unpaid' && lt.code !== 'lop' ? '(Paid)' : '(Unpaid / LOP)'}
+                      </option>
                     ))}
                     {!leaveTypes.some(lt => lt.code === 'unpaid' || lt.code === 'lop') && (
                       <option value="unpaid">Loss of Pay (Unpaid Leave)</option>
@@ -523,9 +546,9 @@ function App() {
                   </>
                 ) : (
                   <>
-                    <option value="annual">Annual Leave</option>
-                    <option value="sick">Sick Leave</option>
-                    <option value="casual">Casual Leave</option>
+                    <option value="annual">Annual Leave (Paid)</option>
+                    <option value="sick">Sick Leave (Paid)</option>
+                    <option value="casual">Casual Leave (Paid)</option>
                     <option value="unpaid">Loss of Pay (Unpaid Leave)</option>
                   </>
                 )}
@@ -533,8 +556,10 @@ function App() {
               {(() => {
                 const currentLt = leaveTypes?.find(lt => lt.code === formData.leave_type);
                 if (!currentLt) return null;
+                const isPaid = currentLt.is_paid !== 0 && currentLt.is_paid !== false && currentLt.code !== 'unpaid' && currentLt.code !== 'lop';
                 return (
                   <div style={{ marginTop: '7px', fontSize: '12px', color: 'var(--text-secondary, #94a3b8)', display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
+                    <span>💵 Compensation: <strong style={{ color: isPaid ? '#34d399' : '#f87171' }}>{isPaid ? 'Paid Leave (Regular Salary)' : 'Unpaid (Loss of Pay / Deducted)'}</strong></span>
                     <span>📅 Notice: <strong style={{ color: (currentLt.notice_days_required > 0) ? '#38bdf8' : '#34d399' }}>{currentLt.notice_days_required > 0 ? `${currentLt.notice_days_required} days advance` : 'Immediate (0 days)'}</strong></span>
                     {currentLt.max_consecutive_days > 0 && (
                       <span>⏱️ Max consecutive: <strong style={{ color: '#fbbf24' }}>{currentLt.max_consecutive_days} days</strong></span>
@@ -716,12 +741,71 @@ function App() {
               })()}
             </div>
 
-            {/* Submit */}
-            <div className="submit-wrapper full-width">
-              <button type="submit" className="submit-btn" id="submit-leave-btn">
-                Submit Application
-              </button>
-            </div>
+              {/* Medical Proof / Document Requirement Banner & Upload */}
+              {(() => {
+                const currentLt = leaveTypes?.find(lt => lt.code === formData.leave_type);
+                const docThreshold = currentLt?.doc_required_after_days || 0;
+                const numDays = formData.leaveDates.filter(Boolean).length;
+                if (!currentLt || docThreshold <= 0 || numDays <= docThreshold) return null;
+
+                return (
+                  <div className="form-group full-width" style={{
+                    padding: '14px 16px',
+                    borderRadius: '8px',
+                    background: 'rgba(56, 189, 248, 0.08)',
+                    border: '1px solid rgba(56, 189, 248, 0.3)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '18px' }}>🏥</span>
+                      <div>
+                        <strong style={{ color: '#38bdf8', fontSize: '13px' }}>
+                          Medical Proof / Doctor's Certificate Required
+                        </strong>
+                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                          You are requesting <strong>{numDays} days</strong> of {currentLt.name}. Policy requires a doctor's certificate for absences over {docThreshold} days.
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                      ⚠️ <strong>Important:</strong> You can upload your medical note now or submit it before your returning date ({formData.returningDate || 'return date'}). 
+                      If unprovided or rejected, this leave will be automatically converted to <strong>No Pay (Loss of Pay)</strong>.
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                      <label className="btn-secondary" style={{ cursor: 'pointer', padding: '6px 14px', fontSize: '12px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.08)' }}>
+                        <span>📎</span>
+                        <span>{attachedDoc ? attachedDoc.name : 'Attach Certificate (PDF / Image)'}</span>
+                        <input 
+                          type="file" 
+                          accept=".pdf,image/*" 
+                          style={{ display: 'none' }} 
+                          onChange={handleDocFileChange} 
+                        />
+                      </label>
+                      {attachedDoc && (
+                        <button 
+                          type="button" 
+                          onClick={() => setAttachedDoc(null)} 
+                          style={{ background: 'transparent', border: 'none', color: '#f87171', fontSize: '12px', cursor: 'pointer' }}
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Submit */}
+              <div className="submit-wrapper full-width">
+                <button type="submit" className="submit-btn" id="submit-leave-btn">
+                  Submit Application
+                </button>
+              </div>
 
             {/* ── Conditions ── */}
             <div className="conditions-section full-width">

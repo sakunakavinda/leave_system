@@ -63,13 +63,29 @@ function formatDate(d) {
 /* ─────────────────────────────────────────────────────
    AdminDashboard
 ───────────────────────────────────────────────────── */
-export function AdminDashboard({ applications, onUpdateStatus, branches, employees, roles, departments, leaveRules, onRefreshApplications, leaveTypes = [] }) {
+export function AdminDashboard({ 
+  applications, 
+  onUpdateStatus, 
+  branches, 
+  employees, 
+  roles, 
+  departments, 
+  leaveRules, 
+  onRefreshApplications, 
+  leaveTypes = [],
+  canApprove = true,
+  canMarkUnpaid = true,
+  currentUser = null
+}) {
   const [timeFilter, setTimeFilter]   = useState('this_month')
   const [reportEmp, setReportEmp]     = useState(null)
   const [filter, setFilter]           = useState('all')
   const [branchFilter, setBranchFilter] = useState('all')
   const [search, setSearch]           = useState('')
   const [toast, setToast]             = useState(null)
+  const [reviewDocApp, setReviewDocApp] = useState(null)
+  const [rejectionReason, setRejectionReason] = useState('')
+  const [isReviewing, setIsReviewing] = useState(false)
   const [currentDate, setCurrentDate] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -84,6 +100,17 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
     const month = String(today.getMonth() + 1).padStart(2, '0');
     const day = String(today.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+  };
+
+  const isLeavePaid = (typeCodeOrName) => {
+    if (!typeCodeOrName) return true;
+    const t = typeCodeOrName.toLowerCase();
+    if (t === 'unpaid' || t === 'lop') return false;
+    const match = (leaveTypes || []).find(lt => lt.code?.toLowerCase() === t || lt.name?.toLowerCase() === t);
+    if (match) {
+      return Boolean(match.is_paid !== 0 && match.is_paid !== false);
+    }
+    return true;
   };
 
   const [showSpecialModal, setShowSpecialModal] = useState(false);
@@ -600,20 +627,22 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
           </svg>
           Special Leave Application
         </button>
-        <button 
-          className="btn-absence" 
-          id="btn-mark-unannounced-absence"
-          onClick={openAbsenceModal} 
-          title="Directly record an employee absence without prior notice as Loss of Pay (Unpaid Leave)"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px' }}>
-            <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-            <circle cx="8.5" cy="7" r="4" />
-            <line x1="18" y1="8" x2="23" y2="13" />
-            <line x1="23" y1="8" x2="18" y2="13" />
-          </svg>
-          Mark Unannounced Absence
-        </button>
+        {canMarkUnpaid && (
+          <button 
+            className="btn-absence" 
+            id="btn-mark-unannounced-absence"
+            onClick={openAbsenceModal} 
+            title="Directly record an employee absence without prior notice as Loss of Pay (Unpaid Leave)"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px' }}>
+              <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="8.5" cy="7" r="4" />
+              <line x1="18" y1="8" x2="23" y2="13" />
+              <line x1="23" y1="8" x2="18" y2="13" />
+            </svg>
+            Mark Unannounced Absence
+          </button>
+        )}
       </div>
 
       {/* Table */}
@@ -662,41 +691,77 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
                 <td className="hide-mobile">{getBranch(getEmp(app.employee_id).branch_id).name}</td>
                 <td className="hide-mobile"><span style={{ color:'var(--text-secondary)', fontSize:'14px' }}>{getRole(getEmp(app.employee_id).role_id).title || '—'}</span></td>
                 <td>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: '240px', alignItems: 'center' }}>
-                    <span style={{ 
-                      fontSize: '10px', 
-                      fontWeight: 700, 
-                      textTransform: 'uppercase', 
-                      padding: '3px 6px', 
-                      background: (app.leave_type === 'unpaid' || app.leave_type === 'lop') ? '#f97316' : 'var(--accent-primary)', 
-                      color: '#fff', 
-                      borderRadius: '4px', 
-                      marginRight: '4px' 
-                    }}>
-                      {(app.leave_type === 'unpaid' || app.leave_type === 'lop') ? 'LOSS OF PAY' : app.leave_type}
-                    </span>
-                    {app.leaveDates.map(date => (
-                      <span key={date} style={{
-                        fontSize: '12px',
-                        background: 'rgba(255, 255, 255, 0.06)',
-                        padding: '2px 6px',
-                        borderRadius: '4px',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                        color: 'var(--text-primary)',
-                        whiteSpace: 'nowrap'
-                      }}>
-                        {formatDate(date)}
-                      </span>
-                    ))}
-                    {app.reason && (
-                      <div style={{ width: '100%', fontSize: '11px', color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '3px' }} title={app.reason}>
-                        <span>📝</span>
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '210px', opacity: 0.9 }}>
-                          {app.reason}
+                  {(() => {
+                    const isPaid = isLeavePaid(app.leave_type);
+                    const ltObj = (leaveTypes || []).find(lt => lt.code === app.leave_type || lt.name === app.leave_type);
+                    const typeLabel = ltObj?.name || (!isPaid ? 'LOSS OF PAY' : app.leave_type);
+                    return (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: '240px', alignItems: 'center' }}>
+                        <span style={{ 
+                          fontSize: '10px', 
+                          fontWeight: 700, 
+                          textTransform: 'uppercase', 
+                          padding: '3px 6px', 
+                          background: !isPaid ? '#f97316' : (ltObj?.color || 'var(--accent-primary)'), 
+                          color: '#fff', 
+                          borderRadius: '4px', 
+                          marginRight: '4px' 
+                        }}>
+                          {!isPaid ? 'LOSS OF PAY' : typeLabel}
                         </span>
+                        {app.leaveDates.map(date => (
+                          <span key={date} style={{
+                            fontSize: '12px',
+                            background: 'rgba(255, 255, 255, 0.06)',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            color: 'var(--text-primary)',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            {formatDate(date)}
+                          </span>
+                        ))}
+                        {app.reason && (
+                          <div style={{ width: '100%', fontSize: '11px', color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '3px' }} title={app.reason}>
+                            <span>📝</span>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '210px', opacity: 0.9 }}>
+                              {app.reason}
+                            </span>
+                          </div>
+                        )}
+                        {app.documentStatus && app.documentStatus !== 'not_required' && (
+                          <div style={{ width: '100%', marginTop: '4px' }}>
+                            {app.documentStatus === 'pending_upload' && (
+                              <span style={{ fontSize: '10px', background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(245, 158, 11, 0.3)', display: 'inline-flex', alignItems: 'center', gap: '3px' }} title={`Medical proof required by ${formatDate(app.documentDeadline)}`}>
+                                📄 Doc Pending {app.documentDeadline ? `(Due ${formatDate(app.documentDeadline)})` : ''}
+                              </span>
+                            )}
+                            {app.documentStatus === 'uploaded' && (
+                              <span style={{ fontSize: '10px', background: 'rgba(56, 189, 248, 0.2)', color: '#38bdf8', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(56, 189, 248, 0.4)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '3px' }} title="Document uploaded and awaiting review">
+                                📄 Doc Uploaded (Needs Review)
+                              </span>
+                            )}
+                            {app.documentStatus === 'approved' && (
+                              <span style={{ fontSize: '10px', background: 'rgba(52, 211, 153, 0.15)', color: '#34d399', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(52, 211, 153, 0.3)', display: 'inline-flex', alignItems: 'center', gap: '3px' }} title="Medical document verified">
+                                ✓ Doc Verified
+                              </span>
+                            )}
+                            {app.documentStatus === 'overdue' && (
+                              <span style={{ fontSize: '10px', background: 'rgba(239, 68, 68, 0.18)', color: '#ef4444', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(239, 68, 68, 0.35)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '3px' }} title="Deadline passed without proof. Converted to No Pay!">
+                                ⚠️ No Pay (Doc Overdue)
+                              </span>
+                            )}
+                            {app.documentStatus === 'rejected' && (
+                              <span style={{ fontSize: '10px', background: 'rgba(239, 68, 68, 0.18)', color: '#f87171', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(239, 68, 68, 0.35)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '3px' }} title={`Document rejected: ${app.documentRejectionReason || 'Converted to No Pay'}`}>
+                                ✕ No Pay (Doc Rejected)
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
+                    );
+                  })()}
                 </td>
                 <td>{formatDate(app.returningDate)}</td>
                 <td>{getEmp(app.substitute_employee_id).name || '—'}</td>
@@ -706,56 +771,87 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
                   {app.status === 'rejected' && <span className="badge badge-rejected"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>Rejected</span>}
                 </td>
                 <td>
-                  {app.status === 'pending' ? (
-                    <div className="action-btns" style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-                      <button className="btn-approve" id={`approve-${app.id}`} onClick={() => handleAction(app.id, 'approved')}>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                        Approve
-                      </button>
-                      <button className="btn-reject" id={`reject-${app.id}`} onClick={() => handleAction(app.id, 'rejected')}>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                        Reject
-                      </button>
-                      {app.leave_type !== 'unpaid' && app.leave_type !== 'lop' && (
-                        <button 
-                          className="btn-mark-unpaid" 
-                          id={`mark-unpaid-${app.id}`} 
-                          title="Mark and approve as Loss of Pay (Unpaid Leave) due to lack of prior notice or policy breach"
-                          onClick={() => handleMarkAsUnpaid(app.id)}
-                        >
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '13px', height: '13px' }}>
-                            <circle cx="12" cy="12" r="10"/>
-                            <line x1="12" y1="8" x2="12" y2="12"/>
-                            <line x1="12" y1="16" x2="12.01" y2="16"/>
-                          </svg>
-                          Mark Unpaid
-                        </button>
-                      )}
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                      <button 
-                        className="btn-secondary" 
-                        style={{fontSize:'12px',padding:'6px 13px', opacity: hasPastDate ? 0.4 : 1, cursor: hasPastDate ? 'not-allowed' : 'pointer'}} 
-                        onClick={() => !hasPastDate && handleAction(app.id, 'pending')}
-                        disabled={hasPastDate}
-                        title={hasPastDate ? "Cannot reset requests that have already started or passed" : "Reset application to pending"}
+                  <div className="action-btns" style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    {app.documentStatus && app.documentStatus !== 'not_required' && (
+                      <button
+                        className="btn-secondary"
+                        style={{
+                          padding: '4px 8px',
+                          fontSize: '11px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          background: app.documentStatus === 'uploaded' ? 'linear-gradient(135deg, #0284c7, #38bdf8)' : 'rgba(255,255,255,0.06)',
+                          color: app.documentStatus === 'uploaded' ? '#fff' : 'var(--text-primary)',
+                          border: '1px solid rgba(255,255,255,0.12)',
+                          fontWeight: app.documentStatus === 'uploaded' ? 600 : 400
+                        }}
+                        onClick={() => {
+                          setReviewDocApp(app);
+                          setRejectionReason(app.documentRejectionReason || '');
+                        }}
+                        title="Review medical / proof document"
                       >
-                        Reset
+                        <span>📄</span>
+                        <span>{app.documentPath ? 'Review Doc' : 'Doc Status'}</span>
                       </button>
-                      {app.status === 'approved' && app.leave_type !== 'unpaid' && app.leave_type !== 'lop' && (
+                    )}
+
+                    {app.status === 'pending' ? (
+                      canApprove ? (
+                        <>
+                          <button className="btn-approve" id={`approve-${app.id}`} onClick={() => handleAction(app.id, 'approved')}>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                            Approve
+                          </button>
+                          <button className="btn-reject" id={`reject-${app.id}`} onClick={() => handleAction(app.id, 'rejected')}>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                            Reject
+                          </button>
+                          {isLeavePaid(app.leave_type) && canMarkUnpaid && (
+                            <button 
+                              className="btn-mark-unpaid" 
+                              id={`mark-unpaid-${app.id}`} 
+                              title="Mark and approve as Loss of Pay (Unpaid Leave) due to lack of prior notice or policy breach"
+                              onClick={() => handleMarkAsUnpaid(app.id)}
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '13px', height: '13px' }}>
+                                <circle cx="12" cy="12" r="10"/>
+                                <line x1="12" y1="8" x2="12" y2="12"/>
+                                <line x1="12" y1="16" x2="12.01" y2="16"/>
+                              </svg>
+                              Mark Unpaid
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Audit only</span>
+                      )
+                    ) : (
+                      <>
                         <button 
-                          className="btn-mark-unpaid" 
-                          id={`convert-unpaid-${app.id}`} 
-                          style={{ padding: '5px 9px', fontSize: '11px' }}
-                          title="Convert this approved leave to Loss of Pay (Unpaid Leave)"
-                          onClick={() => handleMarkAsUnpaid(app.id)}
+                          className="btn-secondary" 
+                          style={{fontSize:'12px',padding:'6px 13px', opacity: hasPastDate ? 0.4 : 1, cursor: hasPastDate ? 'not-allowed' : 'pointer'}} 
+                          onClick={() => !hasPastDate && handleAction(app.id, 'pending')}
+                          disabled={hasPastDate}
+                          title={hasPastDate ? "Cannot reset requests that have already started or passed" : "Reset application to pending"}
                         >
-                          To Unpaid
+                          Reset
                         </button>
-                      )}
-                    </div>
-                  )}
+                        {app.status === 'approved' && isLeavePaid(app.leave_type) && (
+                          <button 
+                            className="btn-mark-unpaid" 
+                            id={`convert-unpaid-${app.id}`} 
+                            style={{ padding: '5px 9px', fontSize: '11px' }}
+                            title="Convert this approved leave to Loss of Pay (Unpaid Leave)"
+                            onClick={() => handleMarkAsUnpaid(app.id)}
+                          >
+                            To Unpaid
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </td>
               </tr>
               )
@@ -1150,13 +1246,16 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
                   >
                     {leaveTypes && leaveTypes.length > 0 ? (
                       leaveTypes.filter(lt => lt.status === 'active').map(lt => (
-                        <option key={lt.id} value={lt.code}>{lt.name}</option>
+                        <option key={lt.id} value={lt.code}>
+                          {lt.name} {lt.is_paid !== 0 && lt.is_paid !== false && lt.code !== 'unpaid' && lt.code !== 'lop' ? '(Paid)' : '(Unpaid / LOP)'}
+                        </option>
                       ))
                     ) : (
                       <>
-                        <option value="annual">Annual Leave</option>
-                        <option value="sick">Sick Leave</option>
-                        <option value="casual">Casual Leave</option>
+                        <option value="annual">Annual Leave (Paid)</option>
+                        <option value="sick">Sick Leave (Paid)</option>
+                        <option value="casual">Casual Leave (Paid)</option>
+                        <option value="unpaid">Loss of Pay (Unpaid Leave)</option>
                       </>
                     )}
                   </select>
@@ -1624,6 +1723,257 @@ export function AdminDashboard({ applications, onUpdateStatus, branches, employe
         </div>
       )}
 
+      {/* ── Document Review Modal ── */}
+      {reviewDocApp && (
+        <div className="modal-backdrop" onClick={() => !isReviewing && setReviewDocApp(null)} style={{ zIndex: 10000 }}>
+          <div 
+            className="modal-box" 
+            onClick={e => e.stopPropagation()} 
+            style={{ 
+              maxWidth: '660px', 
+              width: '92%', 
+              maxHeight: 'calc(100vh - 40px)',
+              background: 'var(--bg-secondary, #131927)', 
+              border: '1px solid rgba(255, 255, 255, 0.15)',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 30px rgba(56, 189, 248, 0.15)',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden'
+            }}
+          >
+            <div className="modal-header" style={{ flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '16px 20px' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '17px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '18px' }}>📄</span> Review Supporting Medical Document
+                </h3>
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '4px 0 0' }}>
+                  Verify employee medical certificate or proof document to determine paid vs no pay compensation.
+                </p>
+              </div>
+              <button 
+                className="modal-close" 
+                onClick={() => !isReviewing && setReviewDocApp(null)}
+                style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '18px' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '14px', overflowY: 'auto' }}>
+              {/* Employee & Leave Context */}
+              <div style={{ background: 'rgba(255,255,255,0.03)', padding: '12px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <div>
+                    <strong style={{ fontSize: '14px', color: 'var(--text-primary)' }}>{getEmp(reviewDocApp.employee_id).name}</strong>
+                    <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: '8px' }}>
+                      ({getRole(getEmp(reviewDocApp.employee_id).role_id).title || 'Staff'} · {getBranch(getEmp(reviewDocApp.employee_id).branch_id).name || 'Branch'})
+                    </span>
+                  </div>
+                  <span style={{ 
+                    fontSize: '11px', 
+                    fontWeight: 700, 
+                    padding: '2px 8px', 
+                    borderRadius: '4px',
+                    background: reviewDocApp.isNoPay ? '#f97316' : 'var(--accent-primary)',
+                    color: '#fff' 
+                  }}>
+                    {reviewDocApp.isNoPay ? 'NO PAY (LOSS OF PAY)' : (reviewDocApp.leave_type || 'Leave')}
+                  </span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px', fontSize: '12px' }}>
+                  <div>
+                    <span style={{ color: 'var(--text-muted)' }}>Duration: </span>
+                    <strong>{reviewDocApp.leaveDates?.length} day(s)</strong>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                      {reviewDocApp.leaveDates?.join(', ')}
+                    </div>
+                  </div>
+                  <div>
+                    <span style={{ color: 'var(--text-muted)' }}>Returning Date: </span>
+                    <div><strong>{formatDate(reviewDocApp.returningDate)}</strong></div>
+                  </div>
+                  <div>
+                    <span style={{ color: 'var(--text-muted)' }}>Doc Deadline: </span>
+                    <div><strong style={{ color: '#f59e0b' }}>{formatDate(reviewDocApp.documentDeadline)}</strong></div>
+                  </div>
+                </div>
+
+                {reviewDocApp.reason && (
+                  <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--text-secondary)', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '6px' }}>
+                    <strong>Applicant Note:</strong> {reviewDocApp.reason}
+                  </div>
+                )}
+              </div>
+
+              {/* Status Banner */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <div style={{ fontSize: '12px' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Verification Status: </span>
+                  <strong style={{ 
+                    color: reviewDocApp.documentStatus === 'approved' ? '#34d399' : (reviewDocApp.documentStatus === 'rejected' || reviewDocApp.documentStatus === 'overdue' ? '#f87171' : '#38bdf8'),
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.04em'
+                  }}>
+                    {reviewDocApp.documentStatus}
+                  </strong>
+                </div>
+                {reviewDocApp.reviewerName && (
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                    Reviewed by {reviewDocApp.reviewerName} {reviewDocApp.documentReviewedAt ? `on ${formatDate(reviewDocApp.documentReviewedAt)}` : ''}
+                  </div>
+                )}
+              </div>
+
+              {/* Document Preview */}
+              {reviewDocApp.documentPath ? (
+                <div style={{ border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '12px', background: 'rgba(0,0,0,0.3)', textAlign: 'center' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', fontSize: '12px' }}>
+                    <span style={{ color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span>📎</span>
+                      <strong>{reviewDocApp.documentName || 'Medical Certificate'}</strong>
+                    </span>
+                    <a 
+                      href={reviewDocApp.documentPath} 
+                      target="_blank" 
+                      rel="noreferrer" 
+                      className="btn-secondary" 
+                      style={{ padding: '4px 10px', fontSize: '11px', textDecoration: 'none', borderRadius: '4px' }}
+                    >
+                      Open in New Tab ↗
+                    </a>
+                  </div>
+
+                  {reviewDocApp.documentPath.toLowerCase().endsWith('.pdf') ? (
+                    <iframe 
+                      src={reviewDocApp.documentPath} 
+                      title="Medical Certificate PDF" 
+                      style={{ width: '100%', height: '340px', border: 'none', borderRadius: '6px', background: '#fff' }}
+                    />
+                  ) : (
+                    <div style={{ maxHeight: '340px', overflow: 'auto', display: 'flex', justifyContent: 'center' }}>
+                      <img 
+                        src={reviewDocApp.documentPath} 
+                        alt="Medical Certificate" 
+                        style={{ maxWidth: '100%', maxHeight: '320px', objectFit: 'contain', borderRadius: '6px' }} 
+                      />
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ padding: '24px', textAlign: 'center', background: 'rgba(239, 68, 68, 0.08)', borderRadius: '8px', border: '1px dashed rgba(239, 68, 68, 0.25)', color: '#f87171', fontSize: '13px' }}>
+                  <div style={{ fontSize: '24px', marginBottom: '8px' }}>⚠️</div>
+                  <strong>No Document Uploaded Yet</strong>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                    {reviewDocApp.documentStatus === 'overdue' 
+                      ? 'The deadline has passed without document submission. This leave is officially classified as No Pay (Loss of Pay).'
+                      : `The employee must upload a medical certificate by ${formatDate(reviewDocApp.documentDeadline)}.`}
+                  </p>
+                </div>
+              )}
+
+              {/* If Rejected, show note */}
+              {reviewDocApp.documentRejectionReason && (
+                <div style={{ padding: '10px 14px', background: 'rgba(239,68,68,0.1)', borderRadius: '6px', border: '1px solid rgba(239,68,68,0.2)', fontSize: '12px', color: '#fca5a5' }}>
+                  <strong>Rejection Note:</strong> {reviewDocApp.documentRejectionReason}
+                </div>
+              )}
+
+              {/* Rejection input for manager / admin */}
+              {reviewDocApp.documentPath && (
+                <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '12px' }}>
+                  <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '5px' }}>
+                    Rejection / Deficiency Reason <span style={{ color: 'var(--text-muted)' }}>(Required if rejecting document)</span>
+                  </label>
+                  <input 
+                    type="text" 
+                    className="admin-filter-select" 
+                    placeholder="e.g. Doctor stamp missing, date mismatch with leave days..." 
+                    value={rejectionReason} 
+                    onChange={e => setRejectionReason(e.target.value)} 
+                    style={{ width: '100%' }}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer" style={{ padding: '14px 20px', borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <button 
+                type="button"
+                className="btn-secondary" 
+                onClick={() => setReviewDocApp(null)}
+                disabled={isReviewing}
+              >
+                Close
+              </button>
+
+              <div style={{ display: 'flex', gap: '10px' }}>
+                {reviewDocApp.documentPath && (
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    style={{ padding: '8px 16px', fontSize: '12px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                    disabled={isReviewing}
+                    onClick={async () => {
+                      if (!rejectionReason.trim()) {
+                        alert('Please enter a rejection reason before rejecting the document.');
+                        return;
+                      }
+                      setIsReviewing(true);
+                      try {
+                        await api.reviewApplicationDocument(reviewDocApp.id, {
+                          action: 'reject',
+                          rejection_reason: rejectionReason,
+                          reviewer_name: currentUser?.name || 'Admin',
+                          reviewer_id: currentUser?.id
+                        });
+                        showToast('Document rejected. Leave converted to No Pay (Loss of Pay).', 'warning');
+                        setReviewDocApp(null);
+                        if (onRefreshApplications) await onRefreshApplications();
+                      } catch (err) {
+                        alert(err.message || 'Failed to reject document');
+                      } finally {
+                        setIsReviewing(false);
+                      }
+                    }}
+                  >
+                    ✕ Reject (Convert to No Pay)
+                  </button>
+                )}
+
+                {reviewDocApp.documentPath && (
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ padding: '8px 18px', fontSize: '12px', background: 'linear-gradient(135deg, #059669, #10b981)', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+                    disabled={isReviewing}
+                    onClick={async () => {
+                      setIsReviewing(true);
+                      try {
+                        await api.reviewApplicationDocument(reviewDocApp.id, {
+                          action: 'approve',
+                          reviewer_name: currentUser?.name || 'Admin',
+                          reviewer_id: currentUser?.id
+                        });
+                        showToast('Document verified and approved as valid paid leave.', 'success');
+                        setReviewDocApp(null);
+                        if (onRefreshApplications) await onRefreshApplications();
+                      } catch (err) {
+                        alert(err.message || 'Failed to approve document');
+                      } finally {
+                        setIsReviewing(false);
+                      }
+                    }}
+                  >
+                    ✓ Approve Document
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Toast */}
       {toast && (
         <div className={`admin-toast admin-toast-${toast.type} show`}>
@@ -1656,26 +2006,40 @@ function generateSecretCode(existingCodes) {
 const DEPARTMENTS = ['Engineering', 'Finance', 'HR', 'Operations']
 const DESIGNATIONS = ['Senior Engineer', 'Junior Developer', 'Software Engineer', 'Accountant', 'HR Manager', 'Operations Lead']
 
-export function ManageEmployees({ branches, employees, setEmployees, departments, roles, isSuper, leaveRules, setLeaveRules, applications = [], leaveTypes = [] }) {
+export function ManageEmployees({ 
+  branches, 
+  employees, 
+  setEmployees, 
+  departments, 
+  roles, 
+  isSuper, 
+  leaveRules, 
+  setLeaveRules, 
+  applications = [], 
+  leaveTypes = [],
+  currentUser = null,
+  canCreateEdit = true,
+  canAdjustBalance = true,
+  canDelete = true
+}) {
+  const isBranchScoped = currentUser && !isSuper && currentUser.branch_id;
+  const initialBranchFilter = isBranchScoped ? currentUser.branch_id : 'all';
+
   const [activeSubTab, setActiveSubTab] = useState('directory')
   const [search, setSearch]             = useState('')
-  const [branchFilter, setBranchFilter] = useState('all')
+  const [branchFilter, setBranchFilter] = useState(initialBranchFilter)
   const [modal, setModal]               = useState(null) // null | 'add' | employee object
   const [toast, setToast]               = useState(null)
   const [secretCodePopup, setSecretCodePopup] = useState(null)
   const EMPTY_EMP = { 
     name:'', 
     role_id: roles?.[0]?.id || '', 
-    branch_id: branches?.[0]?.id || '', 
+    branch_id: isBranchScoped ? currentUser.branch_id : (branches?.[0]?.id || ''), 
     status:'active',
     joined_date: new Date().toISOString().split('T')[0]
   }
   const [form, setForm]                 = useState(EMPTY_EMP)
 
-  // Leave rules state
-  const [ruleModal, setRuleModal]       = useState(null)
-  const EMPTY_RULE = { role_id: roles?.[0]?.id || '', branch_id: branches?.[0]?.id || '', annualLeave: 14, sickLeave: 10, casualLeave: 7, maxPerDay: 1, status: 'active' }
-  const [ruleForm, setRuleForm]         = useState(EMPTY_RULE)
   const [reportEmp, setReportEmp]       = useState(null)  // employee to show report for
 
   const [showScrollTop, setShowScrollTop] = useState(false);
@@ -1764,75 +2128,7 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
     return matchBranch && matchSearch
   })
 
-  // ── Leave Rules handlers ──
-  const openEditRule = (rule) => { setRuleForm({ ...rule }); setRuleModal(rule) }
-  const closeRuleModal = () => setRuleModal(null)
 
-  const handleSaveRule = async () => {
-    if (!ruleForm.role_id || !ruleForm.branch_id) return
-    
-    // Build leaveAllocations dynamically from leaveTypes
-    const leaveAllocations = {};
-    leaveTypes.forEach(lt => {
-      leaveAllocations[lt.code] = parseInt(ruleForm[`${lt.code}_leave`]) || 0;
-    });
-
-    const payload = {
-      ...ruleForm,
-      leaveAllocations
-    };
-
-    try {
-      const savedRule = await api.saveRule(payload);
-      setLeaveRules(prev => {
-        const exists = prev.find(r => r.role_id === savedRule.role_id && r.branch_id === savedRule.branch_id)
-        if (exists) {
-          return prev.map(r => r.role_id === savedRule.role_id && r.branch_id === savedRule.branch_id ? savedRule : r)
-        } else {
-          return [...prev, savedRule]
-        }
-      })
-      showToast('Leave rule saved successfully')
-      closeRuleModal()
-    } catch (err) {
-      alert("Error saving rule: " + err.message);
-    }
-  }
-
-  // Group leave rules hierarchically by branch then department
-  const groupedLeaveRules = useMemo(() => {
-    const grouped = {}
-    branches.forEach(b => {
-      grouped[b.id] = {}
-      
-      // Auto-generate missing rules for active roles if they don't exist in leaveRules array
-      const branchRules = (roles || []).filter(r => r.status === 'active').map(role => {
-        const existingRule = leaveRules.find(r => r.branch_id === b.id && r.role_id === role.id)
-        if (existingRule) return existingRule
-        
-        return {
-          id: `tmp-${b.id}-${role.id}`,
-          role_id: role.id,
-          branch_id: b.id,
-          annualLeave: 14,
-          sickLeave: 10,
-          casualLeave: 7,
-          maxPerDay: 1,
-          status: 'active'
-        }
-      })
-      
-      branchRules.forEach(r => {
-        const role = getRole(r.role_id)
-        const deptId = role?.department_id || 'unknown'
-        if (!grouped[b.id][deptId]) grouped[b.id][deptId] = []
-        grouped[b.id][deptId].push(r)
-      })
-    })
-    return grouped
-  }, [leaveRules, branches, roles])
-
-  const [ruleBranchFilter, setRuleBranchFilter] = useState('all')
 
   // ── Employee Overview computations ──
   const overviewBranches = isSuper ? branches : branches
@@ -1888,17 +2184,6 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
         </svg>
       ),
     },
-    {
-      id: 'leave-rules',
-      label: 'Set Leave Rules',
-      icon: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/>
-          <path d="M14 2v6h6"/>
-          <path d="M9 13h6"/><path d="M9 17h6"/><path d="M9 9h1"/>
-        </svg>
-      ),
-    },
   ]
 
   return (
@@ -1928,18 +2213,37 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
               </svg>
               <input placeholder="Search employees…" value={search} onChange={e => setSearch(e.target.value)} />
             </div>
-          {branches.length > 1 && (
-            <select className="admin-filter-select" value={branchFilter} onChange={e => setBranchFilter(e.target.value)} id="emp-branch-filter">
-              <option value="all">All Branches</option>
-              {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
-          )}
-            <button className="btn-primary" id="add-employee-btn" onClick={openAdd}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-              </svg>
-              Add Employee
-            </button>
+            {isBranchScoped ? (
+              <div style={{
+                padding: '8px 12px',
+                borderRadius: '8px',
+                border: '1px solid var(--border-color)',
+                background: 'var(--bg-card, #1e293b)',
+                color: 'var(--text-primary)',
+                fontSize: '13px',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}>
+                📍 {getBranch(currentUser.branch_id)?.name || 'Assigned Branch'}
+              </div>
+            ) : (
+              branches.length > 1 && (
+                <select className="admin-filter-select" value={branchFilter} onChange={e => setBranchFilter(e.target.value)} id="emp-branch-filter">
+                  <option value="all">All Branches</option>
+                  {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+              )
+            )}
+            {canCreateEdit && (
+              <button className="btn-primary" id="add-employee-btn" onClick={openAdd}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                Add Employee
+              </button>
+            )}
           </div>
 
           <div className="data-table-wrap">
@@ -2164,129 +2468,7 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
         </div>
       )}
 
-      {/* ══════ Set Leave Rules Sub-tab ══════ */}
-      {activeSubTab === 'leave-rules' && (
-        <div className="leave-rules-section">
-          <div className="controls-bar">
-            <div className="admin-search-box">
-              <svg className="s-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-              </svg>
-              <input placeholder="Search leave rules…" id="leave-rule-search" />
-            </div>
-            {isSuper && (
-              <select className="admin-filter-select" value={ruleBranchFilter} onChange={e => setRuleBranchFilter(e.target.value)} id="rule-branch-filter">
-                <option value="all">All Branches</option>
-                {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
-            )}
-          </div>
 
-          {/* Leave type legend */}
-          <div className="leave-legend">
-            <div className="leave-legend-item">
-              <span className="leave-legend-dot leave-legend-annual"></span>
-              Annual Leave
-            </div>
-            <div className="leave-legend-item">
-              <span className="leave-legend-dot leave-legend-sick"></span>
-              Sick Leave
-            </div>
-            <div className="leave-legend-item">
-              <span className="leave-legend-dot leave-legend-casual"></span>
-              Casual Leave
-            </div>
-            <div className="leave-legend-item">
-              <span className="leave-legend-dot leave-legend-maxday"></span>
-              Max/Day Limit
-            </div>
-          </div>
-
-          <div className="lr-hierarchy">
-            {(ruleBranchFilter === 'all' ? branches : branches.filter(b => b.id === ruleBranchFilter)).map(branch => {
-              const depts = Object.keys(groupedLeaveRules[branch.id] || {})
-              if (depts.length === 0) return null
-              
-              return (
-                <div key={branch.id} className="lr-branch-section">
-                  <div className="lr-branch-header">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
-                    </svg>
-                    {branch.name} Branch
-                  </div>
-                  
-                  <div className="lr-branch-body">
-                    {depts.map(deptId => {
-                      const deptName = getDept(deptId)?.name || 'Unknown Department'
-                      const rules = groupedLeaveRules[branch.id][deptId]
-                      return (
-                        <div key={deptId} className="lr-dept-group">
-                          <div className="lr-dept-header">
-                            <span className="lr-dept-icon">{deptName.slice(0,2).toUpperCase()}</span>
-                            {deptName}
-                          </div>
-                          
-                          <div className="lr-role-list">
-                            {rules.map(rule => {
-                              const roleName = getRole(rule.role_id)?.title || 'Unknown Role'
-                              const availableEmployeesCount = employees.filter(e => e.role_id === rule.role_id && e.branch_id === rule.branch_id).length
-                              return (
-                                <div key={rule.id} className="lr-role-row">
-                                  <div className="lr-role-info">
-                                    <div className="lr-role-name">{roleName}</div>
-                                    <div className="lr-role-count">
-                                      <span className="lr-count-badge">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
-                                        </svg>
-                                        {availableEmployeesCount} Available
-                                      </span>
-                                    </div>
-                                  </div>
-                                  
-                                  <div className="lr-role-days" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                                    {leaveTypes.map(lt => {
-                                      const days = rule[`${lt.code}_leave`] || 0;
-                                      return (
-                                        <span key={lt.id} className="leave-days-chip" style={{ background: `${lt.color}15`, color: lt.color, borderColor: `${lt.color}30` }} title={lt.name}>
-                                          {days} {lt.name.charAt(0).toUpperCase()}
-                                        </span>
-                                      );
-                                    })}
-                                  </div>
-                                  
-                                  <div className="lr-role-maxday">
-                                    <label>Max/Day Allowed</label>
-                                    <span style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>{rule.maxPerDay}</span>
-                                  </div>
-                                  
-                                  <div className="lr-role-actions">
-                                    <button className="btn-edit-icon" onClick={() => openEditRule(rule)} title="Edit Rule">
-                                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                                      </svg>
-                                    </button>
-                                  </div>
-                                </div>
-                              )
-                            })}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )
-            })}
-            
-            {(ruleBranchFilter === 'all' ? branches : branches.filter(b => b.id === ruleBranchFilter)).every(b => Object.keys(groupedLeaveRules[b.id] || {}).length === 0) && (
-              <div style={{ textAlign:'center', padding:'48px', color:'var(--text-muted)' }}>No leave rules found</div>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* ── Employee Add/Edit Modal ── */}
       {modal !== null && (
@@ -2320,9 +2502,13 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
                 </div>
                 <div className="field">
                   <label>Branch</label>
-                  <select value={form.branch_id} onChange={e => setForm(p=>({...p, branch_id: e.target.value}))}>
-                    {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                  </select>
+                  {isBranchScoped ? (
+                    <input readOnly value={getBranch(currentUser.branch_id)?.name || ''} style={{ opacity: 0.8, cursor: 'not-allowed' }} />
+                  ) : (
+                    <select value={form.branch_id} onChange={e => setForm(p=>({...p, branch_id: e.target.value}))}>
+                      {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                    </select>
+                  )}
                 </div>
               </div>
               <div className="field-row">
@@ -2356,97 +2542,7 @@ export function ManageEmployees({ branches, employees, setEmployees, departments
         </div>
       )}
 
-      {/* ── Leave Rule Add/Edit Modal ── */}
-      {ruleModal !== null && (() => {
-        // Calculate available employees for the selected role and branch
-        const availableEmployeesCount = employees.filter(e => e.role_id === ruleForm.role_id && e.branch_id === ruleForm.branch_id).length;
-        
-        return (
-        <div className="modal-backdrop" onClick={closeRuleModal}>
-          <div className="modal-box" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Edit Leave Rule</h3>
-              <button className="modal-close" onClick={closeRuleModal}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                </svg>
-              </button>
-            </div>
-            <div className="modal-body">
-              <div className="field-row">
-                <div className="field">
-                  <label>Role</label>
-                  <input readOnly value={getRole(ruleForm.role_id)?.title || ''} style={{ opacity: 0.7, cursor: 'not-allowed' }} />
-                </div>
-                <div className="field">
-                  <label>Branch</label>
-                  <input readOnly value={getBranch(ruleForm.branch_id)?.name || ''} style={{ opacity: 0.7, cursor: 'not-allowed' }} />
-                </div>
-              </div>
-              <div className="field-row">
-                <div className="field">
-                  <label>Department</label>
-                  <input readOnly value={getDept(getRole(ruleForm.role_id)?.department_id)?.name || ''} style={{ opacity: 0.7, cursor: 'not-allowed' }} />
-                </div>
-                <div className="field">
-                  <label>Status</label>
-                  <input readOnly value={ruleForm.status} style={{ opacity: 0.7, cursor: 'not-allowed', textTransform: 'capitalize' }} />
-                </div>
-              </div>
-              <div className="leave-rule-days-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '16px' }}>
-                {leaveTypes.map(lt => (
-                  <div key={lt.id} className="field">
-                    <label>{lt.name} (days)</label>
-                    <input 
-                      type="number" 
-                      min="0" 
-                      max="365" 
-                      value={ruleForm[`${lt.code}_leave`] ?? 0} 
-                      onChange={e => setRuleForm(p => ({...p, [`${lt.code}_leave`]: parseInt(e.target.value) || 0}))} 
-                    />
-                  </div>
-                ))}
-              </div>
-              <div className="leave-total-preview">
-                <span>Total Leave Entitlement</span>
-                <span className="leave-total-value">
-                  {leaveTypes.reduce((sum, lt) => sum + (parseInt(ruleForm[`${lt.code}_leave`]) || 0), 0)} days/year
-                </span>
-              </div>
-              <div className="leave-maxday-section">
-                <div className="leave-maxday-header">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px', color: '#e17055' }}>
-                    <circle cx="12" cy="12" r="10"/>
-                    <line x1="12" y1="8" x2="12" y2="12"/>
-                    <line x1="12" y1="16" x2="12.01" y2="16"/>
-                  </svg>
-                  <span>Concurrent Leave Limit</span>
-                </div>
-                <div className="leave-maxday-row">
-                  <div className="field leave-field-maxday">
-                    <label>Max Leaves Per Day</label>
-                    <input type="number" min="1" max="99" value={ruleForm.maxPerDay} onChange={e => setRuleForm(p=>({...p, maxPerDay: Math.max(1, parseInt(e.target.value) || 1)}))} />
-                  </div>
-                  <p className="leave-maxday-hint">
-                    Maximum number of <strong>{getRole(ruleForm.role_id)?.title || 'employees'}</strong> in <strong>{getBranch(ruleForm.branch_id)?.name || 'this branch'}</strong> that can be on leave on the same day, regardless of leave type.
-                    <br />
-                    <span style={{ display: 'inline-block', marginTop: '6px', padding: '4px 8px', background: 'rgba(249, 115, 22, 0.1)', color: 'var(--accent-light)', borderRadius: '4px', fontSize: '11px', fontWeight: 600 }}>
-                      Currently there {availableEmployeesCount === 1 ? 'is' : 'are'} {availableEmployeesCount} {availableEmployeesCount === 1 ? 'employee' : 'employees'} with this role in this branch.
-                    </span>
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn-secondary" onClick={closeRuleModal}>Cancel</button>
-              <button className="btn-primary" id="save-leave-rule-btn" onClick={handleSaveRule}>
-                Save Changes
-              </button>
-            </div>
-          </div>
-        </div>
-        );
-      })()}
+
 
       {/* Secret Code Popup */}
       {secretCodePopup && (
@@ -3133,32 +3229,261 @@ export function ManageBranches({ branches, setBranches, employees, managers, set
 }
 
 /* ─────────────────────────────────────────────────────
-   ManageManagers
+   ManageManagers (User Management & Permissions)
 ───────────────────────────────────────────────────── */
+
+const PERMISSION_SECTIONS = [
+  {
+    id: 'leaves',
+    title: 'Leave Operations',
+    icon: '📋',
+    permissions: [
+      { key: 'leaves.view', label: 'View Applications', desc: 'View submitted leaves for assigned branch' },
+      { key: 'leaves.approve_reject', label: 'Approve & Reject', desc: 'Make operational leave approval decisions' },
+      { key: 'leaves.mark_unpaid', label: 'Mark Unpaid Leave', desc: 'Record unnotified employee absence as Loss of Pay' },
+    ]
+  },
+  {
+    id: 'employees',
+    title: 'Employee Administration',
+    icon: '👥',
+    permissions: [
+      { key: 'employees.view', label: 'View Staff Directory', desc: 'Access employee list and profiles' },
+      { key: 'employees.create_edit', label: 'Onboard & Edit Staff', desc: 'Add new employees or modify profile info' },
+      { key: 'employees.adjust_balance', label: 'Adjust Leave Balances', desc: 'Manual ledger adjustments and compensatory credits' },
+      { key: 'employees.delete', label: 'Deactivate / Delete', desc: 'Archive or remove employee records' },
+    ]
+  },
+  {
+    id: 'rosters',
+    title: 'Shift Rostering',
+    icon: '📅',
+    permissions: [
+      { key: 'rosters.view', label: 'View Rostering Matrix', desc: 'Inspect monthly shift roster grid' },
+      { key: 'rosters.edit', label: 'Edit & Auto-Fill Rosters', desc: 'Assign shifts, auto-fill month, and clear cells' },
+    ]
+  },
+  {
+    id: 'payroll',
+    title: 'Payroll & Loss of Pay',
+    icon: '💵',
+    permissions: [
+      { key: 'payroll.view', label: 'View LOP Deductions', desc: 'Inspect monthly attendance deductions' },
+      { key: 'payroll.export', label: 'Export Payroll Reports', desc: 'Download CSV / Excel files for payroll processing' },
+    ]
+  },
+  {
+    id: 'holidays',
+    title: 'Branch Holidays',
+    icon: '🏖️',
+    permissions: [
+      { key: 'holidays.view', label: 'View Branch Holidays', desc: 'Inspect public and mercantile calendar' },
+      { key: 'holidays.manage', label: 'Manage Branch Holidays', desc: 'Add, update, or remove branch holidays' },
+    ]
+  },
+  {
+    id: 'overview',
+    title: 'Analytics & Heatmap',
+    icon: '📊',
+    permissions: [
+      { key: 'overview.view', label: 'Leave Overview & Heatmap', desc: 'Access annual trends and department heatmaps' },
+    ]
+  },
+  {
+    id: 'contingencies',
+    title: 'Contingency Shield',
+    icon: '🛡️',
+    permissions: [
+      { key: 'contingencies.view', label: 'View Contingency Shields', desc: 'Monitor active disruptions and emergency rules' },
+      { key: 'contingencies.declare', label: 'Declare Emergency Shield', desc: 'Activate local emergency contingency protocols' },
+    ]
+  }
+];
+
+const DEFAULT_PERMS = {
+  branch_manager: {
+    'leaves.view': true,
+    'leaves.approve_reject': true,
+    'leaves.mark_unpaid': true,
+    'employees.view': true,
+    'employees.create_edit': false,
+    'employees.adjust_balance': false,
+    'employees.delete': false,
+    'rosters.view': true,
+    'rosters.edit': true,
+    'payroll.view': true,
+    'payroll.export': false,
+    'holidays.view': true,
+    'holidays.manage': false,
+    'overview.view': true,
+    'contingencies.view': true,
+    'contingencies.declare': false,
+  },
+  hr_officer: {
+    'leaves.view': true,
+    'leaves.approve_reject': false,
+    'leaves.mark_unpaid': false,
+    'employees.view': true,
+    'employees.create_edit': true,
+    'employees.adjust_balance': true,
+    'employees.delete': true,
+    'rosters.view': true,
+    'rosters.edit': false,
+    'payroll.view': true,
+    'payroll.export': true,
+    'holidays.view': true,
+    'holidays.manage': true,
+    'overview.view': true,
+    'contingencies.view': true,
+    'contingencies.declare': false,
+  },
+  admin: {
+    '*': true,
+    'leaves.view': true,
+    'leaves.approve_reject': true,
+    'leaves.mark_unpaid': true,
+    'employees.view': true,
+    'employees.create_edit': true,
+    'employees.adjust_balance': true,
+    'employees.delete': true,
+    'rosters.view': true,
+    'rosters.edit': true,
+    'payroll.view': true,
+    'payroll.export': true,
+    'holidays.view': true,
+    'holidays.manage': true,
+    'overview.view': true,
+    'contingencies.view': true,
+    'contingencies.declare': true,
+  }
+};
+
 export function ManageManagers({ branches, managers, setManagers }) {
   const [search, setSearch]       = useState('')
   const [modal, setModal]         = useState(null) // null | 'add' | manager object
   const [toast, setToast]         = useState(null)
-  const EMPTY_MGR = { username:'', branch_id: '', status:'active', role: 'manager' }
-  const [form, setForm]           = useState(EMPTY_MGR)
+  
+  const EMPTY_MGR = { 
+    username:'', 
+    password: '', 
+    branch_id: branches[0]?.id || '', 
+    status:'active', 
+    role: 'branch_manager',
+    permissions: { ...DEFAULT_PERMS.branch_manager }
+  }
+  const [form, setForm] = useState(EMPTY_MGR)
 
   const showToast = (msg, type='success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000) }
 
-  const openAdd  = ()    => { setForm(EMPTY_MGR); setModal('add') }
-  const openEdit = (mgr) => { setForm({ ...mgr }); setModal(mgr) }
+  const openAdd  = ()    => { 
+    setForm({
+      ...EMPTY_MGR,
+      branch_id: branches[0]?.id || '',
+      permissions: { ...DEFAULT_PERMS.branch_manager }
+    })
+    setModal('add') 
+  }
+  
+  const openEdit = (mgr) => { 
+    const roleKey = ['super manager', 'super_admin', 'admin'].includes(mgr.role) 
+      ? 'admin' 
+      : (['hr_officer', 'hr'].includes(mgr.role) ? 'hr_officer' : 'branch_manager');
+
+    const resolvedPerms = mgr.permissions && typeof mgr.permissions === 'object' 
+      ? { ...mgr.permissions } 
+      : { ...DEFAULT_PERMS[roleKey] };
+
+    setForm({ 
+      ...mgr, 
+      password: '', // blank unless user explicitly types new password
+      role: roleKey,
+      permissions: resolvedPerms 
+    })
+    setModal(mgr) 
+  }
+  
   const closeModal = ()  => setModal(null)
 
+  const handleRoleChange = (newRole) => {
+    const defaultPerms = DEFAULT_PERMS[newRole] || DEFAULT_PERMS.branch_manager;
+    setForm(p => ({
+      ...p,
+      role: newRole,
+      branch_id: newRole === 'admin' ? '' : (p.branch_id || branches[0]?.id || ''),
+      permissions: { ...defaultPerms }
+    }));
+  };
+
+  const handleTogglePermission = (key) => {
+    setForm(p => ({
+      ...p,
+      permissions: {
+        ...p.permissions,
+        [key]: !p.permissions?.[key]
+      }
+    }));
+  };
+
+  const handleResetPermissions = () => {
+    const roleKey = form.role === 'admin' ? 'admin' : (form.role === 'hr_officer' ? 'hr_officer' : 'branch_manager');
+    setForm(p => ({
+      ...p,
+      permissions: { ...DEFAULT_PERMS[roleKey] }
+    }));
+    showToast('Permissions reset to role defaults', 'info');
+  };
+
+  const handleGrantAll = () => {
+    const granted = {};
+    PERMISSION_SECTIONS.forEach(sec => {
+      sec.permissions.forEach(perm => {
+        granted[perm.key] = true;
+      });
+    });
+    setForm(p => ({ ...p, permissions: granted }));
+    showToast('Granted all permissions');
+  };
+
+  const handleRevokeAll = () => {
+    const revoked = {};
+    PERMISSION_SECTIONS.forEach(sec => {
+      sec.permissions.forEach(perm => {
+        revoked[perm.key] = false;
+      });
+    });
+    // keep basic view
+    revoked['leaves.view'] = true;
+    setForm(p => ({ ...p, permissions: revoked }));
+    showToast('Revoked all optional permissions', 'warning');
+  };
+
   const handleSave = async () => {
-    if (!form.username.trim()) return
+    if (!form.username.trim()) {
+      alert('Please enter a username');
+      return;
+    }
+
+    if (form.role !== 'admin' && !form.branch_id) {
+      alert('Please assign a branch for this account.');
+      return;
+    }
+
     try {
+      const payload = {
+        ...form,
+        username: form.username.trim(),
+        branch_id: form.role === 'admin' ? null : form.branch_id,
+        permissions: form.permissions
+      };
+
       if (modal === 'add') {
-        const newMgr = await api.addManager(form);
+        const newMgr = await api.addManager(payload);
         setManagers(prev => [...prev, newMgr]);
-        showToast('Manager added successfully');
+        showToast('User account created successfully');
       } else {
-        const updatedMgr = await api.updateManager(modal.id, form);
+        const updatedMgr = await api.updateManager(modal.id, payload);
         setManagers(prev => prev.map(m => m.id === modal.id ? updatedMgr : m));
-        showToast('Manager updated');
+        showToast('User account updated');
       }
       closeModal();
     } catch (err) {
@@ -3167,15 +3492,32 @@ export function ManageManagers({ branches, managers, setManagers }) {
   }
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to remove this manager?')) return
+    if (!window.confirm('Are you sure you want to remove this user account?')) return
     try {
       await api.deleteManager(id);
       setManagers(prev => prev.filter(m => m.id !== id));
-      showToast('Manager removed', 'danger');
+      showToast('User removed', 'danger');
     } catch (err) {
       alert("Error: " + err.message);
     }
   }
+
+  const getRoleBadge = (role) => {
+    if (['super manager', 'super_admin', 'admin'].includes(role)) {
+      return <span className="badge badge-admin" style={{ background: 'rgba(249, 115, 22, 0.15)', color: '#f97316', fontWeight: 600 }}>👑 Admin (Owner)</span>;
+    }
+    if (['hr_officer', 'hr'].includes(role)) {
+      return <span className="badge badge-hr" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', fontWeight: 600 }}>👤 HR Officer</span>;
+    }
+    return <span className="badge badge-manager" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', fontWeight: 600 }}>🏢 Branch Manager</span>;
+  };
+
+  const getActivePermCount = (mgr) => {
+    if (['super manager', 'super_admin', 'admin'].includes(mgr.role)) return 'All Capabilities';
+    if (!mgr.permissions) return 'Default';
+    const count = Object.values(mgr.permissions).filter(Boolean).length;
+    return `${count} active`;
+  };
 
   const filtered = managers.filter(m => {
     const q = search.toLowerCase()
@@ -3193,111 +3535,309 @@ export function ManageManagers({ branches, managers, setManagers }) {
           <svg className="s-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
-          <input placeholder="Search managers…" value={search} onChange={e => setSearch(e.target.value)} />
+          <input placeholder="Search users & managers…" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
         <button className="btn-primary" id="add-manager-btn" onClick={openAdd}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
           </svg>
-          Add Manager
+          Add User Account
         </button>
       </div>
 
       <div className="data-table-wrap">
         <table className="data-table">
           <thead>
-            <tr><th>ID</th><th>Username</th><th>Type</th><th>Branch</th><th>Status</th><th>Actions</th></tr>
+            <tr>
+              <th>ID</th>
+              <th>User</th>
+              <th>Role Type</th>
+              <th>Assigned Scope</th>
+              <th>Permissions</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={8} style={{ textAlign:'center', padding:'48px', color:'var(--text-muted)' }}>No managers found</td></tr>
-            ) : filtered.map((mgr, i) => (
-              <tr key={mgr.id} style={{ animationDelay: `${i * 0.04}s` }}>
-                <td><span style={{ fontFamily:'monospace', fontSize:'12px', color:'var(--text-muted)' }}>{mgr.id}</span></td>
-                <td>
-                  <div className="cell-user">
-                    <div className="cell-avatar">{mgr.username.slice(0,2).toUpperCase()}</div>
-                    <div>
-                      <div className="cell-name">{mgr.username}</div>
-                    </div>
-                  </div>
-                </td>
-                <td>
-                  <span className={`badge badge-${mgr.role === 'super manager' ? 'super-manager' : 'manager'}`}>
-                    {mgr.role === 'super manager' ? 'Super Manager' : 'Manager'}
-                  </span>
-                </td>
-                <td>{branches.find(b => b.id === mgr.branch_id)?.name || '—'}</td>
+              <tr><td colSpan={7} style={{ textAlign:'center', padding:'48px', color:'var(--text-muted)' }}>No accounts found</td></tr>
+            ) : filtered.map((mgr, i) => {
+              const isAdmin = ['super manager', 'super_admin', 'admin'].includes(mgr.role);
+              const branch = branches.find(b => b.id === mgr.branch_id);
 
-                <td>
-                  <span className={`badge badge-${mgr.status}`}>{mgr.status === 'active' ? 'Active' : 'Inactive'}</span>
-                </td>
-                <td>
-                  <div className="action-btns">
-                    <button className="btn-edit" id={`edit-mgr-${mgr.id}`} onClick={() => openEdit(mgr)}>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                      </svg>
-                      Edit
-                    </button>
-                    <button className="btn-danger" id={`del-mgr-${mgr.id}`} onClick={() => handleDelete(mgr.id)}>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
-                      </svg>
-                      Remove
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+              return (
+                <tr key={mgr.id} style={{ animationDelay: `${i * 0.04}s` }}>
+                  <td><span style={{ fontFamily:'monospace', fontSize:'12px', color:'var(--text-muted)' }}>{mgr.id.slice(0, 8)}…</span></td>
+                  <td>
+                    <div className="cell-user">
+                      <div className="cell-avatar">{mgr.username.slice(0,2).toUpperCase()}</div>
+                      <div>
+                        <div className="cell-name">{mgr.username}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>{getRoleBadge(mgr.role)}</td>
+                  <td>
+                    {isAdmin ? (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: 'var(--accent-light)', fontWeight: 600 }}>
+                        🌐 Global (All Branches)
+                      </span>
+                    ) : (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '13px', fontWeight: 500 }}>
+                        📍 {branch ? branch.name : <em style={{ color: 'var(--text-muted)' }}>Unassigned</em>}
+                      </span>
+                    )}
+                  </td>
+                  <td>
+                    <span style={{ 
+                      fontSize: '11px', 
+                      padding: '3px 8px', 
+                      borderRadius: '12px', 
+                      background: 'var(--bg-card-subtle, rgba(255,255,255,0.06))',
+                      color: 'var(--text-secondary)',
+                      fontWeight: 600,
+                      border: '1px solid var(--border-color)'
+                    }}>
+                      ⚡ {getActivePermCount(mgr)}
+                    </span>
+                  </td>
+                  <td>
+                    <span className={`badge badge-${mgr.status}`}>{mgr.status === 'active' ? 'Active' : 'Inactive'}</span>
+                  </td>
+                  <td>
+                    <div className="action-btns">
+                      <button className="btn-edit" id={`edit-mgr-${mgr.id}`} onClick={() => openEdit(mgr)}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                        </svg>
+                        Edit & Permissions
+                      </button>
+                      <button className="btn-danger" id={`del-mgr-${mgr.id}`} onClick={() => handleDelete(mgr.id)}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+                        </svg>
+                        Remove
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
 
-      {/* Modal */}
+      {/* Modal: Add / Edit User & Permissions */}
       {modal !== null && (
         <div className="modal-backdrop" onClick={closeModal}>
-          <div className="modal-box" onClick={e => e.stopPropagation()}>
+          <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: '780px', maxHeight: '90vh', overflowY: 'auto' }}>
             <div className="modal-header">
-              <h3>{modal === 'add' ? 'Add Manager' : 'Edit Manager'}</h3>
+              <div>
+                <h3 style={{ margin: 0 }}>{modal === 'add' ? 'Add User Account' : 'Edit User & Permissions'}</h3>
+                <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                  Configure role, branch assignment, and customized granular permissions.
+                </p>
+              </div>
               <button className="modal-close" onClick={closeModal}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                 </svg>
               </button>
             </div>
-            <div className="modal-body">
-              <div className="field-row">
-                <div className="field">
-                  <label>Username *</label>
-                  <input placeholder="Enter username" value={form.username} onChange={e => setForm(p=>({...p, username: e.target.value}))} />
-                </div>
-                <div className="field">
-                  {/* Branch assignment happens during branch creation, so no field here. */}
+            
+            <div className="modal-body" style={{ gap: '20px' }}>
+              {/* Account Credentials */}
+              <div style={{ background: 'var(--bg-card-subtle, rgba(255,255,255,0.02))', padding: '16px', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
+                <h4 style={{ margin: '0 0 12px', fontSize: '14px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  🔑 Account Credentials
+                </h4>
+                <div className="field-row">
+                  <div className="field">
+                    <label>Username *</label>
+                    <input 
+                      placeholder="e.g. john_manager" 
+                      value={form.username} 
+                      onChange={e => setForm(p => ({ ...p, username: e.target.value }))} 
+                    />
+                  </div>
+                  <div className="field">
+                    <label>{modal === 'add' ? 'Password *' : 'Change Password (leave empty to keep)'}</label>
+                    <input 
+                      type="password" 
+                      placeholder={modal === 'add' ? 'Set initial password' : '••••••••'} 
+                      value={form.password} 
+                      onChange={e => setForm(p => ({ ...p, password: e.target.value }))} 
+                    />
+                  </div>
                 </div>
               </div>
-              <div className="field-row">
-                <div className="field">
-                  <label>Role</label>
-                  <select value={form.role || 'manager'} onChange={e => setForm(p=>({...p, role: e.target.value}))} id="mgr-role-select">
-                    <option value="manager">Manager</option>
-                    <option value="super manager">Super Manager</option>
-                  </select>
+
+              {/* Role & Scope Configuration */}
+              <div style={{ background: 'var(--bg-card-subtle, rgba(255,255,255,0.02))', padding: '16px', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
+                <h4 style={{ margin: '0 0 12px', fontSize: '14px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  🏛️ Role & Branch Scope
+                </h4>
+                <div className="field-row">
+                  <div className="field">
+                    <label>Role</label>
+                    <select 
+                      value={form.role || 'branch_manager'} 
+                      onChange={e => handleRoleChange(e.target.value)} 
+                      id="mgr-role-select"
+                    >
+                      <option value="branch_manager">🏢 Branch Manager (Branch-Scoped)</option>
+                      <option value="hr_officer">👤 HR Officer (Branch-Scoped)</option>
+                      <option value="admin">👑 Admin / Owner (Global Access)</option>
+                    </select>
+                  </div>
+
+                  <div className="field">
+                    <label>Assigned Branch {form.role !== 'admin' && '*'}</label>
+                    {form.role === 'admin' ? (
+                      <div style={{ 
+                        padding: '10px 12px', 
+                        background: 'rgba(249, 115, 22, 0.08)', 
+                        border: '1px dashed rgba(249, 115, 22, 0.3)', 
+                        borderRadius: '6px',
+                        color: 'var(--accent-light)',
+                        fontSize: '13px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}>
+                        🌐 Global Access (All branches authorized)
+                      </div>
+                    ) : (
+                      <select 
+                        value={form.branch_id || ''} 
+                        onChange={e => setForm(p => ({ ...p, branch_id: e.target.value }))}
+                      >
+                        <option value="">Select a branch…</option>
+                        {branches.map(b => (
+                          <option key={b.id} value={b.id}>{b.name} ({b.location || 'Active'})</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
                 </div>
-                <div className="field">
-                  <label>Status</label>
-                  <select value={form.status} onChange={e => setForm(p=>({...p, status: e.target.value}))}>
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                  </select>
+
+                <div className="field-row" style={{ marginTop: '12px' }}>
+                  <div className="field">
+                    <label>Account Status</label>
+                    <select value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))}>
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                    </select>
+                  </div>
                 </div>
+              </div>
+
+              {/* Granular Permissions Matrix */}
+              <div style={{ background: 'var(--bg-card-subtle, rgba(255,255,255,0.02))', padding: '16px', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '14px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      ⚡ Custom Capabilities & Granular Permissions
+                    </h4>
+                    <p style={{ margin: '2px 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                      Fine-tune capabilities for this user. Permissions apply strictly within their assigned branch.
+                    </p>
+                  </div>
+                  
+                  {form.role !== 'admin' && (
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button 
+                        type="button" 
+                        className="btn-secondary" 
+                        style={{ padding: '4px 10px', fontSize: '12px', height: 'auto' }} 
+                        onClick={handleResetPermissions}
+                      >
+                        Reset Defaults
+                      </button>
+                      <button 
+                        type="button" 
+                        className="btn-secondary" 
+                        style={{ padding: '4px 10px', fontSize: '12px', height: 'auto' }} 
+                        onClick={handleGrantAll}
+                      >
+                        Grant All
+                      </button>
+                      <button 
+                        type="button" 
+                        className="btn-secondary" 
+                        style={{ padding: '4px 10px', fontSize: '12px', height: 'auto' }} 
+                        onClick={handleRevokeAll}
+                      >
+                        Revoke All
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {form.role === 'admin' ? (
+                  <div style={{ padding: '16px', background: 'rgba(249, 115, 22, 0.08)', borderRadius: '8px', border: '1px solid rgba(249, 115, 22, 0.2)', fontSize: '13px', color: 'var(--accent-light)' }}>
+                    👑 <strong>Admin (Owner) Account</strong>: Inherently holds master wildcard permissions across all operational and configuration modules.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    {PERMISSION_SECTIONS.map(section => (
+                      <div key={section.id} style={{ 
+                        border: '1px solid var(--border-color)', 
+                        borderRadius: '8px', 
+                        padding: '12px 14px',
+                        background: 'rgba(0,0,0,0.1)'
+                      }}>
+                        <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span>{section.icon}</span> {section.title}
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '10px' }}>
+                          {section.permissions.map(perm => {
+                            const isChecked = !!form.permissions?.[perm.key];
+                            return (
+                              <label 
+                                key={perm.key} 
+                                style={{ 
+                                  display: 'flex', 
+                                  alignItems: 'flex-start', 
+                                  gap: '10px', 
+                                  padding: '8px 10px', 
+                                  borderRadius: '6px', 
+                                  background: isChecked ? 'rgba(59, 130, 246, 0.08)' : 'transparent',
+                                  border: isChecked ? '1px solid rgba(59, 130, 246, 0.25)' : '1px solid transparent',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.15s ease'
+                                }}
+                              >
+                                <input 
+                                  type="checkbox" 
+                                  checked={isChecked} 
+                                  onChange={() => handleTogglePermission(perm.key)}
+                                  style={{ marginTop: '2px', cursor: 'pointer' }}
+                                />
+                                <div>
+                                  <div style={{ fontSize: '13px', fontWeight: 500, color: isChecked ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
+                                    {perm.label}
+                                  </div>
+                                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: '1.3' }}>
+                                    {perm.desc}
+                                  </div>
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
+
             <div className="modal-footer">
               <button className="btn-secondary" onClick={closeModal}>Cancel</button>
               <button className="btn-primary" id="save-manager-btn" onClick={handleSave}>
-                {modal === 'add' ? 'Add Manager' : 'Save Changes'}
+                {modal === 'add' ? 'Create Account' : 'Save Changes'}
               </button>
             </div>
           </div>
@@ -3944,11 +4484,35 @@ export function SystemSettings() {
 /* ─────────────────────────────────────────────────────
    Leave Overview
 ───────────────────────────────────────────────────── */
-export function LeaveOverview({ applications, employees, branches, departments, roles }) {
+export function LeaveOverview({ applications = [], employees = [], branches = [], departments = [], roles = [], leaveTypes = [] }) {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
   const [branchFilter, setBranchFilter] = useState('all')
   const [monthsRange, setMonthsRange] = useState(12)
   const [monthOffset, setMonthOffset] = useState(0)
+  const [dynamicLeaveTypes, setDynamicLeaveTypes] = useState(leaveTypes || [])
+
+  useEffect(() => {
+    if (Array.isArray(leaveTypes) && leaveTypes.length > 0) {
+      setDynamicLeaveTypes(leaveTypes);
+    } else {
+      api.getLeaveTypes()
+        .then(data => {
+          if (Array.isArray(data) && data.length > 0) {
+            setDynamicLeaveTypes(data);
+          }
+        })
+        .catch(err => console.error('Failed to load leave types in LeaveOverview:', err));
+    }
+  }, [leaveTypes]);
+
+  const effectiveTypes = (dynamicLeaveTypes && dynamicLeaveTypes.length > 0)
+    ? dynamicLeaveTypes
+    : [
+        { id: '1', name: 'Annual Leave', code: 'annual', color: '#7c3aed', is_paid: 1 },
+        { id: '2', name: 'Sick Leave', code: 'sick', color: '#ef4444', is_paid: 1 },
+        { id: '3', name: 'Casual Leave', code: 'casual', color: '#06b6d4', is_paid: 1 },
+        { id: '4', name: 'Loss of Pay', code: 'unpaid', color: '#f97316', is_paid: 0 }
+      ];
 
   const currentYear = new Date().getFullYear()
   const years = Array.from({ length: 7 }, (_, i) => currentYear - 5 + i)
@@ -3968,16 +4532,22 @@ export function LeaveOverview({ applications, employees, branches, departments, 
   const filteredEmpIds = new Set(filteredEmps.map(e => e.id))
 
   // Pre-calculate approved leaves for fast lookup
-  const approvedLeaves = applications.filter(a => a.status === 'approved')
+  const approvedLeaves = (applications || []).filter(a => a.status === 'approved')
   const leaveMap = {} // { employee_id: { 'YYYY-MM-DD': type } }
   const empLeaveCounts = {} // { employee_id: total_leaves_in_year }
   const monthLeaveCounts = new Array(12).fill(0) // total leaves per month globally
-  const empMonthStats = {} // { employee_id: [{total, annual, sick, casual}, ...] }
-  let totalAnnual = 0; let totalSick = 0; let totalCasual = 0;
+  const empMonthStats = {} // { employee_id: [{total, byType: {}}, ...] }
+  const typeTotals = {} // { [code]: count }
 
-  employees.forEach(emp => {
-    empMonthStats[emp.id] = Array.from({ length: 12 }, () => ({ total: 0, annual: 0, sick: 0, casual: 0 }))
-  })
+  effectiveTypes.forEach(lt => {
+    typeTotals[lt.code] = 0;
+  });
+
+  (employees || []).forEach(emp => {
+    empMonthStats[emp.id] = Array.from({ length: 12 }, () => ({ total: 0, byType: {} }))
+  });
+
+  let totalLeaves = 0;
 
   approvedLeaves.forEach(app => {
     if (!filteredEmpIds.has(app.employee_id)) return;
@@ -3988,24 +4558,26 @@ export function LeaveOverview({ applications, employees, branches, departments, 
       app.leaveDates.forEach(dateStr => {
         // Only count if it's in the selected year
         if (dateStr.startsWith(selectedYear.toString())) {
-          leaveMap[app.employee_id][dateStr] = app.leave_type
+          const lType = app.leave_type || 'annual';
+          leaveMap[app.employee_id][dateStr] = lType;
           
-          const monthIdx = parseInt(dateStr.split('-')[1], 10) - 1
+          const monthIdx = parseInt(dateStr.split('-')[1], 10) - 1;
           
-          monthLeaveCounts[monthIdx]++
-          empMonthStats[app.employee_id][monthIdx].total++
+          monthLeaveCounts[monthIdx]++;
+          totalLeaves++;
+          
+          if (empMonthStats[app.employee_id] && empMonthStats[app.employee_id][monthIdx]) {
+            empMonthStats[app.employee_id][monthIdx].total++;
+            empMonthStats[app.employee_id][monthIdx].byType[lType] = (empMonthStats[app.employee_id][monthIdx].byType[lType] || 0) + 1;
+          }
 
-          if (app.leave_type === 'annual') { totalAnnual++; empMonthStats[app.employee_id][monthIdx].annual++ }
-          if (app.leave_type === 'sick') { totalSick++; empMonthStats[app.employee_id][monthIdx].sick++ }
-          if (app.leave_type === 'casual') { totalCasual++; empMonthStats[app.employee_id][monthIdx].casual++ }
+          typeTotals[lType] = (typeTotals[lType] || 0) + 1;
           
-          empLeaveCounts[app.employee_id]++
+          empLeaveCounts[app.employee_id]++;
         }
       })
     }
-  })
-
-  const totalLeaves = totalAnnual + totalSick + totalCasual
+  });
 
   const dateStrLocal = (d) => {
     const yyyy = d.getFullYear()
@@ -4052,23 +4624,55 @@ export function LeaveOverview({ applications, employees, branches, departments, 
         </div>
       </div>
 
-      <div className="stats-row" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: '12px', gap: '12px' }}>
-        <div className="stat-card" style={{ padding: '10px 16px' }}>
-          <div className="stat-label" style={{ fontSize: '10px', marginBottom: '2px' }}>Total Leaves ({selectedYear})</div>
-          <div className="stat-val" style={{ fontSize: '20px' }}>{totalLeaves}</div>
+      {/* ── Dynamic Stats Row ── */}
+      <div className="stats-row" style={{ 
+        display: 'grid', 
+        gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', 
+        marginBottom: '14px', 
+        gap: '12px' 
+      }}>
+        <div className="stat-card" style={{ padding: '12px 16px' }}>
+          <div className="stat-label" style={{ fontSize: '11px', marginBottom: '3px' }}>Total Leaves ({selectedYear})</div>
+          <div className="stat-val" style={{ fontSize: '22px', fontWeight: 800 }}>{totalLeaves}</div>
         </div>
-        <div className="stat-card" style={{ padding: '10px 16px' }}>
-          <div className="stat-label" style={{ fontSize: '10px', marginBottom: '2px' }}>Total Annual</div>
-          <div className="stat-val" style={{ color: '#a78bfa', fontSize: '20px' }}>{totalAnnual}</div>
-        </div>
-        <div className="stat-card" style={{ padding: '10px 16px' }}>
-          <div className="stat-label" style={{ fontSize: '10px', marginBottom: '2px' }}>Total Sick</div>
-          <div className="stat-val" style={{ color: '#f472b6', fontSize: '20px' }}>{totalSick}</div>
-        </div>
-        <div className="stat-card" style={{ padding: '10px 16px' }}>
-          <div className="stat-label" style={{ fontSize: '10px', marginBottom: '2px' }}>Total Casual</div>
-          <div className="stat-val" style={{ color: '#34d399', fontSize: '20px' }}>{totalCasual}</div>
-        </div>
+        {effectiveTypes.map(lt => {
+          const count = typeTotals[lt.code] || 0;
+          return (
+            <div key={lt.id || lt.code} className="stat-card" style={{ padding: '12px 16px' }}>
+              <div className="stat-label" style={{ fontSize: '11px', marginBottom: '3px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: lt.color || '#7c3aed' }}></span>
+                {lt.name}
+              </div>
+              <div className="stat-val" style={{ color: lt.color || 'var(--text-primary)', fontSize: '22px', fontWeight: 800 }}>
+                {count}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── Dynamic Leave Types Legend ── */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '14px',
+        flexWrap: 'wrap',
+        marginBottom: '12px',
+        padding: '8px 14px',
+        background: 'rgba(255, 255, 255, 0.03)',
+        borderRadius: '8px',
+        border: '1px solid var(--bg-card-border)'
+      }}>
+        <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+          Leave Types:
+        </span>
+        {effectiveTypes.map(lt => (
+          <div key={lt.id || lt.code} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', color: 'var(--text-primary)' }}>
+            <span style={{ width: '10px', height: '10px', borderRadius: '3px', background: lt.color || '#7c3aed' }}></span>
+            <span style={{ fontWeight: 500 }}>{lt.name}</span>
+            <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>({typeTotals[lt.code] || 0})</span>
+          </div>
+        ))}
       </div>
 
       {monthsRange < 12 && (
@@ -4131,16 +4735,14 @@ export function LeaveOverview({ applications, employees, branches, departments, 
                       const dStr = dateStrLocal(day);
                       const lType = leaveMap[emp.id]?.[dStr];
                       const isAltMonth = day.getMonth() % 2 === 1;
-                      let sqClass = isAltMonth ? 'sq-empty-alt' : 'sq-empty';
-                      if (lType === 'annual') sqClass = 'sq-annual';
-                      else if (lType === 'sick') sqClass = 'sq-sick';
-                      else if (lType === 'casual') sqClass = 'sq-casual';
+                      const matchedLt = lType ? effectiveTypes.find(lt => lt.code?.toLowerCase() === lType.toLowerCase() || lt.name?.toLowerCase() === lType.toLowerCase()) : null;
                       
                       return (
                         <div 
                           key={dStr} 
-                          className={`overview-sq ${sqClass}`} 
-                          title={`${dStr}${lType ? ` - ${lType}` : ''}`}
+                          className={`overview-sq ${lType ? '' : (isAltMonth ? 'sq-empty-alt' : 'sq-empty')}`} 
+                          style={matchedLt ? { background: matchedLt.color || '#7c3aed' } : undefined}
+                          title={`${dStr}${matchedLt ? ` - ${matchedLt.name}` : (lType ? ` - ${lType}` : '')}`}
                         ></div>
                       )
                     })}
@@ -4149,16 +4751,22 @@ export function LeaveOverview({ applications, employees, branches, departments, 
                   <div style={{ display: 'grid', gridTemplateColumns: `repeat(${daysInYear.length}, 1fr)`, gap: '1px' }}>
                     {monthDaysArray.map((monthDays, i) => {
                       const absoluteMonthIdx = monthOffset + i;
-                      const stats = empMonthStats[emp.id][absoluteMonthIdx];
+                      const stats = empMonthStats[emp.id]?.[absoluteMonthIdx] || { total: 0, byType: {} };
                       return (
                         <div key={absoluteMonthIdx} style={{ gridColumn: `span ${monthDays}`, display: 'flex', alignItems: 'center', gap: '3px', fontSize: '7px', color: 'var(--text-muted)', overflow: 'hidden' }}>
                           {stats.total > 0 && (
                             <>
                               <span style={{ fontWeight: 600 }}>{stats.total}</span>
-                              <div style={{ display: 'flex', gap: '1px' }}>
-                                {stats.annual > 0 && <span style={{ color: '#a78bfa' }}>●{stats.annual}</span>}
-                                {stats.sick > 0 && <span style={{ color: '#f472b6' }}>●{stats.sick}</span>}
-                                {stats.casual > 0 && <span style={{ color: '#34d399' }}>●{stats.casual}</span>}
+                              <div style={{ display: 'flex', gap: '2px', flexWrap: 'wrap' }}>
+                                {Object.entries(stats.byType || {}).map(([tCode, count]) => {
+                                  if (count <= 0) return null;
+                                  const ltObj = effectiveTypes.find(lt => lt.code?.toLowerCase() === tCode.toLowerCase() || lt.name?.toLowerCase() === tCode.toLowerCase());
+                                  return (
+                                    <span key={tCode} style={{ color: ltObj?.color || '#a78bfa' }} title={`${ltObj?.name || tCode}: ${count}`}>
+                                      ●{count}
+                                    </span>
+                                  );
+                                })}
                               </div>
                             </>
                           )}
@@ -4189,6 +4797,7 @@ export function ManageLeaveTypes({ leaveTypes, setLeaveTypes }) {
     color: '#7c3aed',
     description: '',
     status: 'active',
+    is_paid: true,
     notice_days_required: 0,
     max_consecutive_days: 0,
     doc_required_after_days: 0,
@@ -4211,6 +4820,7 @@ export function ManageLeaveTypes({ leaveTypes, setLeaveTypes }) {
       color: '#7c3aed', 
       description: '', 
       status: 'active',
+      is_paid: true,
       notice_days_required: 0,
       max_consecutive_days: 0,
       doc_required_after_days: 0,
@@ -4224,6 +4834,7 @@ export function ManageLeaveTypes({ leaveTypes, setLeaveTypes }) {
   const openEdit = (lt) => {
     setForm({ 
       ...lt,
+      is_paid: lt.is_paid !== 0 && lt.is_paid !== false,
       notice_days_required: lt.notice_days_required ?? 0,
       max_consecutive_days: lt.max_consecutive_days ?? 0,
       doc_required_after_days: lt.doc_required_after_days ?? 0,
@@ -4308,6 +4919,7 @@ export function ManageLeaveTypes({ leaveTypes, setLeaveTypes }) {
             <tr>
               <th>Leave Type</th>
               <th>Code</th>
+              <th>Compensation</th>
               <th>Color Tag</th>
               <th>Policy Rules</th>
               <th>Description</th>
@@ -4317,7 +4929,7 @@ export function ManageLeaveTypes({ leaveTypes, setLeaveTypes }) {
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={7} style={{ textAlign: 'center', padding: '48px', color: 'var(--text-muted)' }}>No leave types found</td></tr>
+              <tr><td colSpan={8} style={{ textAlign: 'center', padding: '48px', color: 'var(--text-muted)' }}>No leave types found</td></tr>
             ) : filtered.map(lt => (
               <tr key={lt.id}>
                 <td>
@@ -4327,6 +4939,39 @@ export function ManageLeaveTypes({ leaveTypes, setLeaveTypes }) {
                   </div>
                 </td>
                 <td><code style={{ background: 'rgba(255,255,255,0.06)', padding: '2px 8px', borderRadius: '4px', fontSize: '12px' }}>{lt.code}</code></td>
+                <td>
+                  {(lt.is_paid !== 0 && lt.is_paid !== false && lt.code !== 'unpaid' && lt.code !== 'lop') ? (
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      background: 'rgba(16, 185, 129, 0.15)',
+                      color: '#34d399',
+                      border: '1px solid rgba(16, 185, 129, 0.35)',
+                      padding: '3px 8px',
+                      borderRadius: '6px',
+                      fontSize: '11.5px',
+                      fontWeight: 700
+                    }}>
+                      <span>✓</span> Paid Leave
+                    </span>
+                  ) : (
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      background: 'rgba(239, 68, 68, 0.15)',
+                      color: '#f87171',
+                      border: '1px solid rgba(239, 68, 68, 0.35)',
+                      padding: '3px 8px',
+                      borderRadius: '6px',
+                      fontSize: '11.5px',
+                      fontWeight: 700
+                    }}>
+                      <span>✕</span> Unpaid (LOP)
+                    </span>
+                  )}
+                </td>
                 <td>
                   <span style={{ background: lt.color || '#7c3aed', color: '#fff', fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '12px' }}>
                     {lt.color || '#7c3aed'}
@@ -4342,10 +4987,17 @@ export function ManageLeaveTypes({ leaveTypes, setLeaveTypes }) {
                         ⏱️ Max: <strong style={{ color: '#fbbf24' }}>{lt.max_consecutive_days} consecutive days</strong>
                       </span>
                     )}
-                    {lt.doc_required_after_days > 0 && (
-                      <span style={{ color: 'var(--text-secondary)' }}>
-                        📄 Doc: <strong style={{ color: '#34d399' }}>After {lt.doc_required_after_days} days</strong>
+                    {lt.doc_required_after_days > 0 ? (
+                      <span style={{ color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ color: '#38bdf8' }}>🏥</span>
+                        <span>Doc: <strong style={{ color: '#38bdf8' }}>After {lt.doc_required_after_days} days (Medical Rule)</strong></span>
                       </span>
+                    ) : (
+                      (lt.code?.toLowerCase().includes('sick') || lt.name?.toLowerCase().includes('sick')) && (
+                        <span style={{ color: '#fbbf24', fontSize: '10.5px', background: 'rgba(251, 191, 36, 0.12)', padding: '2px 6px', borderRadius: '4px', marginTop: '2px', display: 'inline-flex', alignItems: 'center', gap: '3px' }} title="Appropriate for Sick Leaves: Set Doc Required After (e.g. 2 days) to require medical certificates">
+                          <span>⚠️</span> Doc not set (Recommended for Sick)
+                        </span>
+                      )
                     )}
                     {lt.carry_forward_max_days > 0 && (
                       <span style={{ color: 'var(--text-secondary)' }}>
@@ -4435,6 +5087,58 @@ export function ManageLeaveTypes({ leaveTypes, setLeaveTypes }) {
                   </div>
                 )}
 
+                {/* ── Paid Leave Checkbox / Tick ── */}
+                <div 
+                  onClick={() => setForm(p => ({ ...p, is_paid: !p.is_paid }))}
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: '10px',
+                    border: `1.5px solid ${form.is_paid ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.4)'}`,
+                    background: form.is_paid ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    userSelect: 'none'
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    id="is_paid_tick"
+                    checked={!!form.is_paid}
+                    onChange={e => setForm(p => ({ ...p, is_paid: e.target.checked }))}
+                    onClick={e => e.stopPropagation()}
+                    style={{
+                      width: '20px',
+                      height: '20px',
+                      cursor: 'pointer',
+                      accentColor: '#10b981'
+                    }}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <label 
+                      htmlFor="is_paid_tick" 
+                      style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '6px',
+                        fontWeight: 700, 
+                        fontSize: '13.5px', 
+                        color: form.is_paid ? '#34d399' : '#f87171',
+                        cursor: 'pointer',
+                        marginBottom: '2px'
+                      }}
+                    >
+                      <span>{form.is_paid ? '💵 Paid Leave (Compensated)' : '🚫 Unpaid Leave (Loss of Pay / LOP)'}</span>
+                    </label>
+                    <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                      {form.is_paid 
+                        ? 'Employees receive full regular salary. Does not deduct pay during month-end payroll.'
+                        : 'Uncompensated absence. Automatically deducts payable days and logs Loss of Pay (LOP) in payroll.'}
+                    </div>
+                  </div>
+                </div>
 
                 <div className="form-group">
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
@@ -4495,9 +5199,14 @@ export function ManageLeaveTypes({ leaveTypes, setLeaveTypes }) {
                       <small style={{ fontSize: '11px', color: 'var(--text-muted)' }}>0 = No upper limit</small>
                     </div>
 
-                    <div className="form-group">
-                      <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                        Doc Required After (Days)
+                    <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                        <span>Doc Required After (Days) <strong style={{ color: '#38bdf8' }}>— Ideal for Sick / Medical Leaves</strong></span>
+                        {parseInt(form.doc_required_after_days) > 0 && (
+                          <span style={{ fontSize: '11px', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>
+                            🏥 Appropriate for Sick Leaves
+                          </span>
+                        )}
                       </label>
                       <input
                         type="number"
@@ -4507,7 +5216,14 @@ export function ManageLeaveTypes({ leaveTypes, setLeaveTypes }) {
                         value={form.doc_required_after_days}
                         onChange={e => setForm(p => ({ ...p, doc_required_after_days: e.target.value }))}
                       />
-                      <small style={{ fontSize: '11px', color: 'var(--text-muted)' }}>e.g. Medical certificate</small>
+                      <div style={{ marginTop: '6px', padding: '10px 12px', background: 'rgba(56, 189, 248, 0.05)', borderRadius: '6px', border: '1px solid rgba(56, 189, 248, 0.18)', fontSize: '11.5px', lineHeight: '1.45', color: 'var(--text-muted)' }}>
+                        <strong style={{ color: '#fbbf24' }}>💡 Admin Policy Guide for Sick Leaves:</strong>
+                        <div style={{ marginTop: '3px', color: 'var(--text-secondary)' }}>
+                          • Leave types with a value for this field enforce doctor's note / medical certificate verification for any request exceeding this duration (e.g. 2 days).<br />
+                          • <strong>Automated No-Pay Conversion:</strong> If the employee fails to upload the required medical certificate by their return date / deadline, the leave will automatically be converted and deducted as <strong>No Pay (Loss of Pay)</strong> in payroll and attendance.<br />
+                          • Admins and Branch Managers can inspect and review the uploaded document at any time directly from the dashboard.
+                        </div>
+                      </div>
                     </div>
 
                     <div className="form-group">

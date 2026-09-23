@@ -11,10 +11,38 @@ function formatDate(dateStr) {
   })
 }
 
-const LEAVE_TYPE_CONFIG = {
-  annual:  { label: 'Annual Leave',  color: '#a78bfa', gradient: 'linear-gradient(135deg, #7c3aed, #a78bfa)' },
-  sick:    { label: 'Sick Leave',    color: '#f472b6', gradient: 'linear-gradient(135deg, #db2777, #f472b6)' },
-  casual:  { label: 'Casual Leave',  color: '#34d399', gradient: 'linear-gradient(135deg, #059669, #34d399)' },
+const DEFAULT_LEAVE_TYPES = [
+  { code: 'annual', name: 'Annual Leave', color: '#a78bfa' },
+  { code: 'sick', name: 'Sick Leave', color: '#f472b6' },
+  { code: 'casual', name: 'Casual Leave', color: '#34d399' },
+]
+
+function getLeaveTypeInfo(code, leaveTypesList = []) {
+  const norm = (code || '').toLowerCase().trim()
+  const found = (leaveTypesList || []).find(
+    lt => lt.code?.toLowerCase() === norm || lt.name?.toLowerCase() === norm
+  )
+  if (found) {
+    const color = found.color || '#a78bfa'
+    return {
+      label: found.name || code,
+      color: color,
+      gradient: `linear-gradient(135deg, ${color}, #a78bfa)`,
+      is_paid: found.is_paid !== 0,
+      code: found.code
+    }
+  }
+  if (norm === 'annual') return { label: 'Annual Leave', color: '#a78bfa', gradient: 'linear-gradient(135deg, #7c3aed, #a78bfa)', code: 'annual' }
+  if (norm === 'sick') return { label: 'Sick Leave', color: '#f472b6', gradient: 'linear-gradient(135deg, #db2777, #f472b6)', code: 'sick' }
+  if (norm === 'casual') return { label: 'Casual Leave', color: '#34d399', gradient: 'linear-gradient(135deg, #059669, #34d399)', code: 'casual' }
+  if (norm === 'unpaid' || norm === 'loss of pay') return { label: 'Loss of Pay', color: '#f97316', gradient: 'linear-gradient(135deg, #ea580c, #f97316)', code: 'unpaid' }
+
+  return {
+    label: code ? code.charAt(0).toUpperCase() + code.slice(1).replace(/_/g, ' ') : 'Leave',
+    color: '#818cf8',
+    gradient: 'linear-gradient(135deg, #6366f1, #818cf8)',
+    code: code
+  }
 }
 
 const STATUS_CONFIG = {
@@ -25,17 +53,80 @@ const STATUS_CONFIG = {
 
 export default function LeaveOverview({ onBack, secretCode }) {
   const [overview, setOverview] = useState(null)
+  const [leaveTypes, setLeaveTypes] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [expandedId, setExpandedId] = useState(null)
   const [historyFilter, setHistoryFilter] = useState('all')
   const [heatmapExpanded, setHeatmapExpanded] = useState(true)
+  const [uploadingDocId, setUploadingDocId] = useState(null)
+  const [docUploadMsg, setDocUploadMsg] = useState({})
+
+  const handleUploadDoc = async (appId, e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (file.size > 10 * 1024 * 1024) {
+      alert('File size must be under 10MB')
+      return
+    }
+
+    setUploadingDocId(appId)
+    setDocUploadMsg(prev => ({ ...prev, [appId]: { type: 'info', text: 'Uploading document...' } }))
+
+    try {
+      const reader = new FileReader()
+      reader.onload = async (readEvt) => {
+        const base64Data = readEvt.target.result
+        try {
+          const res = await api.uploadApplicationDocument(appId, {
+            documentData: base64Data,
+            documentName: file.name
+          })
+
+          setDocUploadMsg(prev => ({ ...prev, [appId]: { type: 'success', text: 'Document submitted for review!' } }))
+          
+          // Update local overview state so UI updates immediately
+          setOverview(prev => {
+            if (!prev) return prev
+            const updatedApps = (prev.applications || []).map(a => {
+              if (a.id === appId) {
+                return {
+                  ...a,
+                  document_path: res.document_path || a.document_path,
+                  document_name: file.name,
+                  document_status: 'submitted',
+                  is_no_pay: 0
+                }
+              }
+              return a
+            })
+            return { ...prev, applications: updatedApps }
+          })
+        } catch (err) {
+          setDocUploadMsg(prev => ({ ...prev, [appId]: { type: 'error', text: err.message || 'Failed to upload document' } }))
+        } finally {
+          setUploadingDocId(null)
+        }
+      }
+      reader.readAsDataURL(file)
+    } catch (err) {
+      setUploadingDocId(null)
+      setDocUploadMsg(prev => ({ ...prev, [appId]: { type: 'error', text: err.message || 'Error reading file' } }))
+    }
+  }
 
   useEffect(() => {
     const load = async () => {
       try {
-        const data = await api.getLeaveOverview(secretCode)
+        const [data, typesData] = await Promise.all([
+          api.getLeaveOverview(secretCode),
+          api.getLeaveTypes().catch(() => [])
+        ])
         setOverview(data)
+        if (Array.isArray(typesData) && typesData.length > 0) {
+          setLeaveTypes(typesData)
+        }
       } catch (err) {
         setError(err.message || 'Failed to load overview')
       } finally {
@@ -69,31 +160,50 @@ export default function LeaveOverview({ onBack, secretCode }) {
   }
 
   const { employee, balance, rules, applications } = overview
+  const currentYear = new Date().getFullYear()
 
-  const balanceCards = [
-    {
-      type: 'annual',
-      taken: balance.annual_taken,
-      total: rules.annual_leave,
-    },
-    {
-      type: 'sick',
-      taken: balance.sick_taken,
-      total: rules.sick_leave,
-    },
-    {
-      type: 'casual',
-      taken: balance.casual_taken,
-      total: rules.casual_leave,
-    },
-  ]
+  const effectiveLeaveTypes = (leaveTypes && leaveTypes.length > 0)
+    ? leaveTypes
+    : DEFAULT_LEAVE_TYPES
+
+  const balanceCards = effectiveLeaveTypes.map(lt => {
+    const code = (lt.code || '').toLowerCase()
+    const ruleKey = `${code}_leave`
+    const takenKey = `${code}_taken`
+
+    let taken = (balance && balance[takenKey] !== undefined) ? Number(balance[takenKey]) : null
+    if (taken === null || isNaN(taken)) {
+      taken = (applications || []).reduce((acc, app) => {
+        if (app.status === 'approved' && (app.leave_type?.toLowerCase() === code || app.leave_type?.toLowerCase() === lt.name?.toLowerCase())) {
+          const inYearDates = (app.leaveDates || []).filter(d => d.startsWith(currentYear.toString()))
+          return acc + inYearDates.length
+        }
+        return acc
+      }, 0)
+    }
+
+    let total = (rules && rules[ruleKey] !== undefined) ? Number(rules[ruleKey]) : null
+    if (total === null || isNaN(total)) {
+      total = code === 'annual' ? 14 : code === 'sick' ? 10 : code === 'casual' ? 7 : 0
+    }
+
+    const typeInfo = getLeaveTypeInfo(lt.code, effectiveLeaveTypes)
+
+    return {
+      type: lt.code,
+      label: lt.name || typeInfo.label,
+      color: lt.color || typeInfo.color,
+      gradient: typeInfo.gradient,
+      taken,
+      total,
+    }
+  })
 
   const filteredApps = historyFilter === 'all'
     ? applications
     : applications.filter(a => a.status === historyFilter)
 
   // -- Heatmap Data Generation --
-  const currentYear = new Date().getFullYear()
   const leaveMap = {}
   applications.forEach(app => {
     // Show approved leaves in heatmap (could also include pending in a different style if desired, but let's stick to approved/pending with opacity maybe? Let's just use the color)
@@ -174,14 +284,13 @@ export default function LeaveOverview({ onBack, secretCode }) {
       {/* ── Balance Cards ── */}
       <div className="overview-section-title">Leave Balance — {new Date().getFullYear()}</div>
       <div className="overview-balance-grid">
-        {balanceCards.map(({ type, taken, total }) => {
-          const config = LEAVE_TYPE_CONFIG[type]
+        {balanceCards.map(({ type, label, color, gradient, taken, total }) => {
           const remaining = Math.max(0, total - taken)
           const pct = total > 0 ? Math.min(100, Math.round((taken / total) * 100)) : 0
           return (
             <div className="overview-balance-card" key={type}>
               <div className="balance-card-top">
-                <div className="balance-type-label" style={{ color: config.color }}>{config.label}</div>
+                <div className="balance-type-label" style={{ color: color }}>{label}</div>
                 <div className="balance-remaining">
                   <span className="balance-remaining-num">{remaining}</span>
                   <span className="balance-remaining-of">/ {total} remaining</span>
@@ -193,7 +302,7 @@ export default function LeaveOverview({ onBack, secretCode }) {
                     className="balance-progress-fill"
                     style={{
                       width: `${pct}%`,
-                      background: config.gradient,
+                      background: gradient,
                     }}
                   />
                 </div>
@@ -232,37 +341,66 @@ export default function LeaveOverview({ onBack, secretCode }) {
       </button>
 
       {heatmapExpanded && (
-        <div className="overview-heatmap-container">
-          {heatmapMonths.map(month => (
-            <div key={month.name} className="heatmap-month-block">
-            <div className="heatmap-month-label">{month.name}</div>
-            <div className="heatmap-days-grid">
-              {month.days.map(d => {
-                let bg = 'rgba(255,255,255,0.05)'
-                let border = '1px solid rgba(255,255,255,0.02)'
-                let tooltip = formatDate(d.date)
-                if (d.leave) {
-                  const conf = LEAVE_TYPE_CONFIG[d.leave.type]
-                  bg = conf.color
-                  border = `1px solid ${conf.color}`
-                  tooltip += ` — ${conf.label} (${d.leave.status})`
-                  if (d.leave.status === 'pending') {
-                    bg = 'transparent' // hollow square for pending
-                  }
-                }
-                return (
-                  <div 
-                    key={d.date} 
-                    className={`heatmap-day-sq ${d.leave ? 'has-leave' : ''}`}
-                    style={{ background: bg, border: border }} 
-                    title={tooltip}
-                  />
-                )
-              })}
+        <>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '14px',
+            flexWrap: 'wrap',
+            marginTop: '10px',
+            marginBottom: '14px',
+            padding: '8px 14px',
+            background: 'rgba(255, 255, 255, 0.03)',
+            borderRadius: '8px',
+            border: '1px solid rgba(255, 255, 255, 0.05)'
+          }}>
+            <span style={{ fontSize: '11px', fontWeight: 600, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Leave Types:
+            </span>
+            {effectiveLeaveTypes.map(lt => (
+              <div key={lt.code} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'rgba(255,255,255,0.85)' }}>
+                <span style={{ width: '9px', height: '9px', borderRadius: '2px', background: lt.color || '#a78bfa' }} />
+                <span>{lt.name}</span>
+              </div>
+            ))}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'rgba(255,255,255,0.5)' }}>
+              <span style={{ width: '9px', height: '9px', borderRadius: '2px', border: '1px solid rgba(255,255,255,0.4)', background: 'transparent' }} />
+              <span>Pending</span>
             </div>
           </div>
-        ))}
-      </div>
+
+          <div className="overview-heatmap-container">
+            {heatmapMonths.map(month => (
+              <div key={month.name} className="heatmap-month-block">
+              <div className="heatmap-month-label">{month.name}</div>
+              <div className="heatmap-days-grid">
+                {month.days.map(d => {
+                  let bg = 'rgba(255,255,255,0.05)'
+                  let border = '1px solid rgba(255,255,255,0.02)'
+                  let tooltip = formatDate(d.date)
+                  if (d.leave) {
+                    const conf = getLeaveTypeInfo(d.leave.type, effectiveLeaveTypes)
+                    bg = conf.color
+                    border = `1px solid ${conf.color}`
+                    tooltip += ` — ${conf.label} (${d.leave.status})`
+                    if (d.leave.status === 'pending') {
+                      bg = 'transparent' // hollow square for pending
+                    }
+                  }
+                  return (
+                    <div 
+                      key={d.date} 
+                      className={`heatmap-day-sq ${d.leave ? 'has-leave' : ''}`}
+                      style={{ background: bg, border: border }} 
+                      title={tooltip}
+                    />
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+          </div>
+        </>
       )}
 
       {/* ── Leave History ── */}
@@ -299,7 +437,7 @@ export default function LeaveOverview({ onBack, secretCode }) {
         <div className="overview-history-list">
           {filteredApps.map((app, i) => {
             const status = STATUS_CONFIG[app.status] || STATUS_CONFIG.pending
-            const typeConf = LEAVE_TYPE_CONFIG[app.leave_type] || LEAVE_TYPE_CONFIG.annual
+            const typeConf = getLeaveTypeInfo(app.leave_type, effectiveLeaveTypes)
             const isExpanded = expandedId === app.id
             return (
               <div
@@ -335,6 +473,20 @@ export default function LeaveOverview({ onBack, secretCode }) {
                   <span className={`status-badge ${status.className}`}>
                     {status.label}
                   </span>
+
+                  {app.document_status && (
+                    <span className={`status-badge doc-badge ${
+                      app.document_status === 'verified' ? 'doc-badge-verified' :
+                      app.document_status === 'submitted' ? 'doc-badge-submitted' :
+                      (app.document_status === 'overdue' || app.is_no_pay) ? 'doc-badge-overdue' :
+                      app.document_status === 'rejected' ? 'doc-badge-rejected' : 'doc-badge-pending'
+                    }`}>
+                      {app.document_status === 'verified' ? '✓ Doc Verified' :
+                       app.document_status === 'submitted' ? '📄 Doc Submitted' :
+                       (app.document_status === 'overdue' || app.is_no_pay) ? '⚠️ No Pay (Overdue)' :
+                       app.document_status === 'rejected' ? '❌ No Pay (Rejected)' : '⏳ Doc Required'}
+                    </span>
+                  )}
 
                   <div className={`expand-icon ${isExpanded ? 'rotated' : ''}`}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -374,6 +526,90 @@ export default function LeaveOverview({ onBack, secretCode }) {
                         <span className="detail-value mono">{app.id}</span>
                       </div>
                     </div>
+
+                    {/* Medical / Supporting Document Section */}
+                    {(app.document_status || app.document_deadline || app.document_path) && (
+                      <div className="overview-doc-section">
+                        <div className="overview-doc-header">
+                          <div className="overview-doc-title">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 16, height: 16 }}>
+                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                              <polyline points="14 2 14 8 20 8"/>
+                              <line x1="16" y1="13" x2="8" y2="13"/>
+                              <line x1="16" y1="17" x2="8" y2="17"/>
+                              <polyline points="10 9 9 9 8 9"/>
+                            </svg>
+                            Medical / Supporting Document
+                          </div>
+                          <span className={`status-badge doc-badge ${
+                            app.document_status === 'verified' ? 'doc-badge-verified' :
+                            app.document_status === 'submitted' ? 'doc-badge-submitted' :
+                            (app.document_status === 'overdue' || app.is_no_pay) ? 'doc-badge-overdue' :
+                            app.document_status === 'rejected' ? 'doc-badge-rejected' : 'doc-badge-pending'
+                          }`}>
+                            {app.document_status === 'verified' ? '✓ Verified by Admin/Manager' :
+                             app.document_status === 'submitted' ? '📄 Submitted (Awaiting Review)' :
+                             (app.document_status === 'overdue' || app.is_no_pay) ? '⚠️ Overdue (Converted to No Pay)' :
+                             app.document_status === 'rejected' ? '❌ Rejected (Converted to No Pay)' :
+                             `⏳ Required by ${app.document_deadline || 'return date'}`}
+                          </span>
+                        </div>
+
+                        {/* Document Overdue / Rejected Warning */}
+                        {(app.is_no_pay === 1 || app.document_status === 'overdue' || app.document_status === 'rejected') && (
+                          <div className="overview-nopay-alert">
+                            <strong>⚠️ Loss of Pay (No Pay Leave):</strong>
+                            {app.document_status === 'rejected'
+                              ? ` Your document was rejected: "${app.document_rejection_reason || 'Does not meet requirements'}". This leave is counted as unpaid Loss of Pay.`
+                              : ` The document submission deadline (${app.document_deadline}) has passed without a verified document. This leave is marked as unpaid Loss of Pay.`}
+                          </div>
+                        )}
+
+                        <div className="overview-doc-body">
+                          {app.document_path ? (
+                            <div className="overview-doc-file-info">
+                              <span className="doc-file-name">📄 {app.document_name || 'Uploaded Document'}</span>
+                              <a
+                                href={app.document_path}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="doc-view-btn"
+                              >
+                                View / Download
+                              </a>
+                            </div>
+                          ) : (
+                            <div className="overview-doc-missing-text">
+                              No document uploaded yet. Deadline: <strong>{app.document_deadline || 'Upon return'}</strong>
+                            </div>
+                          )}
+
+                          {/* Upload / Replace Button */}
+                          <div className="overview-doc-actions">
+                            <label className={`overview-doc-upload-btn ${uploadingDocId === app.id ? 'disabled' : ''}`}>
+                              <input
+                                type="file"
+                                accept=".pdf,image/png,image/jpeg,image/webp"
+                                style={{ display: 'none' }}
+                                disabled={uploadingDocId === app.id}
+                                onChange={(e) => handleUploadDoc(app.id, e)}
+                              />
+                              {uploadingDocId === app.id
+                                ? 'Uploading...'
+                                : app.document_path
+                                ? 'Replace Document'
+                                : 'Upload Medical Certificate'}
+                            </label>
+
+                            {docUploadMsg[app.id] && (
+                              <span className={`doc-inline-msg msg-${docUploadMsg[app.id].type}`}>
+                                {docUploadMsg[app.id].text}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

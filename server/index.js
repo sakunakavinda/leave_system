@@ -7,11 +7,11 @@ import branchesRouter from './routes/branches.js';
 import departmentsRouter from './routes/departments.js';
 import rolesRouter from './routes/roles.js';
 import employeesRouter from './routes/employees.js';
-import managersRouter from './routes/managers.js';
+import managersRouter, { initManagersTable } from './routes/managers.js';
 import rulesRouter from './routes/rules.js';
-import applicationsRouter from './routes/applications.js';
+import applicationsRouter, { initApplicationDocumentsTable } from './routes/applications.js';
 import settingsRouter from './routes/settings.js';
-import leaveTypesRouter from './routes/leaveTypes.js';
+import leaveTypesRouter, { initLeaveTypesTable } from './routes/leaveTypes.js';
 import leaveProfilesRouter from './routes/leaveProfiles.js';
 import authRouter from './routes/auth.js';
 import holidaysRouter from './routes/holidays.js';
@@ -23,8 +23,11 @@ import operatingSchedulesRouter, { initOperatingSchedulesTable } from './routes/
 
 dotenv.config();
 
-// Ensure operating_schedules table exists and defaults are seeded
+// Ensure operating_schedules, managers permissions, leave_types, and application documents exist
 initOperatingSchedulesTable();
+initManagersTable();
+initLeaveTypesTable();
+initApplicationDocumentsTable();
 
 const app = express();
 const PORT = process.env.PORT || 5005;
@@ -57,6 +60,9 @@ app.use('/api/rosters', rostersRouter);
 app.use('/api/contingencies', contingenciesRouter);
 app.use('/api/payroll', payrollRouter);
 app.use('/api/operating-schedules', operatingSchedulesRouter);
+
+// Serve uploaded documents statically
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Serve static frontend files in production
 app.use(express.static(path.join(__dirname, '../dist')));

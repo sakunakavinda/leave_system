@@ -60,6 +60,34 @@ export default function LeaveList({ onBack, submissions = [], employees = [], br
   const [filter, setFilter] = useState('all')
   const [expandedId, setExpandedId] = useState(null)
   const [isDeleting, setIsDeleting] = useState(null)
+  const [uploadingDocId, setUploadingDocId] = useState(null)
+
+  const handleUploadDoc = async (e, appId) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      alert('Document file size must be less than 10MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      setUploadingDocId(appId);
+      try {
+        await api.uploadApplicationDocument(appId, {
+          documentData: evt.target.result,
+          documentName: file.name,
+          secretCode: applicant?.secret_code || applicant?.secretCode
+        });
+        alert('Medical document uploaded successfully! It is now pending review.');
+        window.location.reload();
+      } catch (err) {
+        alert(err.message || 'Failed to upload document.');
+      } finally {
+        setUploadingDocId(null);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleUndo = async (e, id) => {
     e.stopPropagation()
@@ -95,6 +123,12 @@ export default function LeaveList({ onBack, submissions = [], employees = [], br
       returningDate: sub.returningDate,
       substituteName: subEmp?.name || 'Unknown',
       status: sub.status,
+      documentPath: sub.documentPath || sub.document_path,
+      documentName: sub.documentName || sub.document_name,
+      documentStatus: sub.documentStatus || sub.document_status,
+      documentDeadline: sub.documentDeadline || sub.document_deadline,
+      documentRejectionReason: sub.documentRejectionReason || sub.document_rejection_reason,
+      isNoPay: Boolean(sub.isNoPay || sub.is_no_pay),
     }
   })
 
@@ -245,6 +279,61 @@ export default function LeaveList({ onBack, submissions = [], employees = [], br
                         <span className="detail-label">Application ID</span>
                         <span className="detail-value mono">{app.id}</span>
                       </div>
+
+                      {app.documentStatus && app.documentStatus !== 'not_required' && (
+                        <div className="detail-item" style={{ gridColumn: 'span 2', background: 'rgba(255,255,255,0.03)', padding: '10px 14px', borderRadius: '6px' }}>
+                          <span className="detail-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span>📄</span> Supporting Medical Document / Doctor's Certificate
+                          </span>
+                          <div style={{ marginTop: '6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                            <div style={{ fontSize: '12px' }}>
+                              <span style={{ color: 'var(--text-muted)' }}>Status: </span>
+                              <strong style={{ 
+                                color: app.documentStatus === 'approved' ? '#34d399' : (app.documentStatus === 'overdue' || app.documentStatus === 'rejected' ? '#f87171' : '#38bdf8'),
+                                textTransform: 'uppercase'
+                              }}>
+                                {app.documentStatus === 'overdue' ? 'No Pay (Overdue)' : app.documentStatus}
+                              </strong>
+                              {app.documentDeadline && (
+                                <span style={{ marginLeft: '8px', color: 'var(--text-muted)', fontSize: '11px' }}>
+                                  (Deadline: {formatDate(app.documentDeadline)})
+                                </span>
+                              )}
+                              {app.documentRejectionReason && (
+                                <div style={{ color: '#f87171', fontSize: '11px', marginTop: '2px' }}>
+                                  Note: {app.documentRejectionReason}
+                                </div>
+                              )}
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              {app.documentPath && (
+                                <a 
+                                  href={app.documentPath} 
+                                  target="_blank" 
+                                  rel="noreferrer" 
+                                  className="btn-secondary" 
+                                  style={{ padding: '4px 10px', fontSize: '11px', textDecoration: 'none' }}
+                                >
+                                  View Uploaded Doc ↗
+                                </a>
+                              )}
+                              {(app.documentStatus === 'pending_upload' || app.documentStatus === 'overdue' || app.documentStatus === 'rejected') && (
+                                <label className="btn-secondary" style={{ padding: '4px 12px', fontSize: '11px', cursor: 'pointer', background: 'linear-gradient(135deg, #0284c7, #38bdf8)', color: '#fff', border: 'none' }}>
+                                  <span>{uploadingDocId === app.id ? 'Uploading...' : (app.documentPath ? 'Re-upload Document' : 'Upload Medical Doc')}</span>
+                                  <input 
+                                    type="file" 
+                                    accept=".pdf,image/*" 
+                                    style={{ display: 'none' }} 
+                                    onChange={(e) => handleUploadDoc(e, app.id)} 
+                                    disabled={uploadingDocId === app.id} 
+                                  />
+                                </label>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                     {app.status === 'pending' && (
                       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '24px', paddingTop: '16px', borderTop: '1px solid var(--bg-card-border)' }}>

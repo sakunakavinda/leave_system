@@ -442,8 +442,76 @@ export default function AdminApp() {
     )
   }
 
-  const isSuper = currentUser.role === 'super manager'
-  const allowedNav = NAV.filter(item => isSuper || ['dashboard', 'employees', 'overview'].includes(item.id))
+  const isSuper = ['super manager', 'super_admin', 'admin'].includes(currentUser?.role);
+  const isHrOfficer = ['hr_officer', 'hr'].includes(currentUser?.role);
+  const isBranchManager = ['branch_manager', 'manager'].includes(currentUser?.role);
+
+  const DEFAULT_ROLE_PERMS = {
+    branch_manager: {
+      'leaves.view': true,
+      'leaves.approve_reject': true,
+      'leaves.mark_unpaid': true,
+      'employees.view': true,
+      'rosters.view': true,
+      'rosters.edit': true,
+      'shifts.view': true,
+      'payroll.view': true,
+      'holidays.view': true,
+      'overview.view': true,
+      'contingencies.view': true
+    },
+    hr_officer: {
+      'leaves.view': true,
+      'employees.view': true,
+      'employees.create_edit': true,
+      'employees.adjust_balance': true,
+      'employees.delete': true,
+      'rosters.view': true,
+      'payroll.view': true,
+      'payroll.export': true,
+      'holidays.view': true,
+      'holidays.manage': true,
+      'overview.view': true,
+      'contingencies.view': true
+    }
+  };
+
+  const hasPermission = (permKey) => {
+    if (isSuper) return true;
+    let perms = currentUser?.permissions;
+    if (typeof perms === 'string') {
+      try { perms = JSON.parse(perms); } catch(e) {}
+    }
+    if (!perms || typeof perms !== 'object' || Object.keys(perms).length === 0) {
+      const roleKey = isHrOfficer ? 'hr_officer' : 'branch_manager';
+      perms = DEFAULT_ROLE_PERMS[roleKey] || DEFAULT_ROLE_PERMS.branch_manager;
+    }
+    return !!(perms['*'] || perms[permKey]);
+  };
+
+  const allowedNav = NAV.map(item => {
+    if (item.children) {
+      const allowedChildren = item.children.filter(child => {
+        if (isSuper) return true;
+        if (child.id === 'holidays') return hasPermission('holidays.view');
+        return false;
+      });
+      if (allowedChildren.length === 0) return null;
+      return { ...item, children: allowedChildren };
+    }
+
+    if (isSuper) return item;
+
+    if (item.id === 'dashboard') return hasPermission('leaves.view') ? item : null;
+    if (item.id === 'employees') return hasPermission('employees.view') ? item : null;
+    if (item.id === 'overview') return hasPermission('overview.view') ? item : null;
+    if (item.id === 'roster') return hasPermission('rosters.view') ? item : null;
+    if (item.id === 'contingencies') return hasPermission('contingencies.view') ? item : null;
+    if (item.id === 'payroll') return hasPermission('payroll.view') ? item : null;
+    if (item.id === 'shifts') return hasPermission('shifts.view') ? item : null;
+
+    return null;
+  }).filter(Boolean);
 
   const allowedApps = isSuper ? applications : applications.filter(a => {
     const emp = employees.find(e => e.id === a.employee_id)
@@ -643,19 +711,47 @@ export default function AdminApp() {
               <p>{meta.subtitle}</p>
             </div>
           </div>
-          <div className="topbar-right">
+          <div className="topbar-right" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {/* If branch-scoped, show assigned branch badge */}
+            {!isSuper && currentUser.branch_id && (
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '4px 10px',
+                borderRadius: '16px',
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid var(--border-color)',
+                fontSize: '12px',
+                fontWeight: 500,
+                color: 'var(--text-secondary)'
+              }}>
+                <span>📍</span>
+                <span>{branches.find(b => b.id === currentUser.branch_id)?.name || 'Assigned Branch'}</span>
+              </div>
+            )}
+
             <div className="hide-mobile" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
               <div 
                 className="admin-avatar" 
-                title={`${currentUser.username} (${currentUser.role})`}
+                title={`${currentUser.username} (${isSuper ? 'Admin (Owner)' : (isHrOfficer ? 'HR Officer' : 'Branch Manager')})`}
                 onClick={() => setShowProfileModal(true)}
                 style={{ cursor: 'pointer', transition: 'transform 0.2s', ':hover': { transform: 'scale(1.05)' } }}
               >
                 {currentUser.username.slice(0,2).toUpperCase()}
               </div>
-              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
-                {currentUser.role}
-              </div>
+              <span style={{ 
+                fontSize: '10px', 
+                fontWeight: 700, 
+                letterSpacing: '0.03em', 
+                textTransform: 'uppercase',
+                padding: '1px 6px',
+                borderRadius: '6px',
+                background: isSuper ? 'rgba(249, 115, 22, 0.15)' : (isHrOfficer ? 'rgba(16, 185, 129, 0.15)' : 'rgba(59, 130, 246, 0.15)'),
+                color: isSuper ? '#f97316' : (isHrOfficer ? '#10b981' : '#3b82f6')
+              }}>
+                {isSuper ? 'Admin' : (isHrOfficer ? 'HR Officer' : 'Branch Mgr')}
+              </span>
             </div>
             <div className="show-mobile" style={{ height: '36px' }}>
               <div className="admin-logo-wrap" style={{ padding: '2px', borderRadius: '8px', marginBottom: 0, height: '100%' }}>
@@ -687,6 +783,7 @@ export default function AdminApp() {
             setLeaveRules={setRules}
             onRefreshApplications={refreshApplications}
             leaveTypes={leaveTypes}
+            currentUser={currentUser}
           />
         )}
         {activePage === 'overview' && (
@@ -696,16 +793,27 @@ export default function AdminApp() {
             branches={allowedBranches}
             departments={departments}
             roles={roles}
+            leaveTypes={leaveTypes}
           />
         )}
         {activePage === 'roster' && (
-          <ManageShiftRosters branches={allowedBranches} employees={allowedEmps} />
+          <ManageShiftRosters 
+            branches={allowedBranches} 
+            employees={allowedEmps} 
+            canEdit={hasPermission('rosters.edit')}
+            currentUser={currentUser}
+          />
         )}
         {activePage === 'contingencies' && (
           <ContingencyShieldManager branches={allowedBranches} />
         )}
         {activePage === 'payroll' && (
-          <PayrollExportManager branches={allowedBranches} />
+          <PayrollExportManager 
+            branches={allowedBranches} 
+            canExport={hasPermission('payroll.export')}
+            currentUser={currentUser}
+            leaveTypes={leaveTypes}
+          />
         )}
         {activePage === 'employees' && (
           <ManageEmployees 
@@ -719,10 +827,14 @@ export default function AdminApp() {
             setLeaveRules={setRules}
             applications={allowedApps}
             leaveTypes={leaveTypes}
+            currentUser={currentUser}
+            canCreateEdit={hasPermission('employees.create_edit')}
+            canAdjustBalance={hasPermission('employees.adjust_balance')}
+            canDelete={hasPermission('employees.delete')}
           />
         )}
         {activePage === 'managers' && (
-          <ManageManagers branches={allowedBranches} managers={managers} setManagers={setManagers} />
+          <ManageManagers branches={branches} managers={managers} setManagers={setManagers} />
         )}
         {(activePage === 'branches' || activePage === 'branch_configurations') && (
           <ManageBranches branches={allowedBranches} setBranches={setBranches} employees={employees} managers={managers} setManagers={setManagers} onNavigatePage={setActivePage} />

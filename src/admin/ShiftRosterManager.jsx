@@ -666,11 +666,14 @@ export function ManageShiftMasters({ branches = [] }) {
 /* ─────────────────────────────────────────────────────────
    2. ManageShiftRosters — Interactive Monthly Workforce Matrix
 ───────────────────────────────────────────────────────── */
-export function ManageShiftRosters({ branches = [], employees = [] }) {
+export function ManageShiftRosters({ branches = [], employees = [], canEdit = true, currentUser = null }) {
   const today = new Date();
   const [selectedYear, setSelectedYear] = useState(today.getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(today.getMonth() + 1); // 1-12
-  const [selectedBranch, setSelectedBranch] = useState(branches[0]?.id || 'all');
+
+  const isUserScoped = currentUser && !['super manager', 'super_admin', 'admin'].includes(currentUser.role) && currentUser.branch_id;
+  const initialBranch = isUserScoped ? currentUser.branch_id : (branches[0]?.id || 'all');
+  const [selectedBranch, setSelectedBranch] = useState(initialBranch);
   const [shifts, setShifts] = useState([]);
   const [rosters, setRosters] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -731,6 +734,7 @@ export function ManageShiftRosters({ branches = [], employees = [] }) {
   });
 
   const handleCellClick = (e, employeeId, dayNum) => {
+    if (!canEdit) return; // View-only audit mode
     const rect = e.currentTarget.getBoundingClientRect();
     const dateStr = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
     setActiveCell({
@@ -932,25 +936,59 @@ export function ManageShiftRosters({ branches = [], employees = [] }) {
         marginBottom: '20px'
       }}>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <select 
-            value={selectedBranch}
-            onChange={e => setSelectedBranch(e.target.value)}
-            style={{
+          {isUserScoped ? (
+            <div style={{
               padding: '8px 12px',
               borderRadius: '8px',
-              border: '1px solid var(--bg-card-border, #cbd5e1)',
-              background: 'var(--bg-card, #fff)',
-              color: 'var(--text-primary, #0f172a)',
+              border: '1px solid var(--border-color)',
+              background: 'var(--bg-card, #1e293b)',
+              color: 'var(--text-primary)',
               fontSize: '13px',
-              fontWeight: 500,
-              cursor: 'pointer'
-            }}
-          >
-            <option value="all">🏢 All Branches</option>
-            {branches.map(b => (
-              <option key={b.id} value={b.id}>{b.name}</option>
-            ))}
-          </select>
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}>
+              📍 {branches.find(b => b.id === currentUser.branch_id)?.name || 'Assigned Branch'}
+            </div>
+          ) : (
+            <select 
+              value={selectedBranch}
+              onChange={e => setSelectedBranch(e.target.value)}
+              style={{
+                padding: '8px 12px',
+                borderRadius: '8px',
+                border: '1px solid var(--bg-card-border, #cbd5e1)',
+                background: 'var(--bg-card, #fff)',
+                color: 'var(--text-primary, #0f172a)',
+                fontSize: '13px',
+                fontWeight: 500,
+                cursor: 'pointer'
+              }}
+            >
+              <option value="all">🏢 All Branches</option>
+              {branches.map(b => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          )}
+
+          {!canEdit && (
+            <span style={{
+              padding: '6px 12px',
+              borderRadius: '16px',
+              background: 'rgba(59, 130, 246, 0.12)',
+              color: '#3b82f6',
+              fontSize: '12px',
+              fontWeight: 600,
+              border: '1px solid rgba(59, 130, 246, 0.25)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}>
+              👁️ View-Only Audit Mode
+            </span>
+          )}
 
           <select 
             value={selectedMonth}
@@ -1050,34 +1088,38 @@ export function ManageShiftRosters({ branches = [], employees = [] }) {
                           {branches.find(b => b.id === emp.branch_id)?.name || 'Branch'}
                         </div>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <button
-                          type="button"
-                          className="btn-autofill-emp"
-                          id={`btn-autofill-${emp.id}`}
-                          title={`Auto-fill ${MONTH_NAMES[selectedMonth - 1]} schedule for ${emp.name}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openAutoFillModal(emp);
-                          }}
-                        >
-                          <span style={{ fontSize: '12px' }}>⚡</span>
-                          <span>Auto-Fill</span>
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-clear-emp"
-                          id={`btn-clear-${emp.id}`}
-                          title={`Clear all roster assignments in ${MONTH_NAMES[selectedMonth - 1]} ${selectedYear} for ${emp.name}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleClearEmployeeRoster(emp);
-                          }}
-                        >
-                          <span style={{ fontSize: '11px' }}>🗑️</span>
-                          <span>Clear All</span>
-                        </button>
-                      </div>
+                      {canEdit ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <button
+                            type="button"
+                            className="btn-autofill-emp"
+                            id={`btn-autofill-${emp.id}`}
+                            title={`Auto-fill ${MONTH_NAMES[selectedMonth - 1]} schedule for ${emp.name}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openAutoFillModal(emp);
+                            }}
+                          >
+                            <span style={{ fontSize: '12px' }}>⚡</span>
+                            <span>Auto-Fill</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-clear-emp"
+                            id={`btn-clear-${emp.id}`}
+                            title={`Clear all roster assignments in ${MONTH_NAMES[selectedMonth - 1]} ${selectedYear} for ${emp.name}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleClearEmployeeRoster(emp);
+                            }}
+                          >
+                            <span style={{ fontSize: '11px' }}>🗑️</span>
+                            <span>Clear All</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Audit only</span>
+                      )}
                     </div>
                   </td>
 
@@ -1106,17 +1148,17 @@ export function ManageShiftRosters({ branches = [], employees = [] }) {
                     return (
                       <td 
                         key={day}
-                        onClick={(e) => handleCellClick(e, emp.id, day)}
+                        onClick={canEdit ? (e) => handleCellClick(e, emp.id, day) : undefined}
                         style={{
                           padding: '6px 2px',
-                          cursor: 'pointer',
+                          cursor: canEdit ? 'pointer' : 'default',
                           background: isWeekend ? 'rgba(255, 255, 255, 0.02)' : 'transparent',
                           borderLeft: '1px solid rgba(255,255,255,0.03)',
                           transition: 'background 0.15s ease'
                         }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'}
-                        onMouseLeave={e => e.currentTarget.style.background = isWeekend ? 'rgba(255, 255, 255, 0.02)' : 'transparent'}
-                        title={`Click to assign shift for ${emp.name} on ${dateStr}`}
+                        onMouseEnter={e => { if (canEdit) e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'; }}
+                        onMouseLeave={e => { if (canEdit) e.currentTarget.style.background = isWeekend ? 'rgba(255, 255, 255, 0.02)' : 'transparent'; }}
+                        title={canEdit ? `Click to assign shift for ${emp.name} on ${dateStr}` : `${emp.name} — ${dateStr}`}
                       >
                         <span style={{
                           display: 'inline-block',

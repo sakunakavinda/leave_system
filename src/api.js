@@ -125,6 +125,8 @@ export const api = {
   confirmApplication: (id, secretCode) => fetchApi(`/applications/${id}/confirm`, { method: 'PUT', body: JSON.stringify({ secretCode }) }),
   deleteApplication: (id) => fetchApi(`/applications/${id}`, { method: 'DELETE' }),
   getLeaveOverview: (secretCode) => fetchApi(`/applications/overview/${secretCode}`),
+  uploadApplicationDocument: (id, data) => fetchApi(`/applications/${id}/document`, { method: 'POST', body: JSON.stringify(data) }),
+  reviewApplicationDocument: (id, data) => fetchApi(`/applications/${id}/review-document`, { method: 'POST', body: JSON.stringify(data) }),
 
   // Settings
   getSettings: () => fetchApi('/settings'),

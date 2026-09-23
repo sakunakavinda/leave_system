@@ -6,15 +6,29 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
-export function PayrollExportManager({ branches = [] }) {
+export function PayrollExportManager({ branches = [], canExport = true, currentUser = null, leaveTypes = [] }) {
   const currentDate = new Date();
   const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
-  const [branchFilter, setBranchFilter] = useState('all');
+
+  const isUserScoped = currentUser && !['super manager', 'super_admin', 'admin'].includes(currentUser.role) && currentUser.branch_id;
+  const initialBranch = isUserScoped ? currentUser.branch_id : 'all';
+  const [branchFilter, setBranchFilter] = useState(initialBranch);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [toast, setToast] = useState(null);
+
+  const isTypeUnpaid = (typeName) => {
+    if (!typeName) return false;
+    const lower = typeName.toLowerCase();
+    if (lower.includes('unpaid') || lower.includes('lop') || lower === 'unpaid' || lower === 'lop') return true;
+    const matched = (leaveTypes || []).find(lt => lt.code?.toLowerCase() === lower || lt.name?.toLowerCase() === lower);
+    if (matched) {
+      return matched.is_paid === 0 || matched.is_paid === false;
+    }
+    return false;
+  };
 
   const showToast = (msg, isError = false) => {
     setToast({ text: msg, isError });
@@ -101,14 +115,28 @@ export function PayrollExportManager({ branches = [] }) {
             </p>
           </div>
 
-          <button
-            onClick={handleExportCsv}
-            disabled={exporting || loading}
-            className="payroll-export-btn"
-          >
-            <span>📥</span>
-            <span>{exporting ? 'Generating CSV...' : 'Export Payroll CSV'}</span>
-          </button>
+          {canExport ? (
+            <button
+              onClick={handleExportCsv}
+              disabled={exporting || loading}
+              className="payroll-export-btn"
+            >
+              <span>📥</span>
+              <span>{exporting ? 'Generating CSV...' : 'Export Payroll CSV'}</span>
+            </button>
+          ) : (
+            <div style={{
+              padding: '8px 14px',
+              borderRadius: '8px',
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid var(--border-color)',
+              color: 'var(--text-muted)',
+              fontSize: '12px',
+              fontWeight: 500
+            }}>
+              🔒 Export capability restricted
+            </div>
+          )}
         </div>
 
         {/* Aggregate KPI Summary Cards */}
@@ -178,15 +206,32 @@ export function PayrollExportManager({ branches = [] }) {
 
         <div className="payroll-filter-item" style={{ flexGrow: 1.5 }}>
           <label>Branch Facility:</label>
-          <select
-            value={branchFilter}
-            onChange={(e) => setBranchFilter(e.target.value)}
-          >
-            <option value="all">🏢 All Domestic Branches</option>
-            {branches.map(b => (
-              <option key={b.id} value={b.id}>{b.name}</option>
-            ))}
-          </select>
+          {isUserScoped ? (
+            <div style={{
+              padding: '8px 12px',
+              borderRadius: '8px',
+              border: '1px solid var(--bg-card-border, #cbd5e1)',
+              background: 'var(--bg-card, #fff)',
+              color: 'var(--text-primary, #0f172a)',
+              fontSize: '13px',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}>
+              📍 {branches.find(b => b.id === currentUser.branch_id)?.name || 'Assigned Branch'}
+            </div>
+          ) : (
+            <select
+              value={branchFilter}
+              onChange={(e) => setBranchFilter(e.target.value)}
+            >
+              <option value="all">🏢 All Domestic Branches</option>
+              {branches.map(b => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          )}
         </div>
 
         <button
@@ -293,22 +338,26 @@ export function PayrollExportManager({ branches = [] }) {
                       <td style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
                         {rec.leaveBreakdown && Object.keys(rec.leaveBreakdown).length > 0 ? (
                           <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                            {Object.entries(rec.leaveBreakdown).map(([typeName, days]) => (
-                              <span
-                                key={typeName}
-                                style={{
-                                  background: typeName.toLowerCase().includes('unpaid') ? 'rgba(239, 68, 68, 0.15)' : 'rgba(59, 130, 246, 0.15)',
-                                  color: typeName.toLowerCase().includes('unpaid') ? '#f87171' : '#60a5fa',
-                                  border: `1px solid ${typeName.toLowerCase().includes('unpaid') ? 'rgba(239, 68, 68, 0.3)' : 'rgba(59, 130, 246, 0.3)'}`,
-                                  padding: '2px 6px',
-                                  borderRadius: '4px',
-                                  fontSize: '11px',
-                                  fontWeight: 600
-                                }}
-                              >
-                                {typeName}: {days}d
-                              </span>
-                            ))}
+                            {Object.entries(rec.leaveBreakdown).map(([typeName, days]) => {
+                              const unpaid = isTypeUnpaid(typeName);
+                              return (
+                                <span
+                                  key={typeName}
+                                  style={{
+                                    background: unpaid ? 'rgba(239, 68, 68, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                                    color: unpaid ? '#f87171' : '#60a5fa',
+                                    border: `1px solid ${unpaid ? 'rgba(239, 68, 68, 0.3)' : 'rgba(59, 130, 246, 0.3)'}`,
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    fontSize: '11px',
+                                    fontWeight: 600
+                                  }}
+                                  title={unpaid ? 'Loss of Pay (Salary Deducted)' : 'Paid Leave (Regular Salary)'}
+                                >
+                                  {typeName}: {days}d {unpaid ? '(LOP)' : ''}
+                                </span>
+                              );
+                            })}
                           </div>
                         ) : (
                           <span style={{ color: 'var(--text-muted)' }}>No leaves taken</span>
@@ -364,22 +413,26 @@ export function PayrollExportManager({ branches = [] }) {
 
                   {rec.leaveBreakdown && Object.keys(rec.leaveBreakdown).length > 0 && (
                     <div className="payroll-card-breakdown">
-                      {Object.entries(rec.leaveBreakdown).map(([typeName, days]) => (
-                        <span
-                          key={typeName}
-                          style={{
-                            background: typeName.toLowerCase().includes('unpaid') ? 'rgba(239, 68, 68, 0.15)' : 'rgba(59, 130, 246, 0.15)',
-                            color: typeName.toLowerCase().includes('unpaid') ? '#f87171' : '#60a5fa',
-                            border: `1px solid ${typeName.toLowerCase().includes('unpaid') ? 'rgba(239, 68, 68, 0.3)' : 'rgba(59, 130, 246, 0.3)'}`,
-                            padding: '2px 8px',
-                            borderRadius: '4px',
-                            fontSize: '11px',
-                            fontWeight: 600
-                          }}
-                        >
-                          {typeName}: {days}d
-                        </span>
-                      ))}
+                      {Object.entries(rec.leaveBreakdown).map(([typeName, days]) => {
+                        const unpaid = isTypeUnpaid(typeName);
+                        return (
+                          <span
+                            key={typeName}
+                            style={{
+                              background: unpaid ? 'rgba(239, 68, 68, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                              color: unpaid ? '#f87171' : '#60a5fa',
+                              border: `1px solid ${unpaid ? 'rgba(239, 68, 68, 0.3)' : 'rgba(59, 130, 246, 0.3)'}`,
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              fontSize: '11px',
+                              fontWeight: 600
+                            }}
+                            title={unpaid ? 'Loss of Pay (Salary Deducted)' : 'Paid Leave (Regular Salary)'}
+                          >
+                            {typeName}: {days}d {unpaid ? '(LOP)' : ''}
+                          </span>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
