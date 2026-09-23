@@ -521,6 +521,7 @@ function App() {
                     <option value="annual">Annual Leave</option>
                     <option value="sick">Sick Leave</option>
                     <option value="casual">Casual Leave</option>
+                    <option value="unpaid">Loss of Pay (Unpaid Leave)</option>
                   </>
                 )}
               </select>

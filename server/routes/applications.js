@@ -180,9 +180,12 @@ router.post('/', async (req, res) => {
       const balanceRow = takenRows[0] || {};
       taken = (balanceRow[balanceCol] !== undefined && balanceRow[balanceCol] !== null) ? Number(balanceRow[balanceCol]) : 0;
       
-      if (taken + requestedDays > quota) {
-        await connection.rollback();
-        return res.status(400).json({ error: `You only have ${quota - taken} ${leave_type} leave days remaining.` });
+      const isUnpaidType = leave_type === 'unpaid' || leave_type === 'lop';
+      if (!isUnpaidType || quota > 0) {
+        if (taken + requestedDays > quota) {
+          await connection.rollback();
+          return res.status(400).json({ error: `You only have ${quota - taken} ${leave_type} leave days remaining.` });
+        }
       }
 
       // Max Per Day Check
