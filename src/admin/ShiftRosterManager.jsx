@@ -927,6 +927,7 @@ export function ManageShiftRosters({ branches = [], employees = [], canEdit = tr
   const [selectedBranch, setSelectedBranch] = useState(initialBranch);
   const [shifts, setShifts] = useState([]);
   const [rosters, setRosters] = useState([]);
+  const [holidays, setHolidays] = useState([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
 
@@ -948,17 +949,22 @@ export function ManageShiftRosters({ branches = [], employees = [], canEdit = tr
       const start_date = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`;
       const end_date = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
 
-      const [shiftList, rosterList] = await Promise.all([
+      const [shiftList, rosterList, holidayList] = await Promise.all([
         api.getShifts(),
         api.getRosters({
           branch_id: selectedBranch !== 'all' ? selectedBranch : undefined,
           start_date,
           end_date
+        }),
+        api.getHolidays({
+          branch_id: selectedBranch !== 'all' ? selectedBranch : undefined,
+          year: selectedYear
         })
       ]);
 
       setShifts(shiftList);
       setRosters(rosterList);
+      setHolidays(Array.isArray(holidayList) ? holidayList : []);
     } catch (err) {
       console.error('Failed to load roster data', err);
       showToast('Error loading roster matrix');
@@ -983,6 +989,27 @@ export function ManageShiftRosters({ branches = [], employees = [], canEdit = tr
   rosters.forEach(r => {
     rosterMap.set(`${r.employee_id}_${r.roster_date}`, r);
   });
+
+  // Lookup map: `${branch_id}_${holiday_date}` -> holiday object
+  const holidayMap = useMemo(() => {
+    const map = new Map();
+    holidays.forEach(h => {
+      map.set(`${h.branch_id}_${h.holiday_date}`, h);
+    });
+    return map;
+  }, [holidays]);
+
+  // Lookup map: `holiday_date` -> array of holidays (for column headers and overview)
+  const dateHolidaysMap = useMemo(() => {
+    const map = new Map();
+    holidays.forEach(h => {
+      if (!map.has(h.holiday_date)) {
+        map.set(h.holiday_date, []);
+      }
+      map.get(h.holiday_date).push(h);
+    });
+    return map;
+  }, [holidays]);
 
   const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -1147,7 +1174,8 @@ export function ManageShiftRosters({ branches = [], employees = [], canEdit = tr
           continue;
         }
 
-        const isWorkingDate = branchWorkingDays.includes(dayOfWeekName);
+        const isBranchHoliday = holidayMap.has(`${autoFillModal.branchId}_${dateStr}`);
+        const isWorkingDate = branchWorkingDays.includes(dayOfWeekName) && !isBranchHoliday;
 
         if (isWorkingDate) {
           // Working date for this employee's branch: assign selected shift
@@ -1341,6 +1369,7 @@ export function ManageShiftRosters({ branches = [], employees = [], canEdit = tr
                   Employee
                 </th>
                 {daysArray.map(day => {
+                  const dateStr = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                   const dateObj = new Date(selectedYear, selectedMonth - 1, day);
                   const dayName = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'][dateObj.getDay()];
                   const dayOfWeekName = DAY_NAMES[dateObj.getDay()];
@@ -1349,21 +1378,60 @@ export function ManageShiftRosters({ branches = [], employees = [], canEdit = tr
                     ? !isEmployeeWorkingDay(selectedBranchObj.id, dateObj)
                     : (dateObj.getDay() === 0 || dateObj.getDay() === 6);
 
+                  const dayHolidays = dateHolidaysMap.get(dateStr) || [];
+                  const headerHoliday = selectedBranch !== 'all'
+                    ? holidayMap.get(`${selectedBranch}_${dateStr}`)
+                    : (dayHolidays.length > 0 ? dayHolidays[0] : null);
+                  const isHoliday = Boolean(headerHoliday);
+
+                  let thBg = 'transparent';
+                  let thColor = 'var(--text-secondary, #94a3b8)';
+
+                  if (isHoliday) {
+                    thBg = 'rgba(16, 185, 129, 0.16)';
+                    thColor = '#34d399';
+                  } else if (isHeaderNonWorkingDay) {
+                    thBg = 'rgba(239, 68, 68, 0.08)';
+                    thColor = '#f87171';
+                  }
+
+                  let tooltip = undefined;
+                  if (headerHoliday) {
+                    tooltip = `${dayOfWeekName}, ${dateStr} — 🎉 ${headerHoliday.name} (${headerHoliday.holiday_type || 'Public'} Holiday)${selectedBranch === 'all' && dayHolidays.length > 1 ? ` [${dayHolidays.length} branches]` : ''}`;
+                  } else if (selectedBranchObj && isHeaderNonWorkingDay) {
+                    tooltip = `${dayOfWeekName} is a scheduled off-day for ${formatBranchName(selectedBranchObj)}`;
+                  }
+
                   return (
                     <th 
                       key={day} 
                       style={{
-                        padding: '8px 4px',
-                        minWidth: '38px',
-                        background: isHeaderNonWorkingDay ? 'rgba(239, 68, 68, 0.08)' : 'transparent',
-                        color: isHeaderNonWorkingDay ? '#f87171' : 'var(--text-secondary, #94a3b8)',
+                        padding: '6px 3px',
+                        minWidth: '40px',
+                        background: thBg,
+                        color: thColor,
                         borderLeft: '1px solid rgba(255,255,255,0.05)',
-                        opacity: isHeaderNonWorkingDay ? 0.75 : 1
+                        opacity: (isHeaderNonWorkingDay && !isHoliday) ? 0.75 : 1
                       }}
-                      title={selectedBranchObj && isHeaderNonWorkingDay ? `${dayOfWeekName} is a scheduled off-day for ${formatBranchName(selectedBranchObj)}` : undefined}
+                      title={tooltip}
                     >
                       <div style={{ fontWeight: 700 }}>{day}</div>
                       <div style={{ fontSize: '10px', textTransform: 'uppercase' }}>{dayName}</div>
+                      {isHoliday && (
+                        <div style={{
+                          fontSize: '9px',
+                          color: '#34d399',
+                          fontWeight: 800,
+                          marginTop: '2px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '1px'
+                        }}>
+                          <span>🎉</span>
+                          <span>HOL</span>
+                        </div>
+                      )}
                     </th>
                   );
                 })}
@@ -1437,34 +1505,64 @@ export function ManageShiftRosters({ branches = [], employees = [], canEdit = tr
                       const isWorkingDay = isEmployeeWorkingDay(emp.branch_id, dateObj);
                       const isNonWorkingDay = !isWorkingDay;
 
+                      // Check if this employee's branch has a holiday on this date
+                      const empHoliday = emp.branch_id ? holidayMap.get(`${emp.branch_id}_${dateStr}`) : null;
+                      const isEmpHoliday = Boolean(empHoliday);
+
                       let badgeContent = '-';
                       let badgeBg = 'transparent';
                       let badgeColor = isNonWorkingDay ? 'rgba(100, 116, 139, 0.35)' : 'var(--text-secondary, #64748b)';
 
                       if (entry) {
-                        if (entry.is_rdo) {
-                          badgeContent = 'RDO';
-                          badgeBg = isNonWorkingDay ? 'rgba(245, 158, 11, 0.12)' : 'rgba(245, 158, 11, 0.25)';
-                          badgeColor = isNonWorkingDay ? 'rgba(251, 191, 36, 0.7)' : '#fbbf24';
-                        } else if (entry.shift_code) {
+                        if (entry.shift_code) {
                           badgeContent = entry.shift_code;
                           badgeBg = entry.color_code || '#3b82f6';
                           badgeColor = '#fff';
+                        } else if (entry.is_rdo) {
+                          if (isEmpHoliday) {
+                            badgeContent = 'HOL';
+                            badgeBg = 'rgba(16, 185, 129, 0.22)';
+                            badgeColor = '#34d399';
+                          } else {
+                            badgeContent = 'RDO';
+                            badgeBg = isNonWorkingDay ? 'rgba(245, 158, 11, 0.12)' : 'rgba(245, 158, 11, 0.25)';
+                            badgeColor = isNonWorkingDay ? 'rgba(251, 191, 36, 0.7)' : '#fbbf24';
+                          }
                         }
+                      } else if (isEmpHoliday) {
+                        // Unassigned cell on a holiday: show as holiday
+                        badgeContent = 'HOL';
+                        badgeBg = 'rgba(16, 185, 129, 0.16)';
+                        badgeColor = '#34d399';
                       }
 
-                      // Visual fading for non-working days:
-                      // Darkened/shaded cell background, muted opacity for unassigned or RDO days.
-                      // If an active working shift is assigned on an off-day, keep badge fully visible.
-                      const cellBg = isNonWorkingDay 
-                        ? (entry?.shift_code ? 'rgba(0, 0, 0, 0.22)' : 'rgba(0, 0, 0, 0.35)') 
-                        : 'transparent';
-                      
-                      const cellOpacity = (isNonWorkingDay && !entry?.shift_code) ? 0.38 : 1;
+                      // Cell background styling:
+                      // If it's a holiday: subtle emerald tint
+                      // Else if it's a non-working day: darkened/shaded
+                      let cellBg = 'transparent';
+                      if (isEmpHoliday) {
+                        cellBg = entry?.shift_code ? 'rgba(16, 185, 129, 0.14)' : 'rgba(16, 185, 129, 0.08)';
+                      } else if (isNonWorkingDay) {
+                        cellBg = entry?.shift_code ? 'rgba(0, 0, 0, 0.22)' : 'rgba(0, 0, 0, 0.35)';
+                      }
 
-                      const tooltipText = canEdit 
-                        ? `Click to assign shift for ${emp.name} on ${dateStr} (${dayOfWeekName}${isNonWorkingDay ? ` — Scheduled Off-Day for ${branchLabel}` : ''})`
-                        : `${emp.name} — ${dateStr} (${dayOfWeekName}${isNonWorkingDay ? ` — Scheduled Off-Day for ${branchLabel}` : ''})`;
+                      // Opacity fading:
+                      // Off-days with no active shifts are faded, but holidays stay crisp and visible
+                      let cellOpacity = 1;
+                      if (isNonWorkingDay && !entry?.shift_code && !isEmpHoliday) {
+                        cellOpacity = 0.38;
+                      }
+
+                      let tooltipText = '';
+                      if (isEmpHoliday) {
+                        tooltipText = canEdit
+                          ? `Click to assign shift for ${emp.name} on ${dateStr} (${dayOfWeekName} — 🎉 Holiday: ${empHoliday.name} [${empHoliday.holiday_type || 'Public'}]${entry?.shift_code ? ` | Assigned Shift: ${entry.shift_code}` : ''})`
+                          : `${emp.name} — ${dateStr} (${dayOfWeekName} — 🎉 Holiday: ${empHoliday.name} [${empHoliday.holiday_type || 'Public'}])`;
+                      } else {
+                        tooltipText = canEdit 
+                          ? `Click to assign shift for ${emp.name} on ${dateStr} (${dayOfWeekName}${isNonWorkingDay ? ` — Scheduled Off-Day for ${branchLabel}` : ''})`
+                          : `${emp.name} — ${dateStr} (${dayOfWeekName}${isNonWorkingDay ? ` — Scheduled Off-Day for ${branchLabel}` : ''})`;
+                      }
 
                       return (
                         <td 
@@ -1478,7 +1576,7 @@ export function ManageShiftRosters({ branches = [], employees = [], canEdit = tr
                             transition: 'background 0.15s ease, opacity 0.15s ease'
                           }}
                           onMouseEnter={e => { 
-                            if (canEdit) e.currentTarget.style.background = isNonWorkingDay ? 'rgba(255, 255, 255, 0.06)' : 'rgba(255, 255, 255, 0.08)'; 
+                            if (canEdit) e.currentTarget.style.background = isEmpHoliday ? 'rgba(16, 185, 129, 0.2)' : (isNonWorkingDay ? 'rgba(255, 255, 255, 0.06)' : 'rgba(255, 255, 255, 0.08)'); 
                           }}
                           onMouseLeave={e => { 
                             if (canEdit) e.currentTarget.style.background = cellBg; 
@@ -1495,6 +1593,7 @@ export function ManageShiftRosters({ branches = [], employees = [], canEdit = tr
                             background: badgeBg,
                             color: badgeColor,
                             opacity: cellOpacity,
+                            border: isEmpHoliday && !entry?.shift_code ? '1px solid rgba(16, 185, 129, 0.3)' : 'none',
                             transition: 'opacity 0.15s ease'
                           }}>
                             {badgeContent}
@@ -1544,6 +1643,18 @@ export function ManageShiftRosters({ branches = [], employees = [], canEdit = tr
           >
             <div style={{ fontSize: '11px', color: '#94a3b8', padding: '2px 4px', borderBottom: '1px solid #1e293b' }}>
               Assign Shift: <strong>{activeCell.dateStr}</strong>
+              {(() => {
+                const cellEmp = employees.find(emp => emp.id === activeCell.employeeId);
+                const cellHoliday = cellEmp ? holidayMap.get(`${cellEmp.branch_id}_${activeCell.dateStr}`) : null;
+                if (cellHoliday) {
+                  return (
+                    <div style={{ color: '#34d399', fontSize: '10.5px', marginTop: '3px', fontWeight: 600 }}>
+                      🎉 {cellHoliday.name} ({cellHoliday.holiday_type || 'Public'})
+                    </div>
+                  );
+                }
+                return null;
+              })()}
             </div>
 
             {(() => {
@@ -1846,6 +1957,20 @@ export function ManageShiftRosters({ branches = [], employees = [], canEdit = tr
             RDO
           </span>
           <span style={{ color: 'var(--text-secondary, #94a3b8)' }}>Rest Day Off (0 Leave Units)</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span style={{
+            background: 'rgba(16, 185, 129, 0.22)',
+            color: '#34d399',
+            fontSize: '11px',
+            fontWeight: 700,
+            padding: '2px 6px',
+            borderRadius: '3px',
+            border: '1px solid rgba(16, 185, 129, 0.4)'
+          }}>
+            HOL
+          </span>
+          <span style={{ color: 'var(--text-secondary, #94a3b8)' }}>Public / Branch Holiday (0 Leave Units)</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <span style={{
