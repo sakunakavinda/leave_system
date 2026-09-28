@@ -6848,7 +6848,7 @@ export function ManageBranchHolidays({ branches = [] }) {
   const openAdd = () => {
     setForm({
       ...EMPTY_FORM,
-      branch_id: selectedBranch !== 'all' ? selectedBranch : branches[0]?.id || ''
+      branch_id: selectedBranch !== 'all' ? selectedBranch : 'all'
     });
     setModal('add');
   };
@@ -6878,10 +6878,13 @@ export function ManageBranchHolidays({ branches = [] }) {
     try {
       setIsSubmitting(true);
       if (modal === 'add') {
-        const created = await api.addHoliday(form);
-        const branchName = formatBranchName(branches.find(b => b.id === form.branch_id)) || '';
-        setHolidays(prev => [...prev, { ...created, branch_name: branchName }]);
-        showToast('Branch holiday added successfully');
+        await api.addHoliday(form);
+        await loadHolidays();
+        showToast(
+          form.branch_id === 'all'
+            ? `Holiday '${form.name.trim()}' scheduled across all ${branches.length} branches successfully!`
+            : 'Branch holiday added successfully'
+        );
       } else {
         const updated = await api.updateHoliday(modal.id, form);
         const branchName = formatBranchName(branches.find(b => b.id === form.branch_id)) || '';
@@ -7160,10 +7163,31 @@ export function ManageBranchHolidays({ branches = [] }) {
                     onChange={e => setForm(p => ({ ...p, branch_id: e.target.value }))}
                     required
                   >
+                    {modal === 'add' && (
+                      <option value="all">🏢 All Branches (Apply to All Domestic Branches)</option>
+                    )}
                     {branches.map(b => (
                       <option key={b.id} value={b.id}>{formatBranchName(b)}</option>
                     ))}
                   </select>
+                  {modal === 'add' && form.branch_id === 'all' && (
+                    <small style={{ 
+                      color: 'var(--accent-light, #60a5fa)', 
+                      marginTop: '6px', 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '5px', 
+                      fontSize: '11px',
+                      fontWeight: 500,
+                      background: 'rgba(59, 130, 246, 0.08)',
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      border: '1px solid rgba(59, 130, 246, 0.2)'
+                    }}>
+                      <span>🌐</span>
+                      <span>This statutory/public holiday will be registered across all {branches.length} company branches.</span>
+                    </small>
+                  )}
                 </div>
 
                 <div className="field-row">
@@ -7202,7 +7226,11 @@ export function ManageBranchHolidays({ branches = [] }) {
               <div className="modal-footer">
                 <button type="button" className="btn-secondary" onClick={closeModal}>Cancel</button>
                 <button type="submit" className="btn-primary" disabled={isSubmitting}>
-                  {isSubmitting ? 'Saving...' : modal === 'add' ? 'Add Holiday' : 'Save Changes'}
+                  {isSubmitting 
+                    ? 'Saving...' 
+                    : modal === 'add' 
+                      ? (form.branch_id === 'all' ? `Add for All Branches (${branches.length})` : 'Add Holiday') 
+                      : 'Save Changes'}
                 </button>
               </div>
             </form>
