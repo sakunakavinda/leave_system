@@ -5799,7 +5799,23 @@ export function ManageLeaveTypes({ leaveTypes, setLeaveTypes }) {
                 <td>
                   <div style={{ fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span style={{ width: '12px', height: '12px', borderRadius: '50%', background: lt.color || '#7c3aed' }}></span>
-                    {lt.name}
+                    <span>{lt.name}</span>
+                    {Boolean(lt.is_default) && (
+                      <span style={{
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        borderRadius: '12px',
+                        background: 'rgba(99, 102, 241, 0.15)',
+                        color: '#818cf8',
+                        border: '1px solid rgba(99, 102, 241, 0.35)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }} title="System Default Leave Type">
+                        <span>🛡️</span> Default
+                      </span>
+                    )}
                   </div>
                 </td>
                 <td><code style={{ background: 'rgba(255,255,255,0.06)', padding: '2px 8px', borderRadius: '4px', fontSize: '12px' }}>{lt.code}</code></td>
@@ -5890,12 +5906,27 @@ export function ManageLeaveTypes({ leaveTypes, setLeaveTypes }) {
                       </svg>
                       Edit
                     </button>
-                    <button className="btn-danger" onClick={() => handleDelete(lt.id, lt.name)} title="Delete Leave Type">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
-                      </svg>
-                      Delete
-                    </button>
+                    {Boolean(lt.is_default) ? (
+                      <button 
+                        className="btn-danger" 
+                        disabled 
+                        style={{ opacity: 0.45, cursor: 'not-allowed', filter: 'grayscale(0.6)' }}
+                        title="Default system leave type cannot be deleted"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                          <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                        </svg>
+                        Protected
+                      </button>
+                    ) : (
+                      <button className="btn-danger" onClick={() => handleDelete(lt.id, lt.name)} title="Delete Leave Type">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+                        </svg>
+                        Delete
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -5914,6 +5945,12 @@ export function ManageLeaveTypes({ leaveTypes, setLeaveTypes }) {
             </div>
             <form onSubmit={handleSubmit}>
               <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {modal !== 'add' && Boolean(modal?.is_default) && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', background: 'rgba(99, 102, 241, 0.1)', color: '#818cf8', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(99, 102, 241, 0.25)' }}>
+                    <span>🛡️</span>
+                    <span><strong>System Default Leave Type:</strong> Policy thresholds, paid/unpaid status, and document requirements can be customized, but this leave type is protected from deletion.</span>
+                  </div>
+                )}
                 {error && (
                   <div style={{ color: '#ff5252', fontSize: '13px', background: 'rgba(255,82,82,0.1)', padding: '10px 14px', borderRadius: '8px' }}>
                     {error}

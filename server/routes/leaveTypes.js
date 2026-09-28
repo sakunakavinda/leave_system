@@ -26,6 +26,7 @@ export async function initLeaveTypesTable() {
         description TEXT,
         status VARCHAR(20) DEFAULT 'active',
         is_paid TINYINT(1) NOT NULL DEFAULT 1,
+        is_default TINYINT(1) NOT NULL DEFAULT 0,
         notice_days_required INT DEFAULT 0,
         max_consecutive_days INT DEFAULT 0,
         doc_required_after_days INT DEFAULT 0,
@@ -36,10 +37,19 @@ export async function initLeaveTypesTable() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
 
-    // 2. Ensure is_paid column exists if table existed previously
+    // 2. Ensure is_paid and is_default columns exist if table existed previously
     try {
       await pool.query('ALTER TABLE leave_types ADD COLUMN is_paid TINYINT(1) NOT NULL DEFAULT 1 AFTER status');
       console.log('✓ Added is_paid column to leave_types table');
+    } catch (e) {
+      if (e.code !== 'ER_DUP_FIELDNAME') {
+        // Ignored if already exists
+      }
+    }
+
+    try {
+      await pool.query('ALTER TABLE leave_types ADD COLUMN is_default TINYINT(1) NOT NULL DEFAULT 0 AFTER is_paid');
+      console.log('✓ Added is_default column to leave_types table');
     } catch (e) {
       if (e.code !== 'ER_DUP_FIELDNAME') {
         // Ignored if already exists
@@ -58,6 +68,7 @@ export async function initLeaveTypesTable() {
           description: 'Standard paid annual vacation leave',
           status: 'active',
           is_paid: 1,
+          is_default: 1,
           notice_days_required: 3,
           max_consecutive_days: 14,
           doc_required_after_days: 0,
@@ -72,6 +83,7 @@ export async function initLeaveTypesTable() {
           description: 'Short-term urgent personal/casual leave',
           status: 'active',
           is_paid: 1,
+          is_default: 1,
           notice_days_required: 1,
           max_consecutive_days: 2,
           doc_required_after_days: 0,
@@ -86,6 +98,7 @@ export async function initLeaveTypesTable() {
           description: 'Medical and health recuperation leave',
           status: 'active',
           is_paid: 1,
+          is_default: 1,
           notice_days_required: 0,
           max_consecutive_days: 7,
           doc_required_after_days: 2,
@@ -100,6 +113,7 @@ export async function initLeaveTypesTable() {
           description: 'Unpaid absence resulting in salary loss of pay (LOP) deduction',
           status: 'active',
           is_paid: 0,
+          is_default: 1,
           notice_days_required: 0,
           max_consecutive_days: 0,
           doc_required_after_days: 0,
@@ -111,10 +125,10 @@ export async function initLeaveTypesTable() {
       for (const t of defaultTypes) {
         await pool.query(
           `INSERT INTO leave_types 
-           (id, name, code, color, description, status, is_paid, notice_days_required, max_consecutive_days, doc_required_after_days, carry_forward_max_days, min_service_days_required)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (id, name, code, color, description, status, is_paid, is_default, notice_days_required, max_consecutive_days, doc_required_after_days, carry_forward_max_days, min_service_days_required)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
-            t.id, t.name, t.code, t.color, t.description, t.status, t.is_paid,
+            t.id, t.name, t.code, t.color, t.description, t.status, t.is_paid, t.is_default,
             t.notice_days_required, t.max_consecutive_days, t.doc_required_after_days,
             t.carry_forward_max_days, t.min_service_days_required
           ]
@@ -129,6 +143,14 @@ export async function initLeaveTypesTable() {
         WHERE code IN ('unpaid', 'lop') 
            OR LOWER(name) LIKE '%unpaid%' 
            OR LOWER(name) LIKE '%loss of pay%'
+      `);
+
+      // Ensure standard default leave types have is_default = 1
+      await pool.query(`
+        UPDATE leave_types 
+        SET is_default = 1 
+        WHERE code IN ('annual', 'casual', 'sick', 'unpaid')
+           OR LOWER(name) IN ('annual leave', 'casual leave', 'sick leave', 'loss of pay (unpaid leave)', 'unpaid leave')
       `);
     }
   } catch (err) {
@@ -190,8 +212,8 @@ router.post('/', async (req, res) => {
     // Insert leave type with customizable policy parameters & is_paid
     await pool.query(
       `INSERT INTO leave_types 
-       (id, name, code, color, description, status, is_paid, notice_days_required, max_consecutive_days, doc_required_after_days, carry_forward_max_days, min_service_days_required) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, name, code, color, description, status, is_paid, is_default, notice_days_required, max_consecutive_days, doc_required_after_days, carry_forward_max_days, min_service_days_required) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id, 
         name.trim(), 
@@ -200,6 +222,7 @@ router.post('/', async (req, res) => {
         description || '', 
         status || 'active',
         isPaidVal,
+        0,
         parseInt(notice_days_required) || 0,
         parseInt(max_consecutive_days) || 0,
         parseInt(doc_required_after_days) || 0,
@@ -300,7 +323,12 @@ router.delete('/:id', async (req, res) => {
     }
 
     const lt = existing[0];
-    // Don't delete built-in core types if needed, or allow soft-delete / status change
+    if (lt.is_default === 1 || lt.is_default === true) {
+      return res.status(400).json({ 
+        error: `Cannot delete '${lt.name}'. This is a protected system default leave type.` 
+      });
+    }
+
     await pool.query('DELETE FROM leave_types WHERE id = ?', [id]);
     res.json({ success: true, message: `Leave type '${lt.name}' deleted successfully` });
   } catch (err) {
