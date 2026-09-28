@@ -53,6 +53,39 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'branch_id, holiday_date, and name are required' });
   }
 
+  // Handle adding holiday for all branches
+  if (branch_id === 'all') {
+    try {
+      const [allBranches] = await pool.query('SELECT id, name FROM branches');
+      if (allBranches.length === 0) {
+        return res.status(400).json({ error: 'No branches available to create holidays for' });
+      }
+
+      for (const b of allBranches) {
+        const id = crypto.randomUUID();
+        await pool.query(
+          `INSERT INTO branch_holidays (id, branch_id, holiday_date, name, holiday_type) 
+           VALUES (?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE name = VALUES(name), holiday_type = VALUES(holiday_type)`,
+          [id, b.id, holiday_date, name.trim(), holiday_type || 'public']
+        );
+      }
+
+      return res.status(201).json({
+        message: `Holiday '${name.trim()}' added across all ${allBranches.length} branches.`,
+        branch_id: 'all',
+        holiday_date,
+        name: name.trim(),
+        holiday_type: holiday_type || 'public',
+        applied_branches_count: allBranches.length
+      });
+    } catch (err) {
+      console.error('Create holiday for all branches error:', err);
+      return res.status(500).json({ error: 'Failed to create holiday for all branches' });
+    }
+  }
+
+  // Single branch creation
   const id = crypto.randomUUID();
   try {
     await pool.query(

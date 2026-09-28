@@ -2895,6 +2895,25 @@
   }
 }
 
+/* ── Shift Rostering Top Scrollbar & Table Container ── */
+.roster-table-scroll-container {
+  overflow-x: auto;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE / Edge */
+}
 
+.roster-table-scroll-container::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+  width: 0;
+  height: 0;
+}
 
+.roster-top-scrollbar button:hover:not(:disabled) {
+  background: rgba(148, 163, 184, 0.2) !important;
+  color: #3b82f6 !important;
+  transform: translateY(-1px);
+}
 
+.roster-top-scrollbar button:active:not(:disabled) {
+  transform: translateY(0);
+}

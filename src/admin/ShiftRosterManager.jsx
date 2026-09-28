@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { api, formatBranchName } from '../api.js';
 
 const PRESET_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#64748b'];
@@ -664,9 +664,260 @@ export function ManageShiftMasters({ branches = [] }) {
 }
 
 /* ─────────────────────────────────────────────────────────
+   RosterHorizontalScrollBar — Standalone Top Scroll Component
+   Synchronized bidirectional horizontal scroll controller
+───────────────────────────────────────────────────────── */
+export function RosterHorizontalScrollBar({ scrollRef, daysInMonth = 31 }) {
+  const [scrollProgress, setScrollProgress] = useState(0); // 0 to 1
+  const [thumbWidthRatio, setThumbWidthRatio] = useState(0.25);
+  const [canScroll, setCanScroll] = useState(false);
+  const trackRef = useRef(null);
+  const isDraggingRef = useRef(false);
+  const startXRef = useRef(0);
+  const startScrollLeftRef = useRef(0);
+
+  const updateScrollState = useCallback(() => {
+    const el = scrollRef?.current;
+    if (!el) return;
+    const maxScroll = el.scrollWidth - el.clientWidth;
+    if (maxScroll > 5) {
+      setCanScroll(true);
+      const ratio = Math.max(0, Math.min(1, el.scrollLeft / maxScroll));
+      setScrollProgress(ratio);
+      setThumbWidthRatio(Math.max(0.18, Math.min(0.8, el.clientWidth / el.scrollWidth)));
+    } else {
+      setCanScroll(false);
+      setScrollProgress(0);
+      setThumbWidthRatio(1);
+    }
+  }, [scrollRef]);
+
+  useEffect(() => {
+    const el = scrollRef?.current;
+    if (!el) return;
+
+    const handleScroll = () => {
+      if (!isDraggingRef.current) {
+        updateScrollState();
+      }
+    };
+
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    updateScrollState();
+    window.addEventListener('resize', updateScrollState);
+
+    let ro;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => {
+        updateScrollState();
+      });
+      ro.observe(el);
+      if (el.firstElementChild) {
+        ro.observe(el.firstElementChild);
+      }
+    }
+
+    return () => {
+      el.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', updateScrollState);
+      if (ro) ro.disconnect();
+    };
+  }, [scrollRef, updateScrollState]);
+
+  const handleScrollBy = (amount) => {
+    const el = scrollRef?.current;
+    if (!el) return;
+    el.scrollBy({ left: amount, behavior: 'smooth' });
+  };
+
+  const handleTrackClick = (e) => {
+    const el = scrollRef?.current;
+    if (!trackRef.current || !el) return;
+    const rect = trackRef.current.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const ratio = Math.max(0, Math.min(1, clickX / rect.width));
+    const maxScroll = el.scrollWidth - el.clientWidth;
+    el.scrollTo({ left: ratio * maxScroll, behavior: 'smooth' });
+  };
+
+  const handlePointerDown = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const el = scrollRef?.current;
+    if (!el || !trackRef.current) return;
+
+    isDraggingRef.current = true;
+    startXRef.current = e.clientX;
+    startScrollLeftRef.current = el.scrollLeft;
+
+    const trackWidth = trackRef.current.clientWidth;
+    const maxScroll = el.scrollWidth - el.clientWidth;
+
+    const handlePointerMove = (moveEvent) => {
+      if (!isDraggingRef.current) return;
+      const deltaX = moveEvent.clientX - startXRef.current;
+      const scrollDelta = (deltaX / trackWidth) * maxScroll;
+      const newScrollLeft = Math.max(0, Math.min(maxScroll, startScrollLeftRef.current + scrollDelta));
+      el.scrollLeft = newScrollLeft;
+      setScrollProgress(maxScroll > 0 ? newScrollLeft / maxScroll : 0);
+    };
+
+    const handlePointerUp = () => {
+      isDraggingRef.current = false;
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+  };
+
+  const handleWheel = (e) => {
+    const el = scrollRef?.current;
+    if (!el) return;
+    const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    el.scrollLeft += delta;
+  };
+
+  const currentEstimatedDay = Math.max(1, Math.min(daysInMonth, Math.round(1 + scrollProgress * (daysInMonth - 1))));
+
+  return (
+    <div 
+      className="roster-top-scrollbar"
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '8px',
+        padding: '4px 10px',
+        height: '38px',
+        borderRadius: '8px',
+        border: '1px solid var(--bg-card-border, #cbd5e1)',
+        background: 'var(--bg-card, #fff)',
+        color: 'var(--text-primary, #0f172a)',
+        boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
+        userSelect: 'none'
+      }}
+    >
+      <span 
+        title="Horizontal Grid Scroll"
+        style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '4px', 
+          fontSize: '11px', 
+          fontWeight: 600, 
+          color: 'var(--text-secondary, #64748b)' 
+        }}
+      >
+        <span style={{ fontSize: '13px' }}>↔</span>
+        <span style={{ textTransform: 'uppercase', letterSpacing: '0.4px' }}>Scroll:</span>
+      </span>
+
+      {/* Step Left */}
+      <button
+        type="button"
+        onClick={() => handleScrollBy(-220)}
+        disabled={!canScroll || scrollProgress <= 0.01}
+        title="Scroll Left (earlier days)"
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '24px',
+          height: '24px',
+          borderRadius: '4px',
+          border: '1px solid var(--border-color, rgba(148, 163, 184, 0.2))',
+          background: 'rgba(148, 163, 184, 0.1)',
+          color: 'var(--text-primary, #0f172a)',
+          cursor: (!canScroll || scrollProgress <= 0.01) ? 'default' : 'pointer',
+          opacity: (!canScroll || scrollProgress <= 0.01) ? 0.35 : 1,
+          transition: 'all 0.15s ease',
+          fontSize: '10px'
+        }}
+      >
+        ◀
+      </button>
+
+      {/* Draggable Track & Thumb */}
+      <div
+        ref={trackRef}
+        onClick={handleTrackClick}
+        onWheel={handleWheel}
+        title="Click or drag to scroll table horizontally"
+        style={{
+          position: 'relative',
+          width: '130px',
+          height: '10px',
+          borderRadius: '5px',
+          background: 'rgba(148, 163, 184, 0.25)',
+          cursor: canScroll ? 'pointer' : 'default',
+          overflow: 'hidden'
+        }}
+      >
+        <div
+          onPointerDown={canScroll ? handlePointerDown : undefined}
+          style={{
+            position: 'absolute',
+            top: 0,
+            bottom: 0,
+            left: `${scrollProgress * (130 - Math.max(26, 130 * thumbWidthRatio))}px`,
+            width: `${Math.max(26, 130 * thumbWidthRatio)}px`,
+            borderRadius: '5px',
+            background: 'linear-gradient(90deg, #3b82f6, #6366f1)',
+            cursor: canScroll ? 'grab' : 'default',
+            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.3)',
+            transition: isDraggingRef.current ? 'none' : 'left 0.1s ease-out'
+          }}
+        />
+      </div>
+
+      {/* Step Right */}
+      <button
+        type="button"
+        onClick={() => handleScrollBy(220)}
+        disabled={!canScroll || scrollProgress >= 0.99}
+        title="Scroll Right (later days)"
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '24px',
+          height: '24px',
+          borderRadius: '4px',
+          border: '1px solid var(--border-color, rgba(148, 163, 184, 0.2))',
+          background: 'rgba(148, 163, 184, 0.1)',
+          color: 'var(--text-primary, #0f172a)',
+          cursor: (!canScroll || scrollProgress >= 0.99) ? 'default' : 'pointer',
+          opacity: (!canScroll || scrollProgress >= 0.99) ? 0.35 : 1,
+          transition: 'all 0.15s ease',
+          fontSize: '10px'
+        }}
+      >
+        ▶
+      </button>
+
+      {/* Current Position / Day Indicator */}
+      <span 
+        title={`Approximate visible day in month (${currentEstimatedDay} of ${daysInMonth})`}
+        style={{
+          fontSize: '11px',
+          fontWeight: 700,
+          color: 'var(--text-primary, #0f172a)',
+          minWidth: '50px',
+          textAlign: 'center'
+        }}
+      >
+        {canScroll ? `Day ${currentEstimatedDay}` : `1–${daysInMonth}`}
+      </span>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────
    2. ManageShiftRosters — Interactive Monthly Workforce Matrix
 ───────────────────────────────────────────────────────── */
 export function ManageShiftRosters({ branches = [], employees = [], canEdit = true, currentUser = null }) {
+  const tableContainerRef = useRef(null);
   const today = new Date();
   const [selectedYear, setSelectedYear] = useState(today.getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(today.getMonth() + 1); // 1-12
@@ -732,6 +983,33 @@ export function ManageShiftRosters({ branches = [], employees = [], canEdit = tr
   rosters.forEach(r => {
     rosterMap.set(`${r.employee_id}_${r.roster_date}`, r);
   });
+
+  const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+  // Map of branch_id -> Set of working day names (e.g. 'Monday', 'Tuesday', ...)
+  const branchWorkingDaysMap = useMemo(() => {
+    const map = new Map();
+    branches.forEach(b => {
+      let days = b.working_days;
+      if (typeof days === 'string') {
+        try { days = JSON.parse(days); } catch (e) { days = null; }
+      }
+      if (!Array.isArray(days) || days.length === 0) {
+        days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+      }
+      map.set(b.id, new Set(days));
+    });
+    return map;
+  }, [branches]);
+
+  // Check if a given date is a scheduled working day for an employee's branch
+  const isEmployeeWorkingDay = (empBranchId, dateObj) => {
+    const dayOfWeekName = DAY_NAMES[dateObj.getDay()];
+    if (!empBranchId || !branchWorkingDaysMap.has(empBranchId)) {
+      return dateObj.getDay() !== 0 && dateObj.getDay() !== 6;
+    }
+    return branchWorkingDaysMap.get(empBranchId).has(dayOfWeekName);
+  };
 
   const handleCellClick = (e, employeeId, dayNum) => {
     if (!canEdit) return; // View-only audit mode
@@ -1027,6 +1305,12 @@ export function ManageShiftRosters({ branches = [], employees = [], canEdit = tr
               <option key={yr} value={yr}>{yr}</option>
             ))}
           </select>
+
+          {/* Standalone Horizontal Scroll Bar Component next to 3 filter tabs */}
+          <RosterHorizontalScrollBar 
+            scrollRef={tableContainerRef}
+            daysInMonth={daysInMonth}
+          />
         </div>
       </div>
 
@@ -1037,7 +1321,19 @@ export function ManageShiftRosters({ branches = [], employees = [], canEdit = tr
           <p>No active employees found for the selected branch filter.</p>
         </div>
       ) : (
-        <div style={{ overflowX: 'auto', marginTop: '16px', borderRadius: '10px', border: '1px solid var(--border-color, #334155)', background: 'var(--card-bg, #1e293b)' }}>
+        <div 
+          ref={tableContainerRef}
+          className="roster-table-scroll-container"
+          style={{ 
+            overflowX: 'auto', 
+            marginTop: '16px', 
+            borderRadius: '10px', 
+            border: '1px solid var(--border-color, #334155)', 
+            background: 'var(--card-bg, #1e293b)',
+            scrollbarWidth: 'none',
+            msOverflowStyle: 'none'
+          }}
+        >
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center', fontSize: '12px' }}>
             <thead>
               <tr style={{ background: 'rgba(255, 255, 255, 0.05)', borderBottom: '1px solid var(--border-color, #334155)' }}>
@@ -1047,7 +1343,11 @@ export function ManageShiftRosters({ branches = [], employees = [], canEdit = tr
                 {daysArray.map(day => {
                   const dateObj = new Date(selectedYear, selectedMonth - 1, day);
                   const dayName = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'][dateObj.getDay()];
-                  const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
+                  const dayOfWeekName = DAY_NAMES[dateObj.getDay()];
+                  const selectedBranchObj = selectedBranch !== 'all' ? branches.find(b => b.id === selectedBranch) : null;
+                  const isHeaderNonWorkingDay = selectedBranchObj 
+                    ? !isEmployeeWorkingDay(selectedBranchObj.id, dateObj)
+                    : (dateObj.getDay() === 0 || dateObj.getDay() === 6);
 
                   return (
                     <th 
@@ -1055,10 +1355,12 @@ export function ManageShiftRosters({ branches = [], employees = [], canEdit = tr
                       style={{
                         padding: '8px 4px',
                         minWidth: '38px',
-                        background: isWeekend ? 'rgba(239, 68, 68, 0.1)' : 'transparent',
-                        color: isWeekend ? '#f87171' : 'var(--text-secondary, #94a3b8)',
-                        borderLeft: '1px solid rgba(255,255,255,0.05)'
+                        background: isHeaderNonWorkingDay ? 'rgba(239, 68, 68, 0.08)' : 'transparent',
+                        color: isHeaderNonWorkingDay ? '#f87171' : 'var(--text-secondary, #94a3b8)',
+                        borderLeft: '1px solid rgba(255,255,255,0.05)',
+                        opacity: isHeaderNonWorkingDay ? 0.75 : 1
                       }}
+                      title={selectedBranchObj && isHeaderNonWorkingDay ? `${dayOfWeekName} is a scheduled off-day for ${formatBranchName(selectedBranchObj)}` : undefined}
                     >
                       <div style={{ fontWeight: 700 }}>{day}</div>
                       <div style={{ fontSize: '10px', textTransform: 'uppercase' }}>{dayName}</div>
@@ -1068,115 +1370,141 @@ export function ManageShiftRosters({ branches = [], employees = [], canEdit = tr
               </tr>
             </thead>
             <tbody>
-              {filteredEmployees.map(emp => (
-                <tr key={emp.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                  <td style={{
-                    padding: '10px 16px',
-                    textAlign: 'left',
-                    fontWeight: 600,
-                    position: 'sticky',
-                    left: 0,
-                    background: 'var(--card-bg, #1e293b)',
-                    zIndex: 1,
-                    borderRight: '1px solid var(--border-color, #334155)',
-                    whiteSpace: 'nowrap'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-                      <div>
-                        <div style={{ color: 'var(--text-primary, #fff)', fontSize: '13px' }}>{emp.name}</div>
-                        <div style={{ fontSize: '11px', color: 'var(--text-secondary, #94a3b8)', fontWeight: 400 }}>
-                          {formatBranchName(branches.find(b => b.id === emp.branch_id)) || 'Branch'}
+              {filteredEmployees.map(emp => {
+                const empBranch = branches.find(b => b.id === emp.branch_id);
+                const branchLabel = empBranch ? formatBranchName(empBranch) : 'Branch';
+
+                return (
+                  <tr key={emp.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                    <td style={{
+                      padding: '10px 16px',
+                      textAlign: 'left',
+                      fontWeight: 600,
+                      position: 'sticky',
+                      left: 0,
+                      background: 'var(--card-bg, #1e293b)',
+                      zIndex: 1,
+                      borderRight: '1px solid var(--border-color, #334155)',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                        <div>
+                          <div style={{ color: 'var(--text-primary, #fff)', fontSize: '13px' }}>{emp.name}</div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-secondary, #94a3b8)', fontWeight: 400 }}>
+                            {branchLabel}
+                          </div>
                         </div>
+                        {canEdit ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <button
+                              type="button"
+                              className="btn-autofill-emp"
+                              id={`btn-autofill-${emp.id}`}
+                              title={`Auto-fill ${MONTH_NAMES[selectedMonth - 1]} schedule for ${emp.name}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openAutoFillModal(emp);
+                              }}
+                            >
+                              <span style={{ fontSize: '12px' }}>⚡</span>
+                              <span>Auto-Fill</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-clear-emp"
+                              id={`btn-clear-${emp.id}`}
+                              title={`Clear all roster assignments in ${MONTH_NAMES[selectedMonth - 1]} ${selectedYear} for ${emp.name}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleClearEmployeeRoster(emp);
+                              }}
+                            >
+                              <span style={{ fontSize: '11px' }}>🗑️</span>
+                              <span>Clear All</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Audit only</span>
+                        )}
                       </div>
-                      {canEdit ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <button
-                            type="button"
-                            className="btn-autofill-emp"
-                            id={`btn-autofill-${emp.id}`}
-                            title={`Auto-fill ${MONTH_NAMES[selectedMonth - 1]} schedule for ${emp.name}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openAutoFillModal(emp);
-                            }}
-                          >
-                            <span style={{ fontSize: '12px' }}>⚡</span>
-                            <span>Auto-Fill</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-clear-emp"
-                            id={`btn-clear-${emp.id}`}
-                            title={`Clear all roster assignments in ${MONTH_NAMES[selectedMonth - 1]} ${selectedYear} for ${emp.name}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleClearEmployeeRoster(emp);
-                            }}
-                          >
-                            <span style={{ fontSize: '11px' }}>🗑️</span>
-                            <span>Clear All</span>
-                          </button>
-                        </div>
-                      ) : (
-                        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Audit only</span>
-                      )}
-                    </div>
-                  </td>
+                    </td>
 
-                  {daysArray.map(day => {
-                    const dateStr = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                    const entry = rosterMap.get(`${emp.id}_${dateStr}`);
-                    const dateObj = new Date(selectedYear, selectedMonth - 1, day);
-                    const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
+                    {daysArray.map(day => {
+                      const dateStr = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                      const entry = rosterMap.get(`${emp.id}_${dateStr}`);
+                      const dateObj = new Date(selectedYear, selectedMonth - 1, day);
+                      const dayOfWeekName = DAY_NAMES[dateObj.getDay()];
+                      const isWorkingDay = isEmployeeWorkingDay(emp.branch_id, dateObj);
+                      const isNonWorkingDay = !isWorkingDay;
 
-                    let badgeContent = '-';
-                    let badgeBg = 'transparent';
-                    let badgeColor = 'var(--text-secondary, #64748b)';
+                      let badgeContent = '-';
+                      let badgeBg = 'transparent';
+                      let badgeColor = isNonWorkingDay ? 'rgba(100, 116, 139, 0.35)' : 'var(--text-secondary, #64748b)';
 
-                    if (entry) {
-                      if (entry.is_rdo) {
-                        badgeContent = 'RDO';
-                        badgeBg = 'rgba(245, 158, 11, 0.2)';
-                        badgeColor = '#fbbf24';
-                      } else if (entry.shift_code) {
-                        badgeContent = entry.shift_code;
-                        badgeBg = entry.color_code || '#3b82f6';
-                        badgeColor = '#fff';
+                      if (entry) {
+                        if (entry.is_rdo) {
+                          badgeContent = 'RDO';
+                          badgeBg = isNonWorkingDay ? 'rgba(245, 158, 11, 0.12)' : 'rgba(245, 158, 11, 0.25)';
+                          badgeColor = isNonWorkingDay ? 'rgba(251, 191, 36, 0.7)' : '#fbbf24';
+                        } else if (entry.shift_code) {
+                          badgeContent = entry.shift_code;
+                          badgeBg = entry.color_code || '#3b82f6';
+                          badgeColor = '#fff';
+                        }
                       }
-                    }
 
-                    return (
-                      <td 
-                        key={day}
-                        onClick={canEdit ? (e) => handleCellClick(e, emp.id, day) : undefined}
-                        style={{
-                          padding: '6px 2px',
-                          cursor: canEdit ? 'pointer' : 'default',
-                          background: isWeekend ? 'rgba(255, 255, 255, 0.02)' : 'transparent',
-                          borderLeft: '1px solid rgba(255,255,255,0.03)',
-                          transition: 'background 0.15s ease'
-                        }}
-                        onMouseEnter={e => { if (canEdit) e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'; }}
-                        onMouseLeave={e => { if (canEdit) e.currentTarget.style.background = isWeekend ? 'rgba(255, 255, 255, 0.02)' : 'transparent'; }}
-                        title={canEdit ? `Click to assign shift for ${emp.name} on ${dateStr}` : `${emp.name} — ${dateStr}`}
-                      >
-                        <span style={{
-                          display: 'inline-block',
-                          minWidth: '32px',
-                          padding: '3px 2px',
-                          borderRadius: '4px',
-                          fontSize: '11px',
-                          fontWeight: 700,
-                          background: badgeBg,
-                          color: badgeColor
-                        }}>
-                          {badgeContent}
-                        </span>
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
+                      // Visual fading for non-working days:
+                      // Darkened/shaded cell background, muted opacity for unassigned or RDO days.
+                      // If an active working shift is assigned on an off-day, keep badge fully visible.
+                      const cellBg = isNonWorkingDay 
+                        ? (entry?.shift_code ? 'rgba(0, 0, 0, 0.22)' : 'rgba(0, 0, 0, 0.35)') 
+                        : 'transparent';
+                      
+                      const cellOpacity = (isNonWorkingDay && !entry?.shift_code) ? 0.38 : 1;
+
+                      const tooltipText = canEdit 
+                        ? `Click to assign shift for ${emp.name} on ${dateStr} (${dayOfWeekName}${isNonWorkingDay ? ` — Scheduled Off-Day for ${branchLabel}` : ''})`
+                        : `${emp.name} — ${dateStr} (${dayOfWeekName}${isNonWorkingDay ? ` — Scheduled Off-Day for ${branchLabel}` : ''})`;
+
+                      return (
+                        <td 
+                          key={day}
+                          onClick={canEdit ? (e) => handleCellClick(e, emp.id, day) : undefined}
+                          style={{
+                            padding: '6px 2px',
+                            cursor: canEdit ? 'pointer' : 'default',
+                            background: cellBg,
+                            borderLeft: '1px solid rgba(255,255,255,0.03)',
+                            transition: 'background 0.15s ease, opacity 0.15s ease'
+                          }}
+                          onMouseEnter={e => { 
+                            if (canEdit) e.currentTarget.style.background = isNonWorkingDay ? 'rgba(255, 255, 255, 0.06)' : 'rgba(255, 255, 255, 0.08)'; 
+                          }}
+                          onMouseLeave={e => { 
+                            if (canEdit) e.currentTarget.style.background = cellBg; 
+                          }}
+                          title={tooltipText}
+                        >
+                          <span style={{
+                            display: 'inline-block',
+                            minWidth: '32px',
+                            padding: '3px 2px',
+                            borderRadius: '4px',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            background: badgeBg,
+                            color: badgeColor,
+                            opacity: cellOpacity,
+                            transition: 'opacity 0.15s ease'
+                          }}>
+                            {badgeContent}
+                          </span>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -1518,6 +1846,24 @@ export function ManageShiftRosters({ branches = [], employees = [], canEdit = tr
             RDO
           </span>
           <span style={{ color: 'var(--text-secondary, #94a3b8)' }}>Rest Day Off (0 Leave Units)</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '28px',
+            height: '20px',
+            borderRadius: '4px',
+            background: 'rgba(0, 0, 0, 0.35)',
+            border: '1px dashed rgba(255, 255, 255, 0.2)',
+            color: 'rgba(148, 163, 184, 0.45)',
+            fontSize: '11px',
+            fontWeight: 700
+          }}>
+            -
+          </span>
+          <span style={{ color: 'var(--text-secondary, #94a3b8)' }}>Branch Scheduled Off-Day (Faded)</span>
         </div>
       </div>
     </div>
