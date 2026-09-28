@@ -2898,14 +2898,26 @@
 /* ── Shift Rostering Top Scrollbar & Table Container ── */
 .roster-table-scroll-container {
   overflow-x: auto;
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* IE / Edge */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
 }
 
 .roster-table-scroll-container::-webkit-scrollbar {
-  display: none; /* Chrome, Safari, Opera */
-  width: 0;
-  height: 0;
+  height: 6px;
+}
+
+.roster-table-scroll-container::-webkit-scrollbar-track {
+  background: rgba(148, 163, 184, 0.05);
+  border-radius: 4px;
+}
+
+.roster-table-scroll-container::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 4px;
+}
+
+.roster-table-scroll-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(59, 130, 246, 0.6);
 }
 
 .roster-top-scrollbar button:hover:not(:disabled) {

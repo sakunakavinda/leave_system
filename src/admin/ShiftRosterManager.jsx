@@ -667,7 +667,7 @@ export function ManageShiftMasters({ branches = [] }) {
    RosterHorizontalScrollBar — Standalone Top Scroll Component
    Synchronized bidirectional horizontal scroll controller
 ───────────────────────────────────────────────────────── */
-export function RosterHorizontalScrollBar({ scrollRef, daysInMonth = 31 }) {
+export function RosterHorizontalScrollBar({ scrollRef, daysInMonth = 31, loading = false }) {
   const [scrollProgress, setScrollProgress] = useState(0); // 0 to 1
   const [thumbWidthRatio, setThumbWidthRatio] = useState(0.25);
   const [canScroll, setCanScroll] = useState(false);
@@ -678,13 +678,16 @@ export function RosterHorizontalScrollBar({ scrollRef, daysInMonth = 31 }) {
 
   const updateScrollState = useCallback(() => {
     const el = scrollRef?.current;
-    if (!el) return;
+    if (!el) {
+      setCanScroll(false);
+      return;
+    }
     const maxScroll = el.scrollWidth - el.clientWidth;
-    if (maxScroll > 5) {
+    if (maxScroll > 1) {
       setCanScroll(true);
       const ratio = Math.max(0, Math.min(1, el.scrollLeft / maxScroll));
       setScrollProgress(ratio);
-      setThumbWidthRatio(Math.max(0.18, Math.min(0.8, el.clientWidth / el.scrollWidth)));
+      setThumbWidthRatio(Math.max(0.15, Math.min(0.75, el.clientWidth / el.scrollWidth)));
     } else {
       setCanScroll(false);
       setScrollProgress(0);
@@ -693,41 +696,84 @@ export function RosterHorizontalScrollBar({ scrollRef, daysInMonth = 31 }) {
   }, [scrollRef]);
 
   useEffect(() => {
-    const el = scrollRef?.current;
-    if (!el) return;
+    let el = scrollRef?.current;
+    let cleanup = null;
 
-    const handleScroll = () => {
-      if (!isDraggingRef.current) {
-        updateScrollState();
+    const attach = (target) => {
+      if (!target) return false;
+
+      const handleScroll = () => {
+        if (!isDraggingRef.current) {
+          updateScrollState();
+        }
+      };
+
+      target.addEventListener('scroll', handleScroll, { passive: true });
+      window.addEventListener('resize', updateScrollState);
+
+      let ro;
+      if (typeof ResizeObserver !== 'undefined') {
+        ro = new ResizeObserver(() => {
+          updateScrollState();
+        });
+        ro.observe(target);
+        if (target.firstElementChild) {
+          ro.observe(target.firstElementChild);
+        }
       }
+
+      updateScrollState();
+
+      cleanup = () => {
+        target.removeEventListener('scroll', handleScroll);
+        window.removeEventListener('resize', updateScrollState);
+        if (ro) ro.disconnect();
+      };
+      return true;
     };
 
-    el.addEventListener('scroll', handleScroll, { passive: true });
-    updateScrollState();
-    window.addEventListener('resize', updateScrollState);
+    if (!attach(el)) {
+      // If table is still mounting (e.g. data loading), poll every 80ms
+      const interval = setInterval(() => {
+        el = scrollRef?.current;
+        if (attach(el)) {
+          clearInterval(interval);
+        }
+      }, 80);
 
-    let ro;
-    if (typeof ResizeObserver !== 'undefined') {
-      ro = new ResizeObserver(() => {
-        updateScrollState();
-      });
-      ro.observe(el);
-      if (el.firstElementChild) {
-        ro.observe(el.firstElementChild);
-      }
+      const timeout = setTimeout(() => clearInterval(interval), 6000);
+
+      return () => {
+        clearInterval(interval);
+        clearTimeout(timeout);
+        if (cleanup) cleanup();
+      };
     }
 
     return () => {
-      el.removeEventListener('scroll', handleScroll);
-      window.removeEventListener('resize', updateScrollState);
-      if (ro) ro.disconnect();
+      if (cleanup) cleanup();
     };
-  }, [scrollRef, updateScrollState]);
+  }, [scrollRef, loading, updateScrollState]);
 
   const handleScrollBy = (amount) => {
     const el = scrollRef?.current;
     if (!el) return;
     el.scrollBy({ left: amount, behavior: 'smooth' });
+    setTimeout(updateScrollState, 150);
+  };
+
+  const handleScrollToEdge = (edge) => {
+    const el = scrollRef?.current;
+    if (!el) return;
+    if (edge === 'start') {
+      el.scrollTo({ left: 0, behavior: 'smooth' });
+      setScrollProgress(0);
+    } else {
+      const maxScroll = el.scrollWidth - el.clientWidth;
+      el.scrollTo({ left: maxScroll, behavior: 'smooth' });
+      setScrollProgress(1);
+    }
+    setTimeout(updateScrollState, 150);
   };
 
   const handleTrackClick = (e) => {
@@ -735,9 +781,17 @@ export function RosterHorizontalScrollBar({ scrollRef, daysInMonth = 31 }) {
     if (!trackRef.current || !el) return;
     const rect = trackRef.current.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
-    const ratio = Math.max(0, Math.min(1, clickX / rect.width));
+    const trackWidth = rect.width;
+    const thumbWidth = Math.max(28, trackWidth * thumbWidthRatio);
+    const maxThumbTravel = trackWidth - thumbWidth;
     const maxScroll = el.scrollWidth - el.clientWidth;
+
+    if (maxScroll <= 0 || maxThumbTravel <= 0) return;
+
+    const targetThumbLeft = Math.max(0, Math.min(maxThumbTravel, clickX - thumbWidth / 2));
+    const ratio = targetThumbLeft / maxThumbTravel;
     el.scrollTo({ left: ratio * maxScroll, behavior: 'smooth' });
+    setScrollProgress(ratio);
   };
 
   const handlePointerDown = (e) => {
@@ -746,30 +800,46 @@ export function RosterHorizontalScrollBar({ scrollRef, daysInMonth = 31 }) {
     const el = scrollRef?.current;
     if (!el || !trackRef.current) return;
 
+    const trackRect = trackRef.current.getBoundingClientRect();
+    const trackWidth = trackRect.width;
+    const thumbWidth = Math.max(28, trackWidth * thumbWidthRatio);
+    const maxThumbTravel = trackWidth - thumbWidth;
+    const maxScroll = el.scrollWidth - el.clientWidth;
+
+    if (maxScroll <= 0 || maxThumbTravel <= 0) return;
+
     isDraggingRef.current = true;
     startXRef.current = e.clientX;
     startScrollLeftRef.current = el.scrollLeft;
 
-    const trackWidth = trackRef.current.clientWidth;
-    const maxScroll = el.scrollWidth - el.clientWidth;
+    const targetEl = e.currentTarget;
+    if (targetEl && targetEl.setPointerCapture) {
+      try { targetEl.setPointerCapture(e.pointerId); } catch (err) {}
+    }
 
     const handlePointerMove = (moveEvent) => {
       if (!isDraggingRef.current) return;
       const deltaX = moveEvent.clientX - startXRef.current;
-      const scrollDelta = (deltaX / trackWidth) * maxScroll;
+      const scrollDelta = (deltaX / maxThumbTravel) * maxScroll;
       const newScrollLeft = Math.max(0, Math.min(maxScroll, startScrollLeftRef.current + scrollDelta));
       el.scrollLeft = newScrollLeft;
-      setScrollProgress(maxScroll > 0 ? newScrollLeft / maxScroll : 0);
+      setScrollProgress(newScrollLeft / maxScroll);
     };
 
     const handlePointerUp = () => {
       isDraggingRef.current = false;
+      if (targetEl && targetEl.releasePointerCapture) {
+        try { targetEl.releasePointerCapture(e.pointerId); } catch (err) {}
+      }
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
+      updateScrollState();
     };
 
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
   };
 
   const handleWheel = (e) => {
@@ -777,6 +847,7 @@ export function RosterHorizontalScrollBar({ scrollRef, daysInMonth = 31 }) {
     if (!el) return;
     const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
     el.scrollLeft += delta;
+    updateScrollState();
   };
 
   const currentEstimatedDay = Math.max(1, Math.min(daysInMonth, Math.round(1 + scrollProgress * (daysInMonth - 1))));
@@ -787,7 +858,7 @@ export function RosterHorizontalScrollBar({ scrollRef, daysInMonth = 31 }) {
       style={{
         display: 'inline-flex',
         alignItems: 'center',
-        gap: '8px',
+        gap: '6px',
         padding: '4px 10px',
         height: '38px',
         borderRadius: '8px',
@@ -799,7 +870,7 @@ export function RosterHorizontalScrollBar({ scrollRef, daysInMonth = 31 }) {
       }}
     >
       <span 
-        title="Horizontal Grid Scroll"
+        title="Workforce Matrix Horizontal Timeline Scroll"
         style={{ 
           display: 'flex', 
           alignItems: 'center', 
@@ -810,13 +881,39 @@ export function RosterHorizontalScrollBar({ scrollRef, daysInMonth = 31 }) {
         }}
       >
         <span style={{ fontSize: '13px' }}>↔</span>
-        <span style={{ textTransform: 'uppercase', letterSpacing: '0.4px' }}>Scroll:</span>
+        <span style={{ textTransform: 'uppercase', letterSpacing: '0.4px' }}>Timeline:</span>
       </span>
+
+      {/* Jump to Day 1 */}
+      <button
+        type="button"
+        onClick={() => handleScrollToEdge('start')}
+        disabled={!canScroll || scrollProgress <= 0.01}
+        title="Jump to Start of Month (Day 1)"
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '2px 5px',
+          height: '24px',
+          borderRadius: '4px',
+          border: '1px solid var(--border-color, rgba(148, 163, 184, 0.2))',
+          background: 'rgba(148, 163, 184, 0.08)',
+          color: 'var(--text-primary, #0f172a)',
+          cursor: (!canScroll || scrollProgress <= 0.01) ? 'default' : 'pointer',
+          opacity: (!canScroll || scrollProgress <= 0.01) ? 0.35 : 1,
+          transition: 'all 0.15s ease',
+          fontSize: '10px',
+          fontWeight: 700
+        }}
+      >
+        ⏮ 1
+      </button>
 
       {/* Step Left */}
       <button
         type="button"
-        onClick={() => handleScrollBy(-220)}
+        onClick={() => handleScrollBy(-240)}
         disabled={!canScroll || scrollProgress <= 0.01}
         title="Scroll Left (earlier days)"
         style={{
@@ -827,12 +924,12 @@ export function RosterHorizontalScrollBar({ scrollRef, daysInMonth = 31 }) {
           height: '24px',
           borderRadius: '4px',
           border: '1px solid var(--border-color, rgba(148, 163, 184, 0.2))',
-          background: 'rgba(148, 163, 184, 0.1)',
+          background: 'rgba(148, 163, 184, 0.08)',
           color: 'var(--text-primary, #0f172a)',
           cursor: (!canScroll || scrollProgress <= 0.01) ? 'default' : 'pointer',
           opacity: (!canScroll || scrollProgress <= 0.01) ? 0.35 : 1,
           transition: 'all 0.15s ease',
-          fontSize: '10px'
+          fontSize: '11px'
         }}
       >
         ◀
@@ -843,29 +940,31 @@ export function RosterHorizontalScrollBar({ scrollRef, daysInMonth = 31 }) {
         ref={trackRef}
         onClick={handleTrackClick}
         onWheel={handleWheel}
-        title="Click or drag to scroll table horizontally"
+        title="Click or drag to scrub across the month"
         style={{
           position: 'relative',
-          width: '130px',
-          height: '10px',
-          borderRadius: '5px',
-          background: 'rgba(148, 163, 184, 0.25)',
+          width: '160px',
+          height: '12px',
+          borderRadius: '6px',
+          background: 'rgba(148, 163, 184, 0.22)',
           cursor: canScroll ? 'pointer' : 'default',
-          overflow: 'hidden'
+          overflow: 'hidden',
+          display: 'flex',
+          alignItems: 'center'
         }}
       >
         <div
           onPointerDown={canScroll ? handlePointerDown : undefined}
           style={{
             position: 'absolute',
-            top: 0,
-            bottom: 0,
-            left: `${scrollProgress * (130 - Math.max(26, 130 * thumbWidthRatio))}px`,
-            width: `${Math.max(26, 130 * thumbWidthRatio)}px`,
+            top: '1px',
+            bottom: '1px',
+            left: `${scrollProgress * (160 - Math.max(28, 160 * thumbWidthRatio))}px`,
+            width: `${Math.max(28, 160 * thumbWidthRatio)}px`,
             borderRadius: '5px',
             background: 'linear-gradient(90deg, #3b82f6, #6366f1)',
             cursor: canScroll ? 'grab' : 'default',
-            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.3)',
+            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.35)',
             transition: isDraggingRef.current ? 'none' : 'left 0.1s ease-out'
           }}
         />
@@ -874,7 +973,7 @@ export function RosterHorizontalScrollBar({ scrollRef, daysInMonth = 31 }) {
       {/* Step Right */}
       <button
         type="button"
-        onClick={() => handleScrollBy(220)}
+        onClick={() => handleScrollBy(240)}
         disabled={!canScroll || scrollProgress >= 0.99}
         title="Scroll Right (later days)"
         style={{
@@ -885,25 +984,51 @@ export function RosterHorizontalScrollBar({ scrollRef, daysInMonth = 31 }) {
           height: '24px',
           borderRadius: '4px',
           border: '1px solid var(--border-color, rgba(148, 163, 184, 0.2))',
-          background: 'rgba(148, 163, 184, 0.1)',
+          background: 'rgba(148, 163, 184, 0.08)',
           color: 'var(--text-primary, #0f172a)',
           cursor: (!canScroll || scrollProgress >= 0.99) ? 'default' : 'pointer',
           opacity: (!canScroll || scrollProgress >= 0.99) ? 0.35 : 1,
           transition: 'all 0.15s ease',
-          fontSize: '10px'
+          fontSize: '11px'
         }}
       >
         ▶
       </button>
 
+      {/* Jump to End of Month */}
+      <button
+        type="button"
+        onClick={() => handleScrollToEdge('end')}
+        disabled={!canScroll || scrollProgress >= 0.99}
+        title={`Jump to End of Month (Day ${daysInMonth})`}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '2px 5px',
+          height: '24px',
+          borderRadius: '4px',
+          border: '1px solid var(--border-color, rgba(148, 163, 184, 0.2))',
+          background: 'rgba(148, 163, 184, 0.08)',
+          color: 'var(--text-primary, #0f172a)',
+          cursor: (!canScroll || scrollProgress >= 0.99) ? 'default' : 'pointer',
+          opacity: (!canScroll || scrollProgress >= 0.99) ? 0.35 : 1,
+          transition: 'all 0.15s ease',
+          fontSize: '10px',
+          fontWeight: 700
+        }}
+      >
+        {daysInMonth} ⏭
+      </button>
+
       {/* Current Position / Day Indicator */}
       <span 
-        title={`Approximate visible day in month (${currentEstimatedDay} of ${daysInMonth})`}
+        title={`Visible month position (approx. Day ${currentEstimatedDay} of ${daysInMonth})`}
         style={{
           fontSize: '11px',
           fontWeight: 700,
           color: 'var(--text-primary, #0f172a)',
-          minWidth: '50px',
+          minWidth: '52px',
           textAlign: 'center'
         }}
       >
@@ -1338,6 +1463,7 @@ export function ManageShiftRosters({ branches = [], employees = [], canEdit = tr
           <RosterHorizontalScrollBar 
             scrollRef={tableContainerRef}
             daysInMonth={daysInMonth}
+            loading={loading}
           />
         </div>
       </div>
