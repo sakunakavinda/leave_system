@@ -129,7 +129,7 @@ export function ManageShiftMasters({ branches = [] }) {
 
   const filteredShifts = shifts.filter(s => {
     const q = search.toLowerCase();
-    const bName = branches.find(b => b.id === s.branch_id)?.name || 'Global';
+    const bName = formatBranchName(branches.find(b => b.id === s.branch_id)) || 'Global';
     return !q || 
       s.name?.toLowerCase().includes(q) || 
       s.code?.toLowerCase().includes(q) || 
@@ -320,7 +320,7 @@ export function ManageShiftMasters({ branches = [] }) {
             <tbody>
               {filteredShifts.map((shift) => {
                 const branchName = shift.branch_id 
-                  ? branches.find(b => b.id === shift.branch_id)?.name || 'Specific Branch'
+                  ? formatBranchName(branches.find(b => b.id === shift.branch_id)) || 'Specific Branch'
                   : 'All Branches (Global)';
                 const isOvernight = Boolean(shift.crosses_midnight);
 
@@ -428,7 +428,7 @@ export function ManageShiftMasters({ branches = [] }) {
         }}>
           {filteredShifts.map(shift => {
             const branchName = shift.branch_id 
-              ? branches.find(b => b.id === shift.branch_id)?.name || 'Specific Branch'
+              ? formatBranchName(branches.find(b => b.id === shift.branch_id)) || 'Specific Branch'
               : 'All Branches (Global)';
             const isOvernight = Boolean(shift.crosses_midnight);
 
@@ -813,7 +813,7 @@ export function ManageShiftRosters({ branches = [], employees = [], canEdit = tr
   const openAutoFillModal = (emp) => {
     const availableShifts = shifts.filter(s => !s.branch_id || s.branch_id === emp.branch_id);
     if (availableShifts.length === 0) {
-      const bName = branches.find(b => b.id === emp.branch_id)?.name || 'their branch';
+      const bName = formatBranchName(branches.find(b => b.id === emp.branch_id)) || 'their branch';
       alert(`No shifts available for ${emp.name}'s branch (${bName}). Please create a shift in Shift Masters for this branch or for All Branches.`);
       return;
     }
@@ -836,7 +836,7 @@ export function ManageShiftRosters({ branches = [], employees = [], canEdit = tr
       employeeId: emp.id,
       employeeName: emp.name,
       branchId: emp.branch_id,
-      branchName: empBranch?.name || 'Branch',
+      branchName: formatBranchName(empBranch) || 'Branch',
       workingDays: branchWorkingDays,
       offDays: offDays
     });
@@ -949,7 +949,7 @@ export function ManageShiftRosters({ branches = [], employees = [], canEdit = tr
               alignItems: 'center',
               gap: '6px'
             }}>
-              📍 {branches.find(b => b.id === currentUser.branch_id)?.name || 'Assigned Branch'}
+              📍 {formatBranchName(branches.find(b => b.id === currentUser.branch_id)) || 'Assigned Branch'}
             </div>
           ) : (
             <select 
@@ -1085,7 +1085,7 @@ export function ManageShiftRosters({ branches = [], employees = [], canEdit = tr
                       <div>
                         <div style={{ color: 'var(--text-primary, #fff)', fontSize: '13px' }}>{emp.name}</div>
                         <div style={{ fontSize: '11px', color: 'var(--text-secondary, #94a3b8)', fontWeight: 400 }}>
-                          {branches.find(b => b.id === emp.branch_id)?.name || 'Branch'}
+                          {formatBranchName(branches.find(b => b.id === emp.branch_id)) || 'Branch'}
                         </div>
                       </div>
                       {canEdit ? (
