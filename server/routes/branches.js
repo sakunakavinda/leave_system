@@ -4,6 +4,26 @@ import pool from '../db.js';
 
 const router = express.Router();
 
+export async function initBranchesTable() {
+  try {
+    // 1. Drop old global unique index on branch name if it exists
+    try {
+      await pool.query('ALTER TABLE branches DROP INDEX name');
+    } catch (e) {}
+
+    // 2. Ensure composite unique index on (name, location) exists
+    try {
+      await pool.query('ALTER TABLE branches ADD UNIQUE KEY unique_branch_name_location (name, location)');
+    } catch (e) {
+      if (e.code !== 'ER_DUP_KEYNAME') {
+        // Ignored if already exists
+      }
+    }
+  } catch (err) {
+    console.error('Error in initBranchesTable:', err);
+  }
+}
+
 // GET all branches with schedule metadata
 router.get('/', async (req, res) => {
   try {
@@ -62,8 +82,8 @@ router.post('/', async (req, res) => {
     const [rolesRows] = await pool.query('SELECT id FROM roles');
     for (const r of rolesRows) {
       await pool.query(
-        'INSERT IGNORE INTO leave_rules (role_id, branch_id) VALUES (?, ?)',
-        [r.id, branchId]
+        'INSERT IGNORE INTO leave_rules (id, role_id, branch_id) VALUES (?, ?, ?)',
+        [crypto.randomUUID(), r.id, branchId]
       );
     }
 
@@ -86,7 +106,10 @@ router.post('/', async (req, res) => {
     });
   } catch (err) {
     console.error('Create branch error:', err);
-    res.status(500).json({ error: 'Server error' });
+    if (err.code === 'ER_DUP_ENTRY') {
+      return res.status(400).json({ error: `A branch with name "${name}" in "${location || 'this city'}" already exists.` });
+    }
+    res.status(500).json({ error: 'Server error', details: err.message });
   }
 });
 

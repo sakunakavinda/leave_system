@@ -50,15 +50,15 @@ router.post('/', async (req, res) => {
     const [branchesRows] = await pool.query('SELECT id FROM branches');
     for (const b of branchesRows) {
       await pool.query(
-        'INSERT IGNORE INTO leave_rules (role_id, branch_id) VALUES (?, ?)',
-        [newRole.id, b.id]
+        'INSERT IGNORE INTO leave_rules (id, role_id, branch_id) VALUES (?, ?, ?)',
+        [crypto.randomUUID(), newRole.id, b.id]
       );
     }
 
     res.status(201).json(newRole);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: 'Server error', details: err.message });
   }
 });
 
