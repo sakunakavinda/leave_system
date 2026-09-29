@@ -172,6 +172,18 @@ router.delete('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Leave profile not found' });
     }
 
+    // Check if any employees are currently assigned to this profile
+    const [[assignedCount]] = await pool.query(
+      'SELECT COUNT(*) as count FROM employees WHERE leave_profile_id = ?',
+      [id]
+    );
+
+    if (assignedCount.count > 0) {
+      return res.status(400).json({
+        error: `Cannot delete profile "${existing[0].name}": It is currently assigned to ${assignedCount.count} employee(s). Please reassign those employees to another profile first.`
+      });
+    }
+
     await pool.query('DELETE FROM leave_profiles WHERE id = ?', [id]);
     res.json({ message: 'Leave profile deleted successfully' });
   } catch (err) {

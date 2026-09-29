@@ -90,41 +90,39 @@ export async function validateLeaveQuota(connection, {
 }) {
   if (requestedDays <= 0) return { valid: true };
 
-  // Fetch rules for this employee
-  const [rulesRows] = await connection.query(
-    'SELECT * FROM leave_rules WHERE role_id = ? AND branch_id = ?',
-    [roleId, branchId]
-  );
-  if (rulesRows.length === 0) {
-    return {
-      valid: false,
-      error: 'Leave rules not found for your role and branch. Please contact Admin.'
-    };
-  }
-  const rule = rulesRows[0];
-  const ruleCol = `${leaveType}_leave`;
-  const balanceCol = `${leaveType}_taken`;
-
-  // Check if employee has an assigned leave_profile_id with customized entitlements
+  // Fetch leave profile for this employee
   let profileEntitlements = null;
+  let leaveProfileName = '';
+
   if (employeeId) {
     try {
       const [empRows] = await connection.query(
-        `SELECT e.leave_profile_id, lp.entitlements 
+        `SELECT e.leave_profile_id, lp.name AS profile_name, lp.entitlements 
          FROM employees e 
          LEFT JOIN leave_profiles lp ON e.leave_profile_id = lp.id 
          WHERE e.id = ?`,
         [employeeId]
       );
-      if (empRows.length > 0 && empRows[0].entitlements) {
-        profileEntitlements = typeof empRows[0].entitlements === 'object'
-          ? empRows[0].entitlements
-          : JSON.parse(empRows[0].entitlements);
+      if (empRows.length > 0) {
+        if (!empRows[0].leave_profile_id) {
+          return {
+            valid: false,
+            error: 'No leave profile assigned to employee. Please assign a leave profile under Admin > Employees.'
+          };
+        }
+        leaveProfileName = empRows[0].profile_name;
+        if (empRows[0].entitlements) {
+          profileEntitlements = typeof empRows[0].entitlements === 'object'
+            ? empRows[0].entitlements
+            : JSON.parse(empRows[0].entitlements);
+        }
       }
     } catch (e) {
       console.error('Error fetching employee profile entitlements:', e);
     }
   }
+
+  const balanceCol = `${leaveType}_taken`;
 
   const getQuotaForMonth = (m) => {
     if (profileEntitlements && profileEntitlements[leaveType] !== undefined) {
@@ -139,7 +137,7 @@ export async function validateLeaveQuota(connection, {
       }
       return Number(ent);
     }
-    return rule[ruleCol] !== undefined && rule[ruleCol] !== null ? Number(rule[ruleCol]) : 0;
+    return 0;
   };
 
   const getAnnualQuota = () => {
@@ -155,7 +153,7 @@ export async function validateLeaveQuota(connection, {
       }
       return Number(ent);
     }
-    return rule[ruleCol] !== undefined && rule[ruleCol] !== null ? Number(rule[ruleCol]) : 0;
+    return 0;
   };
 
   const isUnpaid = leaveType === 'unpaid' || leaveType === 'lop' || 

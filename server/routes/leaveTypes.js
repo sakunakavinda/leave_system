@@ -231,10 +231,7 @@ router.post('/', async (req, res) => {
       ]
     );
 
-    // Keep backward-compatible columns in legacy tables if needed
-    try {
-      await pool.query(`ALTER TABLE leave_rules ADD COLUMN ${code}_leave INT DEFAULT 0`);
-    } catch (e) {}
+    // Keep backward-compatible columns in balance table if needed
     try {
       await pool.query(`ALTER TABLE leave_balances ADD COLUMN ${code}_taken INT DEFAULT 0`);
     } catch (e) {}

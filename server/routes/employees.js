@@ -87,6 +87,16 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Invalid role: The selected role does not exist' });
     }
 
+    if (!effectiveProfileId) {
+      return res.status(400).json({ error: 'Leave profile is required. Every employee must be assigned to a leave profile.' });
+    }
+
+    // Verify leave profile exists
+    const [profileRows] = await pool.query('SELECT id FROM leave_profiles WHERE id = ?', [effectiveProfileId]);
+    if (profileRows.length === 0) {
+      return res.status(400).json({ error: 'Invalid leave profile: The selected leave profile does not exist.' });
+    }
+
     await pool.query(
       'INSERT INTO employees (id, name, secret_code, role_id, branch_id, leave_profile_id, status, joined_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [id, name.trim(), rawCode, role_id, branch_id, effectiveProfileId, status || 'active', effectiveJoinedDate]
@@ -118,6 +128,16 @@ router.put('/:id', async (req, res) => {
   const effectiveProfileId = (leave_profile_id && leave_profile_id.trim() !== '') ? leave_profile_id.trim() : null;
 
   try {
+    if (!effectiveProfileId) {
+      return res.status(400).json({ error: 'Leave profile is required. Every employee must be assigned to a leave profile.' });
+    }
+
+    // Verify leave profile exists
+    const [profileRows] = await pool.query('SELECT id FROM leave_profiles WHERE id = ?', [effectiveProfileId]);
+    if (profileRows.length === 0) {
+      return res.status(400).json({ error: 'Invalid leave profile: The selected leave profile does not exist.' });
+    }
+
     let result;
     if (secretCode && secretCode.trim() !== '') {
       [result] = await pool.query(

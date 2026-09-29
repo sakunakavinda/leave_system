@@ -226,8 +226,7 @@ export default function LeaveOverview({ onBack, secretCode }) {
           total = monthlyPolicy === 'accrual' ? flatVal * selectedMonth : flatVal
         }
       } else {
-        const baseMonthly = (rules && rules[ruleKey] !== undefined) ? Number(rules[ruleKey]) : 0
-        total = monthlyPolicy === 'accrual' ? baseMonthly * selectedMonth : baseMonthly
+        total = 0
       }
     } else {
       const pVal = profile_entitlements?.[code] ?? profile_entitlements?.[lt.id]
@@ -238,7 +237,7 @@ export default function LeaveOverview({ onBack, secretCode }) {
           total = Number(pVal) || 0
         }
       } else {
-        total = (rules && rules[ruleKey] !== undefined) ? Number(rules[ruleKey]) : (code === 'annual' ? 14 : code === 'sick' ? 10 : code === 'casual' ? 7 : 0)
+        total = 0
       }
     }
 

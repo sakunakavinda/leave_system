@@ -46,15 +46,6 @@ router.post('/', async (req, res) => {
     const [roleRows] = await pool.query('SELECT * FROM roles WHERE id = ?', [id]);
     const newRole = roleRows[0];
 
-    // Auto-generate default leave rules for all existing branches
-    const [branchesRows] = await pool.query('SELECT id FROM branches');
-    for (const b of branchesRows) {
-      await pool.query(
-        'INSERT IGNORE INTO leave_rules (id, role_id, branch_id) VALUES (?, ?, ?)',
-        [crypto.randomUUID(), newRole.id, b.id]
-      );
-    }
-
     res.status(201).json(newRole);
   } catch (err) {
     console.error(err);

@@ -2034,13 +2034,16 @@ export function ManageEmployees({
 
   const hasBranches = Boolean(branches && branches.length > 0);
   const hasRoles = Boolean(roles && roles.length > 0);
-  const canAddEmployee = hasBranches && hasRoles;
+  const hasProfiles = Boolean(leaveProfiles && leaveProfiles.some(p => p.status === 'active'));
+  const canAddEmployee = hasBranches && hasRoles && hasProfiles;
 
-  const missingPrerequisitesText = !hasBranches && !hasRoles
-    ? 'Both Branches and Roles records are empty. You must create at least one Branch and one Role before adding employees.'
+  const missingPrerequisitesText = !hasBranches && !hasRoles && !hasProfiles
+    ? 'Branches, Roles, and Leave Profiles records are empty. You must create at least one Branch, Role, and Leave Profile before adding employees.'
     : (!hasBranches
       ? 'Branch records are empty. You must configure at least one Branch before adding employees.'
-      : 'Role records are empty. You must configure at least one Role before adding employees.');
+      : (!hasRoles
+        ? 'Role records are empty. You must configure at least one Role before adding employees.'
+        : 'No active Leave Profiles found. You must create at least one Leave Profile under Leave Profiles before adding employees.'));
 
   const [activeSubTab, setActiveSubTab] = useState('directory')
   const [search, setSearch]             = useState('')
@@ -2048,11 +2051,12 @@ export function ManageEmployees({
   const [modal, setModal]               = useState(null) // null | 'add' | employee object
   const [toast, setToast]               = useState(null)
   const [secretCodePopup, setSecretCodePopup] = useState(null)
+  const firstActiveProfile = leaveProfiles?.find(p => p.status === 'active');
   const EMPTY_EMP = { 
     name:'', 
     role_id: roles?.[0]?.id || '', 
     branch_id: isBranchScoped ? currentUser.branch_id : (branches?.[0]?.id || ''), 
-    leave_profile_id: '',
+    leave_profile_id: firstActiveProfile?.id || '',
     status:'active',
     joined_date: new Date().toISOString().split('T')[0]
   }
@@ -2096,18 +2100,19 @@ export function ManageEmployees({
       showToast(missingPrerequisitesText, 'danger');
       return;
     }
+    const defaultProfile = leaveProfiles?.find(p => p.status === 'active')?.id || '';
     setForm({
       ...EMPTY_EMP,
       role_id: roles?.[0]?.id || '',
       branch_id: isBranchScoped ? currentUser.branch_id : (branches?.[0]?.id || ''),
-      leave_profile_id: ''
+      leave_profile_id: defaultProfile
     }); 
     setModal('add') 
   }
   const openEdit = (emp) => { 
     setForm({ 
       ...emp, 
-      leave_profile_id: emp.leave_profile_id || '',
+      leave_profile_id: emp.leave_profile_id || (leaveProfiles?.find(p => p.status === 'active')?.id || ''),
       joined_date: emp.joined_date ? emp.joined_date.split('T')[0] : (emp.created_at ? emp.created_at.split('T')[0] : new Date().toISOString().split('T')[0]) 
     }); 
     setModal(emp);
@@ -2137,10 +2142,14 @@ export function ManageEmployees({
         return;
       }
     }
+    if (!form.leave_profile_id) {
+      showToast('Please select a Leave Profile for the employee', 'danger');
+      return;
+    }
     try {
       const payload = {
         ...form,
-        leave_profile_id: form.leave_profile_id || null
+        leave_profile_id: form.leave_profile_id
       };
       if (modal === 'add') {
         const existingCodes = employees.map(e => e.secretCode).filter(Boolean);
@@ -2445,8 +2454,16 @@ export function ManageEmployees({
                             <span>{profileName}</span>
                           </span>
                         ) : (
-                          <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
-                            Default Rules
+                          <span style={{ 
+                            fontSize: '11px', 
+                            fontWeight: 600, 
+                            color: '#ef4444',
+                            background: 'rgba(239, 68, 68, 0.1)',
+                            border: '1px solid rgba(239, 68, 68, 0.25)',
+                            padding: '2px 7px',
+                            borderRadius: '5px'
+                          }}>
+                            ⚠️ No Profile Assigned
                           </span>
                         );
                       })()}
@@ -2705,12 +2722,13 @@ export function ManageEmployees({
               </div>
               <div className="field-row">
                 <div className="field" style={{ flex: 1 }}>
-                  <label>Leave Profile (Entitlement Package)</label>
+                  <label>Leave Profile (Entitlement Package) *</label>
                   <select 
                     value={form.leave_profile_id || ''} 
                     onChange={e => setForm(p => ({ ...p, leave_profile_id: e.target.value }))}
+                    required
                   >
-                    <option value="">Standard (Use Role &amp; Branch Default Rules)</option>
+                    <option value="" disabled>-- Select Leave Profile (Required) --</option>
                     {(leaveProfiles || []).filter(lp => lp.status === 'active' || lp.id === form.leave_profile_id).map(lp => (
                       <option key={lp.id} value={lp.id}>
                         {lp.name} ({lp.code})
@@ -2718,7 +2736,7 @@ export function ManageEmployees({
                     ))}
                   </select>
                   <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '2px' }}>
-                    Assigning a profile applies its customized annual or monthly matrix (e.g. February 28 days adjustments)
+                    Every employee must be assigned to an active Leave Profile to govern their annual/monthly leave allowances.
                   </small>
                 </div>
               </div>
@@ -2916,9 +2934,8 @@ export function ManageEmployees({
         });
 
         const profile = getLeaveProfile(reportEmp.leave_profile_id);
-        const rule = (leaveRules || []).find(r => r.role_id === reportEmp.role_id && r.branch_id === reportEmp.branch_id);
         
-        const getEnt = (code, fallback) => {
+        const getEnt = (code, fallback = 0) => {
           if (profile && profile.entitlements && profile.entitlements[code] !== undefined) {
             const val = profile.entitlements[code];
             if (typeof val === 'object' && val !== null) {
@@ -2930,9 +2947,9 @@ export function ManageEmployees({
           return fallback;
         };
 
-        const maxAnnual = getEnt('annual', rule ? rule.annual_leave : 14);
-        const maxSick = getEnt('sick', rule ? rule.sick_leave : 10);
-        const maxCasual = getEnt('casual', rule ? rule.casual_leave : 7);
+        const maxAnnual = getEnt('annual', 0);
+        const maxSick = getEnt('sick', 0);
+        const maxCasual = getEnt('casual', 0);
         const maxTotal = maxAnnual + maxSick + maxCasual;
 
         const dateStr = (d) => {

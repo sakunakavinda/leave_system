@@ -279,11 +279,6 @@ router.post('/', async (req, res) => {
     const deductionCalc = await calculateLeaveDeduction(branch_id, leaveDates || [], employee_id);
     const requestedDays = deductionCalc.netWorkingDaysDeducted;
     if (requestedDays > 0) {
-      const [rulesRows] = await connection.query('SELECT * FROM leave_rules WHERE role_id = ? AND branch_id = ?', [role_id, branch_id]);
-      if (rulesRows.length === 0) {
-        await connection.rollback();
-        return res.status(400).json({ error: 'Leave rules not found for your role and branch. Please contact Admin.' });
-      }
       const quotaCheck = await validateLeaveQuota(connection, {
         employeeId: employee_id,
         roleId: role_id,
@@ -303,23 +298,6 @@ router.post('/', async (req, res) => {
       // Max Per Day & Substitute Checks (Bypassed if manager override / unannounced absence recording)
       if (!isManagerOverride) {
         for (const date of leaveDates) {
-          const [onLeaveRows] = await connection.query(`
-            SELECT COUNT(DISTINCT a.employee_id) AS count
-            FROM leave_applications a
-            JOIN leave_application_dates d ON a.id = d.leave_application_id
-            JOIN employees e ON a.employee_id = e.id
-            WHERE d.leave_date = ? 
-              AND e.role_id = ? 
-              AND e.branch_id = ?
-              AND a.status IN ('approved', 'pending')
-          `, [date, role_id, branch_id]);
-
-          const countOnLeave = parseInt(onLeaveRows[0].count);
-          if (countOnLeave >= rule.max_per_day) {
-            await connection.rollback();
-            return res.status(400).json({ error: `Maximum allowed employees on leave reached for date: ${date}` });
-          }
-
           // Substitute Check
           const [subCheckRows] = await connection.query(`
             SELECT e.name 
@@ -758,13 +736,7 @@ router.get('/overview/:secretCode', async (req, res) => {
       balance = balanceRows[0] || { annual_taken: 0, sick_taken: 0, casual_taken: 0 };
     }
 
-    const [rulesRows] = await pool.query(`
-      SELECT *
-      FROM leave_rules
-      WHERE role_id = ? AND branch_id = ?
-    `, [emp.role_id, emp.branch_id]);
-
-    const rules = rulesRows[0] || { annual_leave: 14, sick_leave: 10, casual_leave: 7, max_per_day: 1 };
+    const rules = { annual_leave: 14, sick_leave: 10, casual_leave: 7, max_per_day: 1 };
 
     const [appsRows] = await pool.query(`
       SELECT 

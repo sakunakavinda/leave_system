@@ -78,15 +78,6 @@ router.post('/', async (req, res) => {
       VALUES (?, ?, ?, ?, ?)
     `, [scheduleId, branchId, operating_model || 'corporate_5day', workingDaysJson, weekly_hours || 40.00]);
     
-    // Auto-generate default leave rules for all existing roles
-    const [rolesRows] = await pool.query('SELECT id FROM roles');
-    for (const r of rolesRows) {
-      await pool.query(
-        'INSERT IGNORE INTO leave_rules (id, role_id, branch_id) VALUES (?, ?, ?)',
-        [crypto.randomUUID(), r.id, branchId]
-      );
-    }
-
     const [branchRows] = await pool.query(`
       SELECT b.*, bs.operating_model, bs.working_days, bs.weekly_hours
       FROM branches b

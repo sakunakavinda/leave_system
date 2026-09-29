@@ -5,13 +5,8 @@ import crypto from 'crypto';
 const router = express.Router();
 
 router.get('/', async (req, res) => {
-  try {
-    const [rows] = await pool.query('SELECT * FROM leave_rules ORDER BY created_at ASC');
-    res.json(rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
-  }
+  // Deprecated: leave_rules replaced by leave_profiles
+  res.json([]);
 });
 
 // Create OR Update rule (Upsert)
