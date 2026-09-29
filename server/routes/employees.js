@@ -16,18 +16,21 @@ router.get('/', optionalAuth, async (req, res) => {
       (req.user.role === 'super_admin' || req.user.role === 'manager' || req.user.role === 'super manager');
 
     let sql = `
-      SELECT id, name, ${includeSecret ? 'secret_code AS "secretCode",' : ''} 
-             role_id, branch_id, status, DATE_FORMAT(joined_date, '%Y-%m-%d') AS joined_date, created_at, updated_at 
-      FROM employees
+      SELECT e.id, e.name, ${includeSecret ? 'e.secret_code AS "secretCode",' : ''} 
+             e.role_id, e.branch_id, e.leave_profile_id,
+             lp.name AS leave_profile_name, lp.code AS leave_profile_code,
+             e.status, DATE_FORMAT(e.joined_date, '%Y-%m-%d') AS joined_date, e.created_at, e.updated_at 
+      FROM employees e
+      LEFT JOIN leave_profiles lp ON e.leave_profile_id = lp.id
     `;
     const params = [];
 
     if (branchScope) {
-      sql += ' WHERE branch_id = ?';
+      sql += ' WHERE e.branch_id = ?';
       params.push(branchScope);
     }
 
-    sql += ' ORDER BY created_at ASC';
+    sql += ' ORDER BY e.created_at ASC';
 
     const [rows] = await pool.query(sql, params);
     res.json(rows);
@@ -41,10 +44,11 @@ router.get('/', optionalAuth, async (req, res) => {
  * POST /api/employees (Create an employee)
  */
 router.post('/', async (req, res) => {
-  const { name, secretCode, role_id, branch_id, status, joined_date } = req.body;
+  const { name, secretCode, role_id, branch_id, leave_profile_id, status, joined_date } = req.body;
   const rawCode = secretCode || Math.floor(10000000 + Math.random() * 90000000).toString();
   const id = crypto.randomUUID();
   const effectiveJoinedDate = joined_date || new Date().toISOString().split('T')[0];
+  const effectiveProfileId = (leave_profile_id && leave_profile_id.trim() !== '') ? leave_profile_id.trim() : null;
 
   try {
     if (!name || !name.trim()) {
@@ -84,12 +88,17 @@ router.post('/', async (req, res) => {
     }
 
     await pool.query(
-      'INSERT INTO employees (id, name, secret_code, role_id, branch_id, status, joined_date) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [id, name.trim(), rawCode, role_id, branch_id, status || 'active', effectiveJoinedDate]
+      'INSERT INTO employees (id, name, secret_code, role_id, branch_id, leave_profile_id, status, joined_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, name.trim(), rawCode, role_id, branch_id, effectiveProfileId, status || 'active', effectiveJoinedDate]
     );
 
     const [rows] = await pool.query(
-      'SELECT id, name, secret_code AS "secretCode", role_id, branch_id, status, DATE_FORMAT(joined_date, "%Y-%m-%d") AS joined_date, created_at FROM employees WHERE id = ?',
+      `SELECT e.id, e.name, e.secret_code AS "secretCode", e.role_id, e.branch_id, e.leave_profile_id,
+              lp.name AS leave_profile_name, lp.code AS leave_profile_code,
+              e.status, DATE_FORMAT(e.joined_date, "%Y-%m-%d") AS joined_date, e.created_at 
+       FROM employees e
+       LEFT JOIN leave_profiles lp ON e.leave_profile_id = lp.id
+       WHERE e.id = ?`,
       [id]
     );
     res.status(201).json(rows[0]);
@@ -104,27 +113,33 @@ router.post('/', async (req, res) => {
  */
 router.put('/:id', async (req, res) => {
   const { id } = req.params;
-  const { name, secretCode, role_id, branch_id, status, joined_date } = req.body;
+  const { name, secretCode, role_id, branch_id, leave_profile_id, status, joined_date } = req.body;
   const effectiveJoinedDate = joined_date || new Date().toISOString().split('T')[0];
+  const effectiveProfileId = (leave_profile_id && leave_profile_id.trim() !== '') ? leave_profile_id.trim() : null;
 
   try {
     let result;
     if (secretCode && secretCode.trim() !== '') {
       [result] = await pool.query(
-        'UPDATE employees SET name = ?, secret_code = ?, role_id = ?, branch_id = ?, status = ?, joined_date = ? WHERE id = ?',
-        [name.trim(), secretCode.trim(), role_id, branch_id, status, effectiveJoinedDate, id]
+        'UPDATE employees SET name = ?, secret_code = ?, role_id = ?, branch_id = ?, leave_profile_id = ?, status = ?, joined_date = ? WHERE id = ?',
+        [name.trim(), secretCode.trim(), role_id, branch_id, effectiveProfileId, status, effectiveJoinedDate, id]
       );
     } else {
       [result] = await pool.query(
-        'UPDATE employees SET name = ?, role_id = ?, branch_id = ?, status = ?, joined_date = ? WHERE id = ?',
-        [name.trim(), role_id, branch_id, status, effectiveJoinedDate, id]
+        'UPDATE employees SET name = ?, role_id = ?, branch_id = ?, leave_profile_id = ?, status = ?, joined_date = ? WHERE id = ?',
+        [name.trim(), role_id, branch_id, effectiveProfileId, status, effectiveJoinedDate, id]
       );
     }
 
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Employee not found' });
 
     const [rows] = await pool.query(
-      'SELECT id, name, secret_code AS "secretCode", role_id, branch_id, status, DATE_FORMAT(joined_date, "%Y-%m-%d") AS joined_date FROM employees WHERE id = ?',
+      `SELECT e.id, e.name, e.secret_code AS "secretCode", e.role_id, e.branch_id, e.leave_profile_id,
+              lp.name AS leave_profile_name, lp.code AS leave_profile_code,
+              e.status, DATE_FORMAT(e.joined_date, "%Y-%m-%d") AS joined_date 
+       FROM employees e
+       LEFT JOIN leave_profiles lp ON e.leave_profile_id = lp.id
+       WHERE e.id = ?`,
       [id]
     );
     res.json(rows[0]);

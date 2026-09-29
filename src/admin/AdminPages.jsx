@@ -2021,6 +2021,8 @@ export function ManageEmployees({
   setLeaveRules, 
   applications = [], 
   leaveTypes = [],
+  leaveProfiles = [],
+  settings = {},
   currentUser = null,
   canCreateEdit = true,
   canAdjustBalance = true,
@@ -2050,6 +2052,7 @@ export function ManageEmployees({
     name:'', 
     role_id: roles?.[0]?.id || '', 
     branch_id: isBranchScoped ? currentUser.branch_id : (branches?.[0]?.id || ''), 
+    leave_profile_id: '',
     status:'active',
     joined_date: new Date().toISOString().split('T')[0]
   }
@@ -2084,6 +2087,7 @@ export function ManageEmployees({
     if (!b) return null
     return { ...b, name: formatBranchName(b) }
   }
+  const getLeaveProfile = (profile_id) => leaveProfiles?.find(p => p.id === profile_id)
 
   const showToast = (msg, type='success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000) }
 
@@ -2095,13 +2099,15 @@ export function ManageEmployees({
     setForm({
       ...EMPTY_EMP,
       role_id: roles?.[0]?.id || '',
-      branch_id: isBranchScoped ? currentUser.branch_id : (branches?.[0]?.id || '')
+      branch_id: isBranchScoped ? currentUser.branch_id : (branches?.[0]?.id || ''),
+      leave_profile_id: ''
     }); 
     setModal('add') 
   }
   const openEdit = (emp) => { 
     setForm({ 
       ...emp, 
+      leave_profile_id: emp.leave_profile_id || '',
       joined_date: emp.joined_date ? emp.joined_date.split('T')[0] : (emp.created_at ? emp.created_at.split('T')[0] : new Date().toISOString().split('T')[0]) 
     }); 
     setModal(emp);
@@ -2132,17 +2138,30 @@ export function ManageEmployees({
       }
     }
     try {
+      const payload = {
+        ...form,
+        leave_profile_id: form.leave_profile_id || null
+      };
       if (modal === 'add') {
         const existingCodes = employees.map(e => e.secretCode).filter(Boolean);
         const newSecretCode = generateSecretCode(existingCodes);
-        const payload = { ...form, secretCode: newSecretCode };
-        const addedEmp = await api.addEmployee(payload);
-        setEmployees(prev => [...prev, { ...addedEmp, secretCode: newSecretCode }]);
+        const addedEmp = await api.addEmployee({ ...payload, secretCode: newSecretCode });
+        const assignedProfile = getLeaveProfile(payload.leave_profile_id);
+        setEmployees(prev => [...prev, {
+          ...addedEmp,
+          secretCode: newSecretCode,
+          leave_profile_name: assignedProfile?.name || addedEmp.leave_profile_name
+        }]);
         setSecretCodePopup({ name: form.name, secretCode: newSecretCode });
         closeModal();
       } else {
-        const updatedEmp = await api.updateEmployee(modal.id, form);
-        setEmployees(prev => prev.map(e => e.id === modal.id ? { ...updatedEmp, secretCode: e.secretCode } : e));
+        const updatedEmp = await api.updateEmployee(modal.id, payload);
+        const assignedProfile = getLeaveProfile(payload.leave_profile_id);
+        setEmployees(prev => prev.map(e => e.id === modal.id ? {
+          ...updatedEmp,
+          secretCode: e.secretCode,
+          leave_profile_name: assignedProfile?.name || updatedEmp.leave_profile_name
+        } : e));
         showToast('Employee updated');
         closeModal();
       }
@@ -2357,11 +2376,11 @@ export function ManageEmployees({
           <div className="data-table-wrap">
             <table className="data-table">
               <thead>
-                <tr><th>ID</th><th>Name</th><th>Secret Code</th><th>Post</th><th>Branch</th><th>Joined Date</th><th>Status</th><th>Actions</th></tr>
+                <tr><th>ID</th><th>Name</th><th>Secret Code</th><th>Post</th><th>Branch</th><th>Leave Profile</th><th>Joined Date</th><th>Status</th><th>Actions</th></tr>
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
-                  <tr><td colSpan={8} style={{ textAlign:'center', padding:'48px', color:'var(--text-muted)' }}>No employees found</td></tr>
+                  <tr><td colSpan={9} style={{ textAlign:'center', padding:'48px', color:'var(--text-muted)' }}>No employees found</td></tr>
                 ) : filtered.map((emp, i) => (
                   <tr key={emp.id} style={{ animationDelay: `${i * 0.04}s` }}>
                     <td><span style={{ fontFamily:'monospace', fontSize:'12px', color:'var(--text-muted)' }}>{emp.id}</span></td>
@@ -2404,6 +2423,34 @@ export function ManageEmployees({
                     </td>
                     <td>{getRole(emp.role_id)?.title || 'Unknown Role'}</td>
                     <td>{getBranch(emp.branch_id)?.name || 'Unknown Branch'}</td>
+                    <td>
+                      {(() => {
+                        const profile = getLeaveProfile(emp.leave_profile_id);
+                        const profileName = emp.leave_profile_name || profile?.name;
+                        return profileName ? (
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            fontSize: '11.5px',
+                            fontWeight: 600,
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            background: 'color-mix(in srgb, var(--accent) 15%, transparent)',
+                            color: 'var(--accent-light)',
+                            border: '1px solid color-mix(in srgb, var(--accent) 30%, transparent)',
+                            whiteSpace: 'nowrap'
+                          }} title={`Leave profile: ${profileName} (${profile?.code || emp.leave_profile_code || ''})`}>
+                            <span>⚡</span>
+                            <span>{profileName}</span>
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                            Default Rules
+                          </span>
+                        );
+                      })()}
+                    </td>
                     <td>
                       <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>
                         {emp.joined_date ? emp.joined_date.split('T')[0] : (emp.created_at ? emp.created_at.split('T')[0] : '—')}
@@ -2656,6 +2703,25 @@ export function ManageEmployees({
                   </select>
                 </div>
               </div>
+              <div className="field-row">
+                <div className="field" style={{ flex: 1 }}>
+                  <label>Leave Profile (Entitlement Package)</label>
+                  <select 
+                    value={form.leave_profile_id || ''} 
+                    onChange={e => setForm(p => ({ ...p, leave_profile_id: e.target.value }))}
+                  >
+                    <option value="">Standard (Use Role &amp; Branch Default Rules)</option>
+                    {(leaveProfiles || []).filter(lp => lp.status === 'active' || lp.id === form.leave_profile_id).map(lp => (
+                      <option key={lp.id} value={lp.id}>
+                        {lp.name} ({lp.code})
+                      </option>
+                    ))}
+                  </select>
+                  <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '2px' }}>
+                    Assigning a profile applies its customized annual or monthly matrix (e.g. February 28 days adjustments)
+                  </small>
+                </div>
+              </div>
             </div>
             <div className="modal-footer">
               <button className="btn-secondary" onClick={closeModal}>Cancel</button>
@@ -2849,11 +2915,24 @@ export function ManageEmployees({
           if (a.leave_type === 'casual') totalCasual += days;
         });
 
-        const totalDays = totalAnnual + totalSick + totalCasual;
+        const profile = getLeaveProfile(reportEmp.leave_profile_id);
         const rule = (leaveRules || []).find(r => r.role_id === reportEmp.role_id && r.branch_id === reportEmp.branch_id);
-        const maxAnnual = rule ? rule.annual_leave : 0;
-        const maxSick = rule ? rule.sick_leave : 0;
-        const maxCasual = rule ? rule.casual_leave : 0;
+        
+        const getEnt = (code, fallback) => {
+          if (profile && profile.entitlements && profile.entitlements[code] !== undefined) {
+            const val = profile.entitlements[code];
+            if (typeof val === 'object' && val !== null) {
+              if (val.months) return Object.values(val.months).reduce((s, v) => s + (Number(v) || 0), 0);
+              if (val.default !== undefined) return Number(val.default);
+            }
+            return Number(val) || 0;
+          }
+          return fallback;
+        };
+
+        const maxAnnual = getEnt('annual', rule ? rule.annual_leave : 14);
+        const maxSick = getEnt('sick', rule ? rule.sick_leave : 10);
+        const maxCasual = getEnt('casual', rule ? rule.casual_leave : 7);
         const maxTotal = maxAnnual + maxSick + maxCasual;
 
         const dateStr = (d) => {
@@ -2867,7 +2946,9 @@ export function ManageEmployees({
               <div className="modal-header" style={{ padding: '24px', borderBottom: '1px solid var(--bg-card-border)' }}>
                 <div>
                   <h3 style={{ fontSize: '20px', marginBottom: '4px' }}>Leave Report</h3>
-                  <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '14px' }}>{reportEmp.name} • {getRole(reportEmp.role_id)?.title} • {getBranch(reportEmp.branch_id)?.name}</p>
+                  <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '14px' }}>
+                    {reportEmp.name} • {getRole(reportEmp.role_id)?.title} • {getBranch(reportEmp.branch_id)?.name} {profile ? `• Package: ${profile.name}` : ''}
+                  </p>
                 </div>
                 <button className="modal-close" onClick={() => setReportEmp(null)}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

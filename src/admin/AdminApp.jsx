@@ -870,6 +870,8 @@ export default function AdminApp() {
             setLeaveRules={setRules}
             applications={allowedApps}
             leaveTypes={leaveTypes}
+            leaveProfiles={leaveProfiles}
+            settings={settings}
             currentUser={currentUser}
             canCreateEdit={hasPermission('employees.create_edit')}
             canAdjustBalance={hasPermission('employees.adjust_balance')}
