@@ -151,7 +151,7 @@ export const api = {
   updateApplicationStatus: (id, status, extra = {}) => fetchApi(`/applications/${id}/status`, { method: 'PUT', body: JSON.stringify({ status, ...extra }) }),
   confirmApplication: (id, secretCode) => fetchApi(`/applications/${id}/confirm`, { method: 'PUT', body: JSON.stringify({ secretCode }) }),
   deleteApplication: (id) => fetchApi(`/applications/${id}`, { method: 'DELETE' }),
-  getLeaveOverview: (secretCode) => fetchApi(`/applications/overview/${secretCode}`),
+  getLeaveOverview: (secretCode, month = null) => fetchApi(`/applications/overview/${secretCode}${month ? `?month=${month}` : ''}`),
   uploadApplicationDocument: (id, data) => fetchApi(`/applications/${id}/document`, { method: 'POST', body: JSON.stringify(data) }),
   reviewApplicationDocument: (id, data) => fetchApi(`/applications/${id}/review-document`, { method: 'POST', body: JSON.stringify(data) }),
 

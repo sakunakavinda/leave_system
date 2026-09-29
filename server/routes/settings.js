@@ -7,7 +7,10 @@ const router = express.Router();
 router.get('/', async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT setting_key, setting_value FROM settings');
-    const settings = {};
+    const settings = {
+      leave_cycle_mode: 'annual',
+      monthly_leave_policy: 'strict_monthly'
+    };
     rows.forEach(row => {
       settings[row.setting_key] = row.setting_value;
     });

@@ -51,7 +51,9 @@ async function emptyAllData() {
       ['company_name', 'Workforce Leave Desk'],
       ['theme_color', 'blue'],
       ['theme_color_secondary', 'indigo'],
-      ['company_logo', '']
+      ['company_logo', ''],
+      ['leave_cycle_mode', 'annual'],
+      ['monthly_leave_policy', 'strict_monthly']
     ];
 
     for (const [k, v] of defaultSettings) {

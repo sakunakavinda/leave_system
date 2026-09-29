@@ -49,7 +49,12 @@ const STATUS_CONFIG = {
   pending:  { label: 'Pending',  className: 'status-pending' },
   approved: { label: 'Approved', className: 'status-approved' },
   rejected: { label: 'Rejected', className: 'status-rejected' },
-}
+};
+
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
 
 export default function LeaveOverview({ onBack, secretCode }) {
   const [overview, setOverview] = useState(null)
@@ -61,6 +66,7 @@ export default function LeaveOverview({ onBack, secretCode }) {
   const [heatmapExpanded, setHeatmapExpanded] = useState(true)
   const [uploadingDocId, setUploadingDocId] = useState(null)
   const [docUploadMsg, setDocUploadMsg] = useState({})
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1)
 
   const handleUploadDoc = async (appId, e) => {
     const file = e.target.files?.[0]
@@ -124,6 +130,9 @@ export default function LeaveOverview({ onBack, secretCode }) {
           api.getLeaveTypes().catch(() => [])
         ])
         setOverview(data)
+        if (data?.selected_month) {
+          setSelectedMonth(data.selected_month)
+        }
         if (Array.isArray(typesData) && typesData.length > 0) {
           setLeaveTypes(typesData)
         }
@@ -141,7 +150,7 @@ export default function LeaveOverview({ onBack, secretCode }) {
       <div className="overview-page">
         <div className="overview-loading">
           <div className="overview-spinner" />
-          <p>Loading your leave overview…</p>
+          <p>Loading your leave overview...</p>
         </div>
       </div>
     )
@@ -159,8 +168,15 @@ export default function LeaveOverview({ onBack, secretCode }) {
     )
   }
 
-  const { employee, balance, rules, applications } = overview
+  const { employee, balance, rules, applications, cycle_mode, monthly_policy, monthly_balances, profile_entitlements } = overview
   const currentYear = new Date().getFullYear()
+  const isMonthly = cycle_mode === 'monthly'
+  const monthlyPolicy = monthly_policy || 'strict_monthly'
+
+  // Determine active balance record
+  const activeBalance = isMonthly
+    ? (monthly_balances?.find(b => b.month === selectedMonth) || balance || {})
+    : (balance || {})
 
   const effectiveLeaveTypes = (leaveTypes && leaveTypes.length > 0)
     ? leaveTypes
@@ -171,20 +187,59 @@ export default function LeaveOverview({ onBack, secretCode }) {
     const ruleKey = `${code}_leave`
     const takenKey = `${code}_taken`
 
-    let taken = (balance && balance[takenKey] !== undefined) ? Number(balance[takenKey]) : null
+    let taken = (activeBalance && activeBalance[takenKey] !== undefined) ? Number(activeBalance[takenKey]) : null
     if (taken === null || isNaN(taken)) {
       taken = (applications || []).reduce((acc, app) => {
         if (app.status === 'approved' && (app.leave_type?.toLowerCase() === code || app.leave_type?.toLowerCase() === lt.name?.toLowerCase())) {
-          const inYearDates = (app.leaveDates || []).filter(d => d.startsWith(currentYear.toString()))
-          return acc + inYearDates.length
+          if (isMonthly) {
+            const inMonthDates = (app.leaveDates || []).filter(d => {
+              const [y, m] = d.split('-').map(Number)
+              return y === currentYear && m === selectedMonth
+            })
+            return acc + inMonthDates.length
+          } else {
+            const inYearDates = (app.leaveDates || []).filter(d => d.startsWith(currentYear.toString()))
+            return acc + inYearDates.length
+          }
         }
         return acc
       }, 0)
     }
 
-    let total = (rules && rules[ruleKey] !== undefined) ? Number(rules[ruleKey]) : null
-    if (total === null || isNaN(total)) {
-      total = code === 'annual' ? 14 : code === 'sick' ? 10 : code === 'casual' ? 7 : 0
+    let total = 0
+    if (isMonthly) {
+      // Check if employee's leave profile has monthly quota configuration
+      const pVal = profile_entitlements?.[code] ?? profile_entitlements?.[lt.id]
+      if (pVal !== undefined && pVal !== null) {
+        if (typeof pVal === 'object' && pVal.months) {
+          if (monthlyPolicy === 'accrual') {
+            let sum = 0
+            for (let m = 1; m <= selectedMonth; m++) {
+              sum += Number(pVal.months[m] ?? pVal.default ?? 0)
+            }
+            total = sum
+          } else {
+            total = Number(pVal.months[selectedMonth] ?? pVal.default ?? 0)
+          }
+        } else {
+          const flatVal = Number(typeof pVal === 'object' ? pVal.default : pVal) || 0
+          total = monthlyPolicy === 'accrual' ? flatVal * selectedMonth : flatVal
+        }
+      } else {
+        const baseMonthly = (rules && rules[ruleKey] !== undefined) ? Number(rules[ruleKey]) : 0
+        total = monthlyPolicy === 'accrual' ? baseMonthly * selectedMonth : baseMonthly
+      }
+    } else {
+      const pVal = profile_entitlements?.[code] ?? profile_entitlements?.[lt.id]
+      if (pVal !== undefined && pVal !== null) {
+        if (typeof pVal === 'object') {
+          total = Number(pVal.default ?? (pVal.months ? Object.values(pVal.months).reduce((s, v) => s + (Number(v) || 0), 0) : 0))
+        } else {
+          total = Number(pVal) || 0
+        }
+      } else {
+        total = (rules && rules[ruleKey] !== undefined) ? Number(rules[ruleKey]) : (code === 'annual' ? 14 : code === 'sick' ? 10 : code === 'casual' ? 7 : 0)
+      }
     }
 
     const typeInfo = getLeaveTypeInfo(lt.code, effectiveLeaveTypes)
@@ -282,7 +337,57 @@ export default function LeaveOverview({ onBack, secretCode }) {
       </div>
 
       {/* ── Balance Cards ── */}
-      <div className="overview-section-title">Leave Balance — {new Date().getFullYear()}</div>
+      {isMonthly ? (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <div className="overview-section-title" style={{ margin: 0 }}>
+              Leave Balance — {MONTH_NAMES[selectedMonth - 1]} {currentYear}
+            </div>
+            <span style={{
+              fontSize: '11px',
+              fontWeight: 700,
+              padding: '2px 8px',
+              borderRadius: '12px',
+              background: 'rgba(16, 185, 129, 0.15)',
+              color: '#34d399',
+              border: '1px solid rgba(16, 185, 129, 0.35)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}>
+              <span>📆</span> Monthly Quota ({monthlyPolicy === 'strict_monthly' ? 'Strict Monthly Limit' : 'Cumulative Accrual'})
+            </span>
+          </div>
+
+          {/* Month Selector */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <label style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600 }}>Select Month:</label>
+            <select 
+              value={selectedMonth} 
+              onChange={e => setSelectedMonth(Number(e.target.value))}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '8px',
+                border: '1px solid var(--border-color, rgba(148, 163, 184, 0.3))',
+                background: 'var(--bg-card, #1e293b)',
+                color: 'var(--text-primary, #fff)',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              {MONTH_NAMES.map((name, idx) => (
+                <option key={idx + 1} value={idx + 1}>
+                  {name} {idx + 1 === (new Date().getMonth() + 1) ? '(Current)' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      ) : (
+        <div className="overview-section-title">Leave Balance — {currentYear}</div>
+      )}
+
       <div className="overview-balance-grid">
         {balanceCards.map(({ type, label, color, gradient, taken, total }) => {
           const remaining = Math.max(0, total - taken)
@@ -293,7 +398,7 @@ export default function LeaveOverview({ onBack, secretCode }) {
                 <div className="balance-type-label" style={{ color: color }}>{label}</div>
                 <div className="balance-remaining">
                   <span className="balance-remaining-num">{remaining}</span>
-                  <span className="balance-remaining-of">/ {total} remaining</span>
+                  <span className="balance-remaining-of">/ {total} remaining {isMonthly ? 'this month' : ''}</span>
                 </div>
               </div>
               <div className="balance-progress-wrap">

@@ -909,10 +909,13 @@ export default function AdminApp() {
             leaveProfiles={leaveProfiles}
             setLeaveProfiles={setLeaveProfiles}
             leaveTypes={leaveTypes}
+            settings={settings}
           />
         )}
         {activePage === 'settings' && (
-          <SystemSettings />
+          <SystemSettings 
+            onSettingsUpdated={(newStgs) => setSettings(prev => ({ ...prev, ...newStgs }))}
+          />
         )}
       </main>
 

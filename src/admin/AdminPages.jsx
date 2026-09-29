@@ -6212,9 +6212,26 @@ export function ManageLeaveTypes({ leaveTypes, setLeaveTypes }) {
 /* ─────────────────────────────────────────────────────
    ManageLeaveProfiles
 ───────────────────────────────────────────────────── */
-export function ManageLeaveProfiles({ leaveProfiles = [], setLeaveProfiles = () => {}, leaveTypes = [] }) {
+export const MONTH_CALENDAR_DATA = [
+  { month: 1, name: 'Jan', fullName: 'January', days: 31 },
+  { month: 2, name: 'Feb', fullName: 'February', days: 28, isFeb: true },
+  { month: 3, name: 'Mar', fullName: 'March', days: 31 },
+  { month: 4, name: 'Apr', fullName: 'April', days: 30 },
+  { month: 5, name: 'May', fullName: 'May', days: 31 },
+  { month: 6, name: 'Jun', fullName: 'June', days: 30 },
+  { month: 7, name: 'Jul', fullName: 'July', days: 31 },
+  { month: 8, name: 'Aug', fullName: 'August', days: 31 },
+  { month: 9, name: 'Sep', fullName: 'September', days: 30 },
+  { month: 10, name: 'Oct', fullName: 'October', days: 31 },
+  { month: 11, name: 'Nov', fullName: 'November', days: 30 },
+  { month: 12, name: 'Dec', fullName: 'December', days: 31 },
+];
+
+export function ManageLeaveProfiles({ leaveProfiles = [], setLeaveProfiles = () => {}, leaveTypes = [], settings = {} }) {
   const [modal, setModal] = useState(null); // null | 'add' | profile object
   const [search, setSearch] = useState('');
+  const isMonthly = settings?.leave_cycle_mode === 'monthly';
+  const [expandedMonths, setExpandedMonths] = useState({}); // { [ltCode]: boolean }
   const [form, setForm] = useState({
     name: '',
     code: '',
@@ -6234,10 +6251,37 @@ export function ManageLeaveProfiles({ leaveProfiles = [], setLeaveProfiles = () 
   // Use real leave types from database
   const effectiveLeaveTypes = Array.isArray(leaveTypes) ? leaveTypes : [];
 
+  const toggleExpandMonths = (code) => {
+    setExpandedMonths(prev => ({
+      ...prev,
+      [code]: !prev[code]
+    }));
+  };
+
+  const toggleAllMonths = (open) => {
+    const next = {};
+    effectiveLeaveTypes.forEach(lt => {
+      next[lt.code] = open;
+    });
+    setExpandedMonths(next);
+  };
+
   const openAdd = () => {
     const initialEntitlements = {};
     effectiveLeaveTypes.forEach(lt => {
-      initialEntitlements[lt.code] = 0;
+      if (isMonthly) {
+        const defaultVal = 2.0;
+        const initialMonths = {};
+        MONTH_CALENDAR_DATA.forEach(m => {
+          initialMonths[m.month] = m.month === 2 ? 1.5 : defaultVal;
+        });
+        initialEntitlements[lt.code] = {
+          default: defaultVal,
+          months: initialMonths
+        };
+      } else {
+        initialEntitlements[lt.code] = 0;
+      }
     });
 
     setForm({
@@ -6247,6 +6291,7 @@ export function ManageLeaveProfiles({ leaveProfiles = [], setLeaveProfiles = () 
       status: 'active',
       entitlements: initialEntitlements,
     });
+    setExpandedMonths({});
     setError('');
     setModal('add');
   };
@@ -6255,7 +6300,38 @@ export function ManageLeaveProfiles({ leaveProfiles = [], setLeaveProfiles = () 
     const currentEntitlements = {};
     effectiveLeaveTypes.forEach(lt => {
       const savedVal = profile.entitlements?.[lt.code] ?? profile.entitlements?.[lt.id];
-      currentEntitlements[lt.code] = savedVal !== undefined ? Number(savedVal) : 0;
+      if (isMonthly) {
+        if (typeof savedVal === 'object' && savedVal !== null) {
+          const def = Number(savedVal.default !== undefined ? savedVal.default : (savedVal.months?.[1] || 0));
+          const months = {};
+          MONTH_CALENDAR_DATA.forEach(m => {
+            months[m.month] = savedVal.months?.[m.month] !== undefined
+              ? Number(savedVal.months[m.month])
+              : (m.month === 2 && def >= 1.5 ? Math.max(0.5, Math.floor((def * (28 / 31)) * 2) / 2) : def);
+          });
+          currentEntitlements[lt.code] = {
+            default: def,
+            months
+          };
+        } else if (savedVal !== undefined && !isNaN(Number(savedVal))) {
+          const num = Number(savedVal);
+          const months = {};
+          MONTH_CALENDAR_DATA.forEach(m => {
+            months[m.month] = num;
+          });
+          currentEntitlements[lt.code] = {
+            default: num,
+            months
+          };
+        } else {
+          const months = {};
+          MONTH_CALENDAR_DATA.forEach(m => { months[m.month] = 0; });
+          currentEntitlements[lt.code] = { default: 0, months };
+        }
+      } else {
+        const def = typeof savedVal === 'object' && savedVal !== null ? (savedVal.default || 0) : (Number(savedVal) || 0);
+        currentEntitlements[lt.code] = def;
+      }
     });
 
     setForm({
@@ -6266,6 +6342,7 @@ export function ManageLeaveProfiles({ leaveProfiles = [], setLeaveProfiles = () 
       status: profile.status || 'active',
       entitlements: currentEntitlements,
     });
+    setExpandedMonths({});
     setError('');
     setModal(profile);
   };
@@ -6286,29 +6363,188 @@ export function ManageLeaveProfiles({ leaveProfiles = [], setLeaveProfiles = () 
     });
   };
 
-  const handleDaysChange = (code, rawVal) => {
-    const num = Math.max(0, parseInt(rawVal, 10) || 0);
-    setForm(prev => ({
-      ...prev,
-      entitlements: {
-        ...prev.entitlements,
-        [code]: num
+  const handleBaseDaysChange = (code, rawVal) => {
+    const num = isMonthly ? Math.max(0, parseFloat(rawVal) || 0) : Math.max(0, parseInt(rawVal, 10) || 0);
+    setForm(prev => {
+      const cur = prev.entitlements[code];
+      if (isMonthly) {
+        const curMonths = (typeof cur === 'object' && cur?.months) ? { ...cur.months } : {};
+        return {
+          ...prev,
+          entitlements: {
+            ...prev.entitlements,
+            [code]: {
+              default: num,
+              months: curMonths
+            }
+          }
+        };
+      } else {
+        return {
+          ...prev,
+          entitlements: {
+            ...prev.entitlements,
+            [code]: num
+          }
+        };
       }
-    }));
+    });
   };
 
-  const stepDays = (code, delta) => {
+  const stepBaseDays = (code, delta) => {
     setForm(prev => {
-      const current = Number(prev.entitlements[code]) || 0;
-      const next = Math.max(0, current + delta);
+      const cur = prev.entitlements[code];
+      const currentVal = isMonthly
+        ? (typeof cur === 'object' && cur !== null ? Number(cur.default) || 0 : Number(cur) || 0)
+        : (Number(cur) || 0);
+      const stepVal = isMonthly ? 0.5 * Math.sign(delta) : delta;
+      const nextVal = Math.max(0, Math.round((currentVal + stepVal) * 10) / 10);
+
+      if (isMonthly) {
+        const curMonths = (typeof cur === 'object' && cur?.months) ? { ...cur.months } : {};
+        return {
+          ...prev,
+          entitlements: {
+            ...prev.entitlements,
+            [code]: {
+              default: nextVal,
+              months: curMonths
+            }
+          }
+        };
+      } else {
+        return {
+          ...prev,
+          entitlements: {
+            ...prev.entitlements,
+            [code]: nextVal
+          }
+        };
+      }
+    });
+  };
+
+  const handleMonthDaysChange = (code, monthNum, rawVal) => {
+    const num = Math.max(0, parseFloat(rawVal) || 0);
+    setForm(prev => {
+      const cur = prev.entitlements[code];
+      const def = typeof cur === 'object' && cur !== null ? (Number(cur.default) || 0) : (Number(cur) || 0);
+      const curMonths = (typeof cur === 'object' && cur?.months) ? { ...cur.months } : {};
+      curMonths[monthNum] = num;
       return {
         ...prev,
         entitlements: {
           ...prev.entitlements,
-          [code]: next
+          [code]: {
+            default: def,
+            months: curMonths
+          }
         }
       };
     });
+  };
+
+  const stepMonthDays = (code, monthNum, delta) => {
+    setForm(prev => {
+      const cur = prev.entitlements[code];
+      const def = typeof cur === 'object' && cur !== null ? (Number(cur.default) || 0) : (Number(cur) || 0);
+      const curMonths = (typeof cur === 'object' && cur?.months) ? { ...cur.months } : {};
+      const curMonthVal = Number(curMonths[monthNum] !== undefined ? curMonths[monthNum] : def);
+      const stepVal = 0.5 * Math.sign(delta);
+      const nextVal = Math.max(0, Math.round((curMonthVal + stepVal) * 10) / 10);
+      curMonths[monthNum] = nextVal;
+      return {
+        ...prev,
+        entitlements: {
+          ...prev.entitlements,
+          [code]: {
+            default: def,
+            months: curMonths
+          }
+        }
+      };
+    });
+  };
+
+  const applyEqualizePreset = (code) => {
+    setForm(prev => {
+      const cur = prev.entitlements[code];
+      const base = typeof cur === 'object' && cur !== null ? (Number(cur.default) || 0) : (Number(cur) || 0);
+      const months = {};
+      MONTH_CALENDAR_DATA.forEach(m => {
+        months[m.month] = base;
+      });
+      return {
+        ...prev,
+        entitlements: {
+          ...prev.entitlements,
+          [code]: {
+            default: base,
+            months
+          }
+        }
+      };
+    });
+    showToast('Equalized all 12 months to base quota');
+  };
+
+  const applyAutoScalePreset = (code) => {
+    setForm(prev => {
+      const cur = prev.entitlements[code];
+      const base = typeof cur === 'object' && cur !== null ? (Number(cur.default) || 0) : (Number(cur) || 0);
+      const months = {};
+      MONTH_CALENDAR_DATA.forEach(m => {
+        if (m.month === 2) {
+          // Feb (28 calendar days) proportional scaling
+          months[m.month] = Math.max(0.5, Math.floor((base * (28 / 31)) * 2) / 2);
+        } else if (m.days === 30 && base >= 3.0) {
+          months[m.month] = Math.round((base * (30 / 31)) * 2) / 2;
+        } else {
+          months[m.month] = base;
+        }
+      });
+      return {
+        ...prev,
+        entitlements: {
+          ...prev.entitlements,
+          [code]: {
+            default: base,
+            months
+          }
+        }
+      };
+    });
+    showToast('Auto-scaled months by calendar days (Feb = 28 days)');
+  };
+
+  const applyBulkPreset = (presetType) => {
+    setForm(prev => {
+      const updated = { ...prev.entitlements };
+      effectiveLeaveTypes.forEach(lt => {
+        const cur = updated[lt.code];
+        const base = typeof cur === 'object' && cur !== null ? (Number(cur.default) || 0) : (Number(cur) || 0);
+        const months = {};
+        MONTH_CALENDAR_DATA.forEach(m => {
+          if (presetType === 'equalize') {
+            months[m.month] = base;
+          } else if (presetType === 'auto_scale') {
+            if (m.month === 2) {
+              months[m.month] = Math.max(0.5, Math.floor((base * (28 / 31)) * 2) / 2);
+            } else if (m.days === 30 && base >= 3.0) {
+              months[m.month] = Math.round((base * (30 / 31)) * 2) / 2;
+            } else {
+              months[m.month] = base;
+            }
+          }
+        });
+        updated[lt.code] = {
+          default: base,
+          months
+        };
+      });
+      return { ...prev, entitlements: updated };
+    });
+    showToast(presetType === 'equalize' ? 'Equalized all 12 months for all leave types' : 'Auto-scaled all leave types by calendar month length');
   };
 
   const handleSubmit = async (e) => {
@@ -6326,12 +6562,20 @@ export function ManageLeaveProfiles({ leaveProfiles = [], setLeaveProfiles = () 
     setIsSubmitting(true);
     setError('');
 
+    let finalEntitlements = { ...form.entitlements };
+    if (!isMonthly) {
+      Object.keys(finalEntitlements).forEach(k => {
+        const val = finalEntitlements[k];
+        finalEntitlements[k] = typeof val === 'object' && val !== null ? (Number(val.default) || 0) : (Number(val) || 0);
+      });
+    }
+
     const payload = {
       name: form.name.trim(),
       code: finalCode,
       description: form.description.trim(),
       status: form.status,
-      entitlements: form.entitlements,
+      entitlements: finalEntitlements,
     };
 
     try {
@@ -6368,7 +6612,24 @@ export function ManageLeaveProfiles({ leaveProfiles = [], setLeaveProfiles = () 
     return !q || p.name.toLowerCase().includes(q) || (p.code || '').toLowerCase().includes(q) || (p.description || '').toLowerCase().includes(q);
   });
 
-  const totalConfiguredDays = Object.values(form.entitlements || {}).reduce((s, d) => s + (Number(d) || 0), 0);
+  const calcProfileTotalDays = (p) => {
+    if (!p.entitlements) return 0;
+    return Object.values(p.entitlements).reduce((acc, ent) => {
+      if (isMonthly && typeof ent === 'object' && ent !== null && ent.months) {
+        return acc + Object.values(ent.months).reduce((s, v) => s + (Number(v) || 0), 0);
+      }
+      const val = typeof ent === 'object' && ent !== null ? (Number(ent.default) || 0) : (Number(ent) || 0);
+      return acc + (isMonthly ? val * 12 : val);
+    }, 0);
+  };
+
+  const totalConfiguredDays = Object.values(form.entitlements || {}).reduce((s, ent) => {
+    if (isMonthly && typeof ent === 'object' && ent !== null && ent.months) {
+      return s + Object.values(ent.months).reduce((mSum, v) => mSum + (Number(v) || 0), 0);
+    }
+    const val = typeof ent === 'object' && ent !== null ? (Number(ent.default) || 0) : (Number(ent) || 0);
+    return s + (isMonthly ? val * 12 : val);
+  }, 0);
 
   return (
     <div className="admin-content">
@@ -6437,48 +6698,51 @@ export function ManageLeaveProfiles({ leaveProfiles = [], setLeaveProfiles = () 
             flexShrink: 0
           }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '20px', height: '20px' }}>
-              <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
-              <line x1="7" y1="7" x2="7.01" y2="7"/>
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="16" y1="2" x2="16" y2="6"></line>
+              <line x1="8" y1="2" x2="8" y2="6"></line>
+              <line x1="3" y1="10" x2="21" y2="10"></line>
             </svg>
           </div>
           <div>
             <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)' }}>
               {effectiveLeaveTypes.length}
             </div>
-            <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Available Leave Types</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Active Leave Types</div>
           </div>
         </div>
       </div>
 
-      {/* Top Controls */}
-      <div className="controls-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
-        <div className="admin-search-box" style={{ flex: 1, maxWidth: '400px' }}>
-          <svg className="s-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-          </svg>
+      {/* Action Header */}
+      <div className="admin-actions-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', gap: '16px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '12px', flex: 1, minWidth: '240px' }}>
           <input
-            placeholder="Search profiles by name or code…"
+            className="admin-search-input"
+            type="text"
+            placeholder="Search profiles by name, code or description..."
             value={search}
             onChange={e => setSearch(e.target.value)}
+            style={{ maxWidth: '400px', width: '100%' }}
           />
         </div>
-        <button className="btn-primary" onClick={openAdd} style={{ gap: '6px', whiteSpace: 'nowrap' }}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '18px', height: '18px' }}>
-            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        <button className="btn-primary" onClick={openAdd} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px' }}>
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
           Create Leave Profile
         </button>
       </div>
 
-      {/* Table */}
-      <div className="data-table-wrap">
-        <table className="data-table">
+      {/* Profiles Table */}
+      <div className="table-responsive">
+        <table className="admin-table">
           <thead>
             <tr>
               <th>Profile Name & Code</th>
               <th>Description</th>
-              <th>Configured Leave Entitlements</th>
-              <th>Total Days</th>
+              <th>{isMonthly ? 'Configured Monthly Quota' : 'Configured Leave Entitlements'}</th>
+              <th>{isMonthly ? 'Total (Days/Yr)' : 'Total Days'}</th>
               <th>Status</th>
               <th>Actions</th>
             </tr>
@@ -6491,7 +6755,7 @@ export function ManageLeaveProfiles({ leaveProfiles = [], setLeaveProfiles = () 
                 </td>
               </tr>
             ) : filtered.map(p => {
-              const totalDays = Object.values(p.entitlements || {}).reduce((s, v) => s + (Number(v) || 0), 0);
+              const totalDays = calcProfileTotalDays(p);
               const unconfiguredCount = effectiveLeaveTypes.filter(lt => {
                 return p.entitlements?.[lt.code] === undefined && p.entitlements?.[lt.id] === undefined;
               }).length;
@@ -6512,15 +6776,37 @@ export function ManageLeaveProfiles({ leaveProfiles = [], setLeaveProfiles = () 
                   <td>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
                       {effectiveLeaveTypes.map(lt => {
-                        const days = p.entitlements?.[lt.code] ?? p.entitlements?.[lt.id];
-                        if (days === undefined) return null;
-                        return (
-                          <span key={lt.id || lt.code} className="profile-entitlement-chip">
-                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: lt.color || '#7c3aed' }}></span>
-                            <span>{lt.name}:</span>
-                            <strong style={{ color: 'var(--text-primary)' }}>{days}d</strong>
-                          </span>
-                        );
+                        const ent = p.entitlements?.[lt.code] ?? p.entitlements?.[lt.id];
+                        if (ent === undefined) return null;
+                        if (isMonthly && typeof ent === 'object' && ent !== null && ent.months) {
+                          const vals = Object.values(ent.months).map(Number);
+                          const minVal = vals.length ? Math.min(...vals) : (Number(ent.default) || 0);
+                          const maxVal = vals.length ? Math.max(...vals) : (Number(ent.default) || 0);
+                          const isVariable = minVal !== maxVal;
+                          const totalYear = vals.reduce((s, v) => s + v, 0);
+                          return (
+                            <span
+                              key={lt.id || lt.code}
+                              className="profile-entitlement-chip"
+                              title={isVariable ? `Varies by month (${minVal}d - ${maxVal}d). Feb: ${ent.months[2] ?? minVal}d. Annual total: ${totalYear}d` : `Fixed: ${minVal} days / month`}
+                            >
+                              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: lt.color || '#7c3aed' }}></span>
+                              <span>{lt.name}:</span>
+                              <strong style={{ color: 'var(--text-primary)' }}>
+                                {isVariable ? `${minVal}-${maxVal}d/mo` : `${minVal}d/mo`}
+                              </strong>
+                            </span>
+                          );
+                        } else {
+                          const days = typeof ent === 'object' && ent !== null ? ent.default : ent;
+                          return (
+                            <span key={lt.id || lt.code} className="profile-entitlement-chip">
+                              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: lt.color || '#7c3aed' }}></span>
+                              <span>{lt.name}:</span>
+                              <strong style={{ color: 'var(--text-primary)' }}>{days}d{isMonthly ? '/mo' : ''}</strong>
+                            </span>
+                          );
+                        }
                       })}
                       {unconfiguredCount > 0 && (
                         <button
@@ -6553,8 +6839,13 @@ export function ManageLeaveProfiles({ leaveProfiles = [], setLeaveProfiles = () 
                   </td>
                   <td>
                     <span style={{ fontWeight: 700, fontSize: '13px', color: 'var(--accent-light)' }}>
-                      {totalDays} days/yr
+                      {totalDays} {isMonthly ? 'd/yr' : 'days/yr'}
                     </span>
+                    {isMonthly && (
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                        ~{(totalDays / 12).toFixed(1)} d/mo avg
+                      </div>
+                    )}
                   </td>
                   <td>
                     <span className={`badge badge-${p.status === 'active' ? 'approved' : 'rejected'}`}>
@@ -6588,7 +6879,7 @@ export function ManageLeaveProfiles({ leaveProfiles = [], setLeaveProfiles = () 
       {/* Create / Edit Modal */}
       {modal !== null && (
         <div className="modal-backdrop" onClick={closeModal}>
-          <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: '640px' }}>
+          <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: '820px' }}>
             <div className="modal-header">
               <div>
                 <h3 style={{ margin: 0 }}>{modal === 'add' ? 'Create Leave Profile' : 'Edit Leave Profile'}</h3>
@@ -6661,12 +6952,59 @@ export function ManageLeaveProfiles({ leaveProfiles = [], setLeaveProfiles = () 
                 <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--bg-card-border)' }}>
                   <div style={{ marginBottom: '14px' }}>
                     <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                      Leave Days per Leave Type
+                      {isMonthly ? 'Monthly Quotas per Leave Type (Calendar Aware)' : 'Leave Days per Leave Type'}
                     </div>
                     <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                      Configure the annual allowed days for each available leave type below. If new leave types were added to the system, they appear here ready to configure.
+                      {isMonthly 
+                        ? 'Set base monthly quotas or fine-tune exact days per month using the 12-month calendar grid (reflecting February 28 days vs 30/31-day months).' 
+                        : 'Configure the annual allowed days for each available leave type below. If new leave types were added to the system, they appear here ready to configure.'}
                     </div>
                   </div>
+
+                  {isMonthly && effectiveLeaveTypes.length > 0 && (
+                    <div className="profile-bulk-toolbar">
+                      <div className="profile-bulk-toolbar-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '15px', height: '15px' }}>
+                          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                        </svg>
+                        <span>Smart Presets (All Leave Types):</span>
+                      </div>
+                      <div className="profile-bulk-btn-group">
+                        <button
+                          type="button"
+                          className="profile-preset-btn"
+                          onClick={() => applyBulkPreset('equalize')}
+                          title="Set all 12 months equal to their base quota for every leave type"
+                        >
+                          ⚡ Equalize All to Base
+                        </button>
+                        <button
+                          type="button"
+                          className="profile-preset-btn"
+                          onClick={() => applyBulkPreset('auto_scale')}
+                          title="Auto-scale February (28 days) proportionally for all leave types"
+                        >
+                          📅 Auto-Scale by Month Length (Feb = 28d)
+                        </button>
+                        <button
+                          type="button"
+                          className="profile-preset-btn"
+                          onClick={() => toggleAllMonths(true)}
+                          title="Expand 12-month calendar breakdown for all leave types"
+                        >
+                          Expand All Grids
+                        </button>
+                        <button
+                          type="button"
+                          className="profile-preset-btn"
+                          onClick={() => toggleAllMonths(false)}
+                          title="Collapse all 12-month grids"
+                        >
+                          Collapse All
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {effectiveLeaveTypes.length === 0 ? (
@@ -6689,95 +7027,265 @@ export function ManageLeaveProfiles({ leaveProfiles = [], setLeaveProfiles = () 
                     ) : (
                       effectiveLeaveTypes.map(lt => {
                         const isNewType = modal !== 'add' && modal?.entitlements && modal.entitlements[lt.code] === undefined && modal.entitlements[lt.id] === undefined;
-                        const currentDays = form.entitlements[lt.code] ?? 0;
+                        const entObj = form.entitlements[lt.code];
+                        const baseVal = isMonthly
+                          ? (typeof entObj === 'object' && entObj !== null ? Number(entObj.default) || 0 : Number(entObj) || 0)
+                          : (Number(entObj) || 0);
+
+                        const isExpanded = isMonthly && Boolean(expandedMonths[lt.code]);
+                        const monthsMap = (isMonthly && typeof entObj === 'object' && entObj?.months) ? entObj.months : {};
+                        const yearSum = isMonthly
+                          ? MONTH_CALENDAR_DATA.reduce((acc, m) => acc + Number(monthsMap[m.month] !== undefined ? monthsMap[m.month] : baseVal), 0)
+                          : baseVal;
+
+                        const isCustomized = isMonthly && MONTH_CALENDAR_DATA.some(m => {
+                          const val = Number(monthsMap[m.month] !== undefined ? monthsMap[m.month] : baseVal);
+                          return val !== baseVal;
+                        });
 
                         return (
-                          <div key={lt.id || lt.code} className={`profile-leave-card ${isNewType ? 'is-new-type' : ''}`}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <span style={{ width: '12px', height: '12px', borderRadius: '50%', background: lt.color || '#7c3aed', flexShrink: 0 }}></span>
-                            <div>
-                              <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                {lt.name}
-                                {isNewType && (
-                                  <span className="profile-new-badge" title="This leave type was added to the system after this profile was created">
-                                    New Leave Type
+                          <div key={lt.id || lt.code} className={`profile-leave-group-card ${isNewType ? 'is-new-type' : ''}`}>
+                            <div className="profile-leave-group-header">
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <span style={{ width: '12px', height: '12px', borderRadius: '50%', background: lt.color || '#7c3aed', flexShrink: 0 }}></span>
+                                <div>
+                                  <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    {lt.name}
+                                    {isNewType && (
+                                      <span className="profile-new-badge" title="This leave type was added to the system after this profile was created">
+                                        New Leave Type
+                                      </span>
+                                    )}
+                                    {isMonthly && (
+                                      <span style={{
+                                        fontSize: '11px',
+                                        padding: '1px 6px',
+                                        borderRadius: '4px',
+                                        background: isCustomized ? 'rgba(245, 158, 11, 0.15)' : 'rgba(255,255,255,0.06)',
+                                        color: isCustomized ? '#f59e0b' : 'var(--text-muted)',
+                                        fontWeight: 600
+                                      }}>
+                                        {isCustomized ? '⚡ Month-Customized' : 'Fixed Monthly'}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                                    Code: <code>{lt.code}</code> {lt.description ? `• ${lt.description}` : ''}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => stepBaseDays(lt.code, -1)}
+                                    style={{
+                                      width: '28px',
+                                      height: '28px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      borderRadius: '6px',
+                                      border: '1px solid var(--bg-card-border)',
+                                      background: 'rgba(255,255,255,0.05)',
+                                      color: 'var(--text-primary)',
+                                      cursor: 'pointer',
+                                      fontWeight: 700,
+                                      fontSize: '14px'
+                                    }}
+                                  >
+                                    -
+                                  </button>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="365"
+                                    step={isMonthly ? "0.5" : "1"}
+                                    value={baseVal}
+                                    onChange={e => handleBaseDaysChange(lt.code, e.target.value)}
+                                    style={{
+                                      width: '64px',
+                                      textAlign: 'center',
+                                      padding: '6px 8px',
+                                      borderRadius: '6px',
+                                      background: 'rgba(255,255,255,0.06)',
+                                      border: '1px solid var(--bg-card-border)',
+                                      color: 'var(--text-primary)',
+                                      fontWeight: 600
+                                    }}
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => stepBaseDays(lt.code, 1)}
+                                    style={{
+                                      width: '28px',
+                                      height: '28px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      borderRadius: '6px',
+                                      border: '1px solid var(--bg-card-border)',
+                                      background: 'rgba(255,255,255,0.05)',
+                                      color: 'var(--text-primary)',
+                                      cursor: 'pointer',
+                                      fontWeight: 700,
+                                      fontSize: '14px'
+                                    }}
+                                  >
+                                    +
+                                  </button>
+                                  <span style={{ fontSize: '12px', color: 'var(--text-muted)', minWidth: '48px' }}>
+                                    {isMonthly ? 'days/mo base' : 'days/yr'}
                                   </span>
+                                </div>
+
+                                {isMonthly && (
+                                  <>
+                                    <div style={{
+                                      fontSize: '12px',
+                                      fontWeight: 700,
+                                      color: 'var(--accent-light)',
+                                      background: 'color-mix(in srgb, var(--accent) 12%, transparent)',
+                                      padding: '4px 10px',
+                                      borderRadius: '6px',
+                                      border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)'
+                                    }}>
+                                      {yearSum} d/yr
+                                    </div>
+                                    <button
+                                      type="button"
+                                      className={`profile-preset-btn ${isExpanded ? 'btn-active' : ''}`}
+                                      onClick={() => toggleExpandMonths(lt.code)}
+                                      title="Expand or collapse 12-month calendar override grid"
+                                    >
+                                      <span>📅 12-Month Calendar Grid</span>
+                                      <span>{isExpanded ? '▲' : '▼'}</span>
+                                    </button>
+                                  </>
                                 )}
                               </div>
-                              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                                Code: <code>{lt.code}</code> {lt.description ? `• ${lt.description}` : ''}
-                              </div>
                             </div>
-                          </div>
 
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <button
-                              type="button"
-                              onClick={() => stepDays(lt.code, -1)}
-                              style={{
-                                width: '28px',
-                                height: '28px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                borderRadius: '6px',
-                                border: '1px solid var(--bg-card-border)',
-                                background: 'rgba(255,255,255,0.05)',
-                                color: 'var(--text-primary)',
-                                cursor: 'pointer',
-                                fontWeight: 700,
-                                fontSize: '14px'
-                              }}
-                            >
-                              -
-                            </button>
-                            <input
-                              type="number"
-                              min="0"
-                              max="365"
-                              value={currentDays}
-                              onChange={e => handleDaysChange(lt.code, e.target.value)}
-                              style={{
-                                width: '64px',
-                                textAlign: 'center',
-                                padding: '6px 8px',
-                                borderRadius: '6px',
-                                background: 'rgba(255,255,255,0.06)',
-                                border: '1px solid var(--bg-card-border)',
-                                color: 'var(--text-primary)',
-                                fontWeight: 600
-                              }}
-                            />
-                            <button
-                              type="button"
-                              onClick={() => stepDays(lt.code, 1)}
-                              style={{
-                                width: '28px',
-                                height: '28px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                borderRadius: '6px',
-                                border: '1px solid var(--bg-card-border)',
-                                background: 'rgba(255,255,255,0.05)',
-                                color: 'var(--text-primary)',
-                                cursor: 'pointer',
-                                fontWeight: 700,
-                                fontSize: '14px'
-                              }}
-                            >
-                              +
-                            </button>
-                            <span style={{ fontSize: '12px', color: 'var(--text-muted)', width: '32px' }}>days</span>
+                            {/* 12-Month Override Grid Section */}
+                            {isExpanded && (
+                              <div>
+                                <div style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  padding: '8px 14px',
+                                  background: 'rgba(255, 255, 255, 0.02)',
+                                  borderTop: '1px solid var(--bg-card-border)',
+                                  fontSize: '11px',
+                                  color: 'var(--text-muted)',
+                                  flexWrap: 'wrap',
+                                  gap: '8px'
+                                }}>
+                                  <span>
+                                    Exact calendar days are displayed for each month. Adjust quotas or apply smart presets:
+                                  </span>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <button
+                                      type="button"
+                                      className="profile-preset-btn"
+                                      onClick={() => applyEqualizePreset(lt.code)}
+                                      title="Reset all 12 months to match the base quota"
+                                    >
+                                      ⚡ Equalize ({baseVal}d)
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="profile-preset-btn"
+                                      onClick={() => applyAutoScalePreset(lt.code)}
+                                      title="Auto-scale February (28 days) proportionally"
+                                    >
+                                      📅 Auto-Scale by Month Length
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <div className="profile-month-grid">
+                                  {MONTH_CALENDAR_DATA.map(m => {
+                                    const monthVal = Number(monthsMap[m.month] !== undefined ? monthsMap[m.month] : baseVal);
+                                    const diff = Math.round((monthVal - baseVal) * 10) / 10;
+                                    const isDiff = diff !== 0;
+
+                                    return (
+                                      <div
+                                        key={m.month}
+                                        className={`profile-month-card ${m.isFeb ? 'is-february' : ''} ${isDiff ? 'is-modified' : ''}`}
+                                        title={`${m.fullName}: ${m.days} calendar days` + (m.isFeb ? ' (29 in leap year)' : '')}
+                                      >
+                                        <div className="profile-month-header">
+                                          <span className="profile-month-name">{m.name}</span>
+                                          <span className="profile-month-dates-badge">
+                                            {m.days} days{m.isFeb ? ' (leap 29)' : ''}
+                                          </span>
+                                        </div>
+
+                                        <div className="profile-month-stepper">
+                                          <button
+                                            type="button"
+                                            className="profile-month-btn"
+                                            onClick={() => stepMonthDays(lt.code, m.month, -1)}
+                                            title="Decrease by 0.5 days"
+                                          >
+                                            -
+                                          </button>
+                                          <input
+                                            type="number"
+                                            step="0.5"
+                                            min="0"
+                                            max="31"
+                                            className="profile-month-input"
+                                            value={monthVal}
+                                            onChange={e => handleMonthDaysChange(lt.code, m.month, e.target.value)}
+                                          />
+                                          <button
+                                            type="button"
+                                            className="profile-month-btn"
+                                            onClick={() => stepMonthDays(lt.code, m.month, 1)}
+                                            title="Increase by 0.5 days"
+                                          >
+                                            +
+                                          </button>
+                                        </div>
+
+                                        {isDiff && (
+                                          <span style={{
+                                            fontSize: '10px',
+                                            fontWeight: 700,
+                                            color: diff < 0 ? '#f59e0b' : 'var(--accent-light)',
+                                            marginTop: '4px'
+                                          }}>
+                                            {diff > 0 ? `+${diff}d` : `${diff}d`}
+                                          </span>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      );
-                    }))}
+                        );
+                      })
+                    )}
                   </div>
 
                   {/* Total Entitlement Preview */}
-                  <div className="leave-total-preview" style={{ marginTop: '16px' }}>
-                    <span>Total Annual Leave Entitlement</span>
+                  <div className="leave-total-preview" style={{ marginTop: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                    <div>
+                      <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                        {isMonthly ? 'Total Annual Allocation (All 12 Months)' : 'Total Annual Leave Entitlement'}
+                      </div>
+                      {isMonthly && (
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                          Average: {(totalConfiguredDays / 12).toFixed(2)} days / month across all configured leave types
+                        </div>
+                      )}
+                    </div>
                     <span className="leave-total-value">{totalConfiguredDays} days / year</span>
                   </div>
                 </div>

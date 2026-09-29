@@ -20,15 +20,17 @@ import rostersRouter from './routes/rosters.js';
 import contingenciesRouter from './routes/contingencies.js';
 import payrollRouter from './routes/payroll.js';
 import operatingSchedulesRouter, { initOperatingSchedulesTable } from './routes/operatingSchedules.js';
+import { initPhase7Tables } from './scripts/init_phase7_leave_cycles.js';
 
 dotenv.config();
 
-// Ensure operating_schedules, managers permissions, leave_types, branches, and application documents exist
+// Ensure operating_schedules, managers permissions, leave_types, branches, application documents, and phase 7 dual-cycle schema exist
 initBranchesTable();
 initOperatingSchedulesTable();
 initManagersTable();
 initLeaveTypesTable();
 initApplicationDocumentsTable();
+initPhase7Tables();
 
 const app = express();
 const PORT = process.env.PORT || 5005;

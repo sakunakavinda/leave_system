@@ -3,6 +3,12 @@ import pool from '../db.js';
 import { optionalAuth, getBranchScope } from '../middleware/auth.js';
 import { calculateLeaveDeduction } from '../services/calendarService.js';
 import { recordLeaveDeduction, recordLeaveRefund } from '../services/ledgerService.js';
+import { 
+  getLeaveCycleSettings, 
+  validateLeaveQuota, 
+  deductLeaveDays, 
+  refundLeaveDays 
+} from '../services/balanceService.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -278,39 +284,20 @@ router.post('/', async (req, res) => {
         await connection.rollback();
         return res.status(400).json({ error: 'Leave rules not found for your role and branch. Please contact Admin.' });
       }
-      const rule = rulesRows[0];
+      const quotaCheck = await validateLeaveQuota(connection, {
+        employeeId: employee_id,
+        roleId: role_id,
+        branchId: branch_id,
+        leaveType: leave_type,
+        requestedDays,
+        deductionBreakdown: deductionCalc.breakdown,
+        isManagerOverride,
+        leaveTypeRecord: ltRows[0] || null
+      });
 
-      const currentYear = new Date().getFullYear();
-      let [takenRows] = await connection.query('SELECT * FROM leave_balances WHERE employee_id = ? AND year = ?', [employee_id, currentYear]);
-      
-      if (takenRows.length === 0) {
-        const balanceId = crypto.randomUUID();
-        await connection.query(
-          'INSERT INTO leave_balances (id, employee_id, year, annual_taken, sick_taken, casual_taken) VALUES (?, ?, ?, 0, 0, 0)',
-          [balanceId, employee_id, currentYear]
-        );
-        [takenRows] = await connection.query('SELECT * FROM leave_balances WHERE employee_id = ? AND year = ?', [employee_id, currentYear]);
-      }
-      const ruleCol = `${leave_type}_leave`;
-      const balanceCol = `${leave_type}_taken`;
-
-      let quota = 0;
-      let taken = 0;
-
-      if (rule[ruleCol] !== undefined && rule[ruleCol] !== null) {
-        quota = rule[ruleCol];
-      } else {
-        quota = 0;
-      }
-      const balanceRow = takenRows[0] || {};
-      taken = (balanceRow[balanceCol] !== undefined && balanceRow[balanceCol] !== null) ? Number(balanceRow[balanceCol]) : 0;
-      
-      const isUnpaidType = leave_type === 'unpaid' || leave_type === 'lop' || (ltRows.length > 0 && (ltRows[0].is_paid === 0 || ltRows[0].is_paid === false));
-      if (!isManagerOverride && (!isUnpaidType || quota > 0)) {
-        if (taken + requestedDays > quota) {
-          await connection.rollback();
-          return res.status(400).json({ error: `You only have ${quota - taken} ${leave_type} leave days remaining.` });
-        }
+      if (!quotaCheck.valid) {
+        await connection.rollback();
+        return res.status(400).json({ error: quotaCheck.error });
       }
 
       // Max Per Day & Substitute Checks (Bypassed if manager override / unannounced absence recording)
@@ -403,24 +390,14 @@ router.post('/', async (req, res) => {
     }
     
     if (requestedDays > 0) {
-      const currentYear = new Date().getFullYear();
-      const colName = `${leave_type}_taken`;
-      try {
-        await connection.query(`UPDATE leave_balances SET ${colName} = COALESCE(${colName}, 0) + ? WHERE employee_id = ? AND year = ?`, [requestedDays, employee_id, currentYear]);
-      } catch (err) {
-        try {
-          await connection.query(`ALTER TABLE leave_balances ADD COLUMN ${colName} INT DEFAULT 0`);
-          await connection.query(`UPDATE leave_balances SET ${colName} = COALESCE(${colName}, 0) + ? WHERE employee_id = ? AND year = ?`, [requestedDays, employee_id, currentYear]);
-        } catch (e) {
-          console.error(`Failed to update ${colName} column`, e);
-        }
-      }
-      // Record transaction in immutable ledger
-      try {
-        await recordLeaveDeduction(employee_id, leave_type, requestedDays, appId, reason || (isManagerOverride ? 'Manager Recorded Leave' : 'Leave Application Submitted'));
-      } catch (ledgErr) {
-        console.error('Ledger deduction record error:', ledgErr);
-      }
+      await deductLeaveDays(connection, {
+        employeeId: employee_id,
+        leaveType: leave_type,
+        requestedDays,
+        deductionBreakdown: deductionCalc.breakdown,
+        appId,
+        reason: reason || (isManagerOverride ? 'Manager Recorded Leave' : 'Leave Application Submitted')
+      });
     }
 
     await connection.commit();
@@ -563,26 +540,27 @@ router.put('/:id/status', optionalAuth, async (req, res) => {
     if (newLeaveType && newLeaveType !== app.leave_type) {
       if (app.status !== 'rejected') {
         // Refund previous leave type
-        const oldCol = `${app.leave_type}_taken`;
-        try {
-          await connection.query(`UPDATE leave_balances SET ${oldCol} = GREATEST(0, COALESCE(${oldCol}, 0) - ?) WHERE employee_id = ? AND year = ?`, [requestedDays, app.employee_id, currentYear]);
-          await recordLeaveRefund(app.employee_id, app.leave_type, requestedDays, id, `Converted to ${newLeaveType}: ${reason || 'Manager Action'}`);
-        } catch (e) {}
+        await refundLeaveDays(connection, {
+          employeeId: app.employee_id,
+          leaveType: app.leave_type,
+          requestedDays,
+          deductionBreakdown: deductionCalc.breakdown,
+          appId: id,
+          reason: `Converted to ${newLeaveType}: ${reason || 'Manager Action'}`
+        });
       }
 
       const targetStatus = status || app.status || 'approved';
       if (targetStatus !== 'rejected') {
         // Add deduction for the new leave type (e.g. unpaid_taken)
-        const newCol = `${newLeaveType}_taken`;
-        try {
-          await connection.query(`UPDATE leave_balances SET ${newCol} = COALESCE(${newCol}, 0) + ? WHERE employee_id = ? AND year = ?`, [requestedDays, app.employee_id, currentYear]);
-        } catch (colErr) {
-          try {
-            await connection.query(`ALTER TABLE leave_balances ADD COLUMN ${newCol} INT DEFAULT 0`);
-            await connection.query(`UPDATE leave_balances SET ${newCol} = COALESCE(${newCol}, 0) + ? WHERE employee_id = ? AND year = ?`, [requestedDays, app.employee_id, currentYear]);
-          } catch (e) {}
-        }
-        await recordLeaveDeduction(app.employee_id, newLeaveType, requestedDays, id, reason || `Marked as ${newLeaveType} (Unpaid Leave / LOP) by Manager`);
+        await deductLeaveDays(connection, {
+          employeeId: app.employee_id,
+          leaveType: newLeaveType,
+          requestedDays,
+          deductionBreakdown: deductionCalc.breakdown,
+          appId: id,
+          reason: reason || `Marked as ${newLeaveType} (Unpaid Leave / LOP) by Manager`
+        });
       }
 
       await connection.query(
@@ -592,23 +570,24 @@ router.put('/:id/status', optionalAuth, async (req, res) => {
     } else {
       // Normal status change
       if (app.status !== 'rejected' && status === 'rejected') {
-        const colName = `${app.leave_type}_taken`;
-        try {
-          await connection.query(`UPDATE leave_balances SET ${colName} = GREATEST(0, COALESCE(${colName}, 0) - ?) WHERE employee_id = ? AND year = ?`, [requestedDays, app.employee_id, currentYear]);
-          await recordLeaveRefund(app.employee_id, app.leave_type, requestedDays, id, reason || 'Leave Application Rejected');
-        } catch (err) {}
+        await refundLeaveDays(connection, {
+          employeeId: app.employee_id,
+          leaveType: app.leave_type,
+          requestedDays,
+          deductionBreakdown: deductionCalc.breakdown,
+          appId: id,
+          reason: reason || 'Leave Application Rejected'
+        });
       } 
       else if (app.status === 'rejected' && status !== 'rejected') {
-        await connection.query(`
-          INSERT IGNORE INTO leave_balances (id, employee_id, year) 
-          VALUES (?, ?, ?)
-        `, [crypto.randomUUID(), app.employee_id, currentYear]);
-
-        const colName = `${app.leave_type}_taken`;
-        try {
-          await connection.query(`UPDATE leave_balances SET ${colName} = COALESCE(${colName}, 0) + ? WHERE employee_id = ? AND year = ?`, [requestedDays, app.employee_id, currentYear]);
-          await recordLeaveDeduction(app.employee_id, app.leave_type, requestedDays, id, reason || 'Leave Application Re-approved');
-        } catch (err) {}
+        await deductLeaveDays(connection, {
+          employeeId: app.employee_id,
+          leaveType: app.leave_type,
+          requestedDays,
+          deductionBreakdown: deductionCalc.breakdown,
+          appId: id,
+          reason: reason || 'Leave Application Re-approved'
+        });
       }
 
       await connection.query(
@@ -695,20 +674,20 @@ router.delete('/:id', async (req, res) => {
       return res.status(400).json({ error: 'Can only undo pending applications' });
     }
     
-    const [daysRows] = await connection.query('SELECT COUNT(*) AS count FROM leave_application_dates WHERE leave_application_id = ?', [id]);
-    const requestedDays = parseInt(daysRows[0].count);
-    const currentYear = new Date(app.applied_date).getFullYear();
+    const [daysRows] = await connection.query('SELECT DATE_FORMAT(leave_date, "%Y-%m-%d") AS date_str FROM leave_application_dates WHERE leave_application_id = ?', [id]);
+    const dateList = daysRows.map(d => d.date_str);
+    const deductionCalc = await calculateLeaveDeduction(app.branch_id, dateList, app.employee_id);
+    const requestedDays = deductionCalc.netWorkingDaysDeducted;
 
-    let updateCol = '';
-    if (app.leave_type === 'annual') updateCol = 'annual_taken';
-    else if (app.leave_type === 'sick') updateCol = 'sick_taken';
-    else if (app.leave_type === 'casual') updateCol = 'casual_taken';
-
-    if (updateCol) {
-      await connection.query(`
-        UPDATE leave_balances SET ${updateCol} = ${updateCol} - ? 
-        WHERE employee_id = ? AND year = ?
-      `, [requestedDays, app.employee_id, currentYear]);
+    if (requestedDays > 0) {
+      await refundLeaveDays(connection, {
+        employeeId: app.employee_id,
+        leaveType: app.leave_type,
+        requestedDays,
+        deductionBreakdown: deductionCalc.breakdown,
+        appId: id,
+        reason: 'Pending Application Cancelled'
+      });
     }
     
     await connection.query('DELETE FROM leave_application_dates WHERE leave_application_id = ?', [id]);
@@ -729,7 +708,8 @@ router.get('/overview/:secretCode', async (req, res) => {
   const { secretCode } = req.params;
   try {
     const [empRows] = await pool.query(`
-      SELECT e.id, e.name, e.role_id, e.branch_id,
+      SELECT e.id, e.name, e.role_id, e.branch_id, e.leave_profile_id,
+             lp.entitlements AS profile_entitlements,
              r.title AS role_title,
              CASE WHEN b.location IS NOT NULL AND TRIM(b.location) != '' THEN CONCAT(b.name, ' (', b.location, ')') ELSE b.name END AS branch_name,
              d.name AS department_name
@@ -737,6 +717,7 @@ router.get('/overview/:secretCode', async (req, res) => {
       LEFT JOIN roles r ON e.role_id = r.id
       LEFT JOIN branches b ON e.branch_id = b.id
       LEFT JOIN departments d ON r.department_id = d.id
+      LEFT JOIN leave_profiles lp ON e.leave_profile_id = lp.id
       WHERE e.secret_code = ?
     `, [secretCode]);
 
@@ -745,15 +726,37 @@ router.get('/overview/:secretCode', async (req, res) => {
     }
 
     const emp = empRows[0];
+    let profileEntitlements = null;
+    if (emp.profile_entitlements) {
+      try {
+        profileEntitlements = typeof emp.profile_entitlements === 'object'
+          ? emp.profile_entitlements
+          : JSON.parse(emp.profile_entitlements);
+      } catch (e) {}
+    }
+
     const year = new Date().getFullYear();
+    const currentMonth = new Date().getMonth() + 1;
+    const selectedMonth = req.query.month ? parseInt(req.query.month, 10) : currentMonth;
 
-    const [balanceRows] = await pool.query(`
-      SELECT *
-      FROM leave_balances
-      WHERE employee_id = ? AND year = ?
-    `, [emp.id, year]);
+    const { cycleMode, monthlyPolicy } = await getLeaveCycleSettings(pool);
 
-    const balance = balanceRows[0] || { annual_taken: 0, sick_taken: 0, casual_taken: 0 };
+    let balance = { annual_taken: 0, sick_taken: 0, casual_taken: 0 };
+    let monthlyBalances = [];
+
+    if (cycleMode === 'monthly') {
+      const [mRows] = await pool.query(`
+        SELECT * FROM leave_balances WHERE employee_id = ? AND year = ? AND month > 0 ORDER BY month ASC
+      `, [emp.id, year]);
+      monthlyBalances = mRows;
+      const found = mRows.find(r => r.month === selectedMonth);
+      balance = found || { annual_taken: 0, sick_taken: 0, casual_taken: 0 };
+    } else {
+      const [balanceRows] = await pool.query(`
+        SELECT * FROM leave_balances WHERE employee_id = ? AND year = ? AND month = 0
+      `, [emp.id, year]);
+      balance = balanceRows[0] || { annual_taken: 0, sick_taken: 0, casual_taken: 0 };
+    }
 
     const [rulesRows] = await pool.query(`
       SELECT *
@@ -789,6 +792,11 @@ router.get('/overview/:secretCode', async (req, res) => {
         branch: emp.branch_name,
         department: emp.department_name,
       },
+      cycle_mode: cycleMode,
+      monthly_policy: monthlyPolicy,
+      selected_month: selectedMonth,
+      profile_entitlements: profileEntitlements,
+      monthly_balances: monthlyBalances,
       balance: balance,
       rules: rules,
       applications: appsRows.map(row => {
