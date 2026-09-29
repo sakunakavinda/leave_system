@@ -6731,21 +6731,11 @@ export function ManageLeaveProfiles({ leaveProfiles = [], setLeaveProfiles = () 
 
   return (
     <div className="admin-content">
-      {/* Stats bar */}
-      <div className="profile-stats-grid">
-        <div className="profile-stat-card">
-          <div style={{
-            width: '42px',
-            height: '42px',
-            borderRadius: '10px',
-            background: 'color-mix(in srgb, var(--accent) 15%, transparent)',
-            color: 'var(--accent-light)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0
-          }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '20px', height: '20px' }}>
+      {/* Compact Stats Bar */}
+      <div className="profile-stats-grid compact-stats">
+        <div className="profile-stat-card compact-stat">
+          <div className="stat-icon-wrap" style={{ background: 'color-mix(in srgb, var(--accent) 15%, transparent)', color: 'var(--accent-light)' }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '18px', height: '18px' }}>
               <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
               <circle cx="9" cy="7" r="4" />
               <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
@@ -6753,49 +6743,29 @@ export function ManageLeaveProfiles({ leaveProfiles = [], setLeaveProfiles = () 
             </svg>
           </div>
           <div>
-            <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)' }}>{leaveProfiles.length}</div>
-            <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Total Leave Profiles</div>
+            <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>{leaveProfiles.length}</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Leave Profiles</div>
           </div>
         </div>
 
-        <div className="profile-stat-card">
-          <div style={{
-            width: '42px',
-            height: '42px',
-            borderRadius: '10px',
-            background: 'rgba(16, 185, 129, 0.15)',
-            color: '#10b981',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0
-          }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '20px', height: '20px' }}>
+        <div className="profile-stat-card compact-stat">
+          <div className="stat-icon-wrap" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981' }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '18px', height: '18px' }}>
               <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
               <polyline points="22 4 12 14.01 9 11.01"></polyline>
             </svg>
           </div>
           <div>
-            <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)' }}>
+            <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>
               {leaveProfiles.filter(p => p.status === 'active').length}
             </div>
-            <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Active Profiles</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Active Profiles</div>
           </div>
         </div>
 
-        <div className="profile-stat-card">
-          <div style={{
-            width: '42px',
-            height: '42px',
-            borderRadius: '10px',
-            background: 'rgba(59, 130, 246, 0.15)',
-            color: '#3b82f6',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0
-          }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '20px', height: '20px' }}>
+        <div className="profile-stat-card compact-stat">
+          <div className="stat-icon-wrap" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6' }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '18px', height: '18px' }}>
               <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
               <line x1="16" y1="2" x2="16" y2="6"></line>
               <line x1="8" y1="2" x2="8" y2="6"></line>
@@ -6803,53 +6773,53 @@ export function ManageLeaveProfiles({ leaveProfiles = [], setLeaveProfiles = () 
             </svg>
           </div>
           <div>
-            <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)' }}>
+            <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>
               {effectiveLeaveTypes.length}
             </div>
-            <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Active Leave Types</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Leave Types</div>
           </div>
         </div>
       </div>
 
       {/* Action Header */}
-      <div className="admin-actions-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', gap: '16px', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', gap: '12px', flex: 1, minWidth: '240px' }}>
+      <div className="admin-actions-bar profile-actions-bar">
+        <div style={{ display: 'flex', gap: '10px', flex: 1, minWidth: '220px' }}>
           <input
             className="admin-search-input"
             type="text"
-            placeholder="Search profiles by name, code or description..."
+            placeholder="Search profiles..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            style={{ maxWidth: '400px', width: '100%' }}
+            style={{ maxWidth: '340px', width: '100%', padding: '7px 12px', fontSize: '13px' }}
           />
         </div>
-        <button className="btn-primary" onClick={openAdd} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '16px', height: '16px' }}>
+        <button className="btn-primary" onClick={openAdd} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 14px', fontSize: '13px' }}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '15px', height: '15px' }}>
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
-          Create Leave Profile
+          Create Profile
         </button>
       </div>
 
       {/* Profiles Table */}
-      <div className="table-responsive">
-        <table className="admin-table">
+      <div className="data-table-wrap profile-table-wrap">
+        <table className="data-table profile-compact-table">
           <thead>
             <tr>
-              <th>Profile Name & Code</th>
-              <th>Description</th>
-              <th>{isMonthly ? 'Configured Monthly Quota' : 'Configured Leave Entitlements'}</th>
-              <th>{isMonthly ? 'Total (Days/Yr)' : 'Total Days'}</th>
-              <th>Status</th>
-              <th>Actions</th>
+              <th style={{ minWidth: '160px' }}>Profile Name</th>
+              <th className="hide-on-compact" style={{ minWidth: '140px' }}>Description</th>
+              <th style={{ minWidth: '220px' }}>{isMonthly ? 'Monthly Quotas' : 'Leave Entitlements'}</th>
+              <th style={{ minWidth: '90px' }}>{isMonthly ? 'Annual Total' : 'Total'}</th>
+              <th style={{ minWidth: '80px' }}>Status</th>
+              <th style={{ textAlign: 'right', minWidth: '120px' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{ textAlign: 'center', padding: '48px', color: 'var(--text-muted)' }}>
-                  {search ? 'No leave profiles matching search' : 'No leave profiles created yet. Click "Create Leave Profile" to get started.'}
+                <td colSpan={6} style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)', fontSize: '13px' }}>
+                  {search ? 'No leave profiles matching search' : 'No leave profiles created yet. Click "Create Profile" to get started.'}
                 </td>
               </tr>
             ) : filtered.map(p => {
@@ -6861,18 +6831,23 @@ export function ManageLeaveProfiles({ leaveProfiles = [], setLeaveProfiles = () 
               return (
                 <tr key={p.id}>
                   <td>
-                    <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '3px' }}>
+                    <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '13.5px', marginBottom: '2px' }}>
                       {p.name}
                     </div>
-                    <code style={{ background: 'rgba(255,255,255,0.06)', padding: '2px 8px', borderRadius: '4px', fontSize: '11px' }}>
+                    <code style={{ background: 'rgba(255,255,255,0.06)', padding: '1px 6px', borderRadius: '4px', fontSize: '10.5px', color: 'var(--text-muted)' }}>
                       {p.code}
                     </code>
+                    {p.description && (
+                      <div className="show-on-compact-desc" style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '3px' }}>
+                        {p.description}
+                      </div>
+                    )}
                   </td>
-                  <td style={{ color: 'var(--text-secondary)', fontSize: '13px', maxWidth: '240px' }}>
+                  <td className="hide-on-compact" style={{ color: 'var(--text-secondary)', fontSize: '12.5px', maxWidth: '200px' }}>
                     {p.description || '—'}
                   </td>
                   <td>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', alignItems: 'center' }}>
                       {effectiveLeaveTypes.map(lt => {
                         const ent = p.entitlements?.[lt.code] ?? p.entitlements?.[lt.id];
                         if (ent === undefined) return null;
@@ -6885,22 +6860,22 @@ export function ManageLeaveProfiles({ leaveProfiles = [], setLeaveProfiles = () 
                           return (
                             <span
                               key={lt.id || lt.code}
-                              className="profile-entitlement-chip"
+                              className="profile-entitlement-chip compact-chip"
                               title={isVariable ? `Varies by month (${minVal}d - ${maxVal}d). Feb: ${ent.months[2] ?? minVal}d. Annual total: ${totalYear}d` : `Fixed: ${minVal} days / month`}
                             >
-                              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: lt.color || '#7c3aed' }}></span>
-                              <span>{lt.name}:</span>
+                              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: lt.color || '#7c3aed', flexShrink: 0 }}></span>
+                              <span>{lt.name || lt.code}:</span>
                               <strong style={{ color: 'var(--text-primary)' }}>
-                                {isVariable ? `${minVal}-${maxVal}d/mo` : `${minVal}d/mo`}
+                                {isVariable ? `${minVal}-${maxVal}d` : `${minVal}d`}
                               </strong>
                             </span>
                           );
                         } else {
                           const days = typeof ent === 'object' && ent !== null ? ent.default : ent;
                           return (
-                            <span key={lt.id || lt.code} className="profile-entitlement-chip">
-                              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: lt.color || '#7c3aed' }}></span>
-                              <span>{lt.name}:</span>
+                            <span key={lt.id || lt.code} className="profile-entitlement-chip compact-chip">
+                              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: lt.color || '#7c3aed', flexShrink: 0 }}></span>
+                              <span>{lt.name || lt.code}:</span>
                               <strong style={{ color: 'var(--text-primary)' }}>{days}d{isMonthly ? '/mo' : ''}</strong>
                             </span>
                           );
@@ -6910,60 +6885,42 @@ export function ManageLeaveProfiles({ leaveProfiles = [], setLeaveProfiles = () 
                         <button
                           type="button"
                           onClick={() => openEdit(p)}
-                          style={{
-                            border: '1px dashed color-mix(in srgb, var(--accent) 50%, transparent)',
-                            background: 'color-mix(in srgb, var(--accent) 8%, transparent)',
-                            color: 'var(--accent-light)',
-                            fontSize: '11px',
-                            fontWeight: 600,
-                            padding: '3px 8px',
-                            borderRadius: '6px',
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px'
-                          }}
+                          className="profile-unconfigured-btn"
                           title="New leave types were added to the system. Click to configure their days for this profile."
                         >
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '12px', height: '12px' }}>
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <line x1="12" y1="8" x2="12" y2="12"></line>
-                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                          </svg>
-                          +{unconfiguredCount} new {unconfiguredCount === 1 ? 'type' : 'types'} to set
+                          +{unconfiguredCount} new
                         </button>
                       )}
                     </div>
                   </td>
                   <td>
-                    <span style={{ fontWeight: 700, fontSize: '13px', color: 'var(--accent-light)' }}>
-                      {totalDays} {isMonthly ? 'd/yr' : 'days/yr'}
+                    <span style={{ fontWeight: 700, fontSize: '12.5px', color: 'var(--accent-light)', whiteSpace: 'nowrap' }}>
+                      {totalDays} {isMonthly ? 'd/yr' : 'days'}
                     </span>
                     {isMonthly && (
-                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                        ~{(totalDays / 12).toFixed(1)} d/mo avg
+                      <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                        ~{(totalDays / 12).toFixed(1)} d/mo
                       </div>
                     )}
                   </td>
                   <td>
-                    <span className={`badge badge-${p.status === 'active' ? 'approved' : 'rejected'}`}>
+                    <span className={`badge badge-${p.status === 'active' ? 'approved' : 'rejected'}`} style={{ padding: '2px 7px', fontSize: '10.5px' }}>
                       {p.status || 'active'}
                     </span>
                   </td>
-                  <td>
-                    <div className="action-btns">
-                      <button className="btn-edit" onClick={() => openEdit(p)} title="Edit Profile & Leave Days">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <td style={{ textAlign: 'right' }}>
+                    <div className="action-btns" style={{ justifyContent: 'flex-end', gap: '5px' }}>
+                      <button className="btn-edit" onClick={() => openEdit(p)} title="Edit Profile & Leave Days" style={{ padding: '4px 9px', fontSize: '12px' }}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '13px', height: '13px' }}>
                           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                           <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
                         </svg>
                         Edit
                       </button>
-                      <button className="btn-danger" onClick={() => handleDelete(p.id, p.name)} title="Delete Profile">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <button className="btn-danger" onClick={() => handleDelete(p.id, p.name)} title="Delete Profile" style={{ padding: '4px 9px', fontSize: '12px' }}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: '13px', height: '13px' }}>
                           <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
                         </svg>
-                        Remove
                       </button>
                     </div>
                   </td>
