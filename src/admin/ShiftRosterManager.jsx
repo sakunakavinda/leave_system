@@ -1048,7 +1048,7 @@ export function ManageShiftRosters({ branches = [], employees = [], canEdit = tr
   const [selectedMonth, setSelectedMonth] = useState(today.getMonth() + 1); // 1-12
 
   const isUserScoped = currentUser && !['super manager', 'super_admin', 'admin'].includes(currentUser.role) && currentUser.branch_id;
-  const initialBranch = isUserScoped ? currentUser.branch_id : (branches[0]?.id || 'all');
+  const initialBranch = isUserScoped ? currentUser.branch_id : 'all';
   const [selectedBranch, setSelectedBranch] = useState(initialBranch);
   const [shifts, setShifts] = useState([]);
   const [rosters, setRosters] = useState([]);
